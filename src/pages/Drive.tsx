@@ -44,6 +44,9 @@ const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', rec
 
 const act = (p: Promise<unknown>) => p.catch(toastError)
 
+/** The folder being browsed before a search started, so leaving the search goes back there. */
+let lastFolderPath = '/'
+
 export default function DrivePage({ mode }: { mode: Mode }) {
   const { folderId = ROOT } = useParams()
   const [params, setParams] = useSearchParams()
@@ -99,6 +102,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     if (mode === 'search') searchInput.current?.focus()
     else setSearchText('')
   }, [mode])
+
+  useEffect(() => {
+    if (mode === 'folder') lastFolderPath = location.pathname
+  }, [mode, location.pathname])
 
   const openFolder = (id: string) => navigate(id === ROOT ? '/' : `/folder/${id}`)
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -263,7 +270,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   }
 
   // Filters always search the whole drive (a folder view filtered to nothing is confusing)
-  const setFilter = (type: FilterKey | null) => setSearch(query, type)
+  const setFilter = (type: FilterKey | null) => {
+    // "All" with nothing typed means there's nothing to search: go back to browsing
+    if (!type && !query) return exitSearch()
+    setSearch(query, type)
+  }
+
+  const exitSearch = () => navigate(lastFolderPath)
 
   // ---- Drag and drop ----
 
@@ -385,12 +398,12 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                     setSearchText(e.target.value)
                     setSearch(e.target.value.trim())
                   }}
-                  onKeyDown={(e) => e.key === 'Escape' && navigate('/')}
+                  onKeyDown={(e) => e.key === 'Escape' && mode === 'search' && exitSearch()}
                 />
                 {mode === 'search' && (searchText || filter) && (
                   <button
                     className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
-                    onClick={() => navigate('/')}
+                    onClick={exitSearch}
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
