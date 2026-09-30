@@ -204,6 +204,32 @@ Name conflicts in the same folder are auto-renamed to `name (1).ext`.
 - **Video/audio:** `public/sw.js` intercepts `/stream/<fileId>` requests, maps the HTTP Range to the right chunk and offset, asks the page (via `postMessage`) to fetch that byte range from Telegram with `iterDownload({offset, limit})`, and streams it back. `<video src="/stream/...">` then seeks natively.
 - **PDF:** browser's built-in viewer (Blob URL). **Text/code:** first 1 MB in a text viewer.
 
+### 2.2b Document previews (added after Phase 3)
+| Format | Renderer | Where it runs |
+|---|---|---|
+| PDF | pdf.js (canvas, lazy pages, zoom, `isEvalSupported: false`) | App |
+| .docx | docx-preview | Sandboxed frame |
+| .pptx | pptx-preview (+ echarts for charts) | Sandboxed frame |
+| .xlsx .xls .ods .csv | SheetJS 0.20.3 (from cdn.sheetjs.com; the npm copy is outdated) → table built with `textContent` | Sandboxed frame |
+| Markdown | marked → DOMPurify | Sandboxed frame |
+| .zip | JSZip (names and sizes only) | App |
+| Text / code | first 1 MB, React-escaped | App |
+| .doc .ppt (old binary formats) | none available in the browser → explanation + Open with / Download | — |
+
+**Why a sandbox:** these renderers turn untrusted file content into HTML, and pptx-preview inserts slide
+text with `innerHTML`. The app holds the Telegram session, so document rendering is isolated:
+`src/viewer/frame.ts` is built into one script (`npm run build:frame`, `vite.frame.config.ts`) and
+embedded in an `<iframe sandbox="allow-scripts" srcdoc>` (opaque origin: no access to the app's
+IndexedDB, DOM or cookies) with CSP `default-src 'none'` (no network). The app sends the bytes and the
+available width by `postMessage`; the frame answers only `ready` / `rendered` / `error` / `open-link`
+(http/https only). Verified: a script in that frame can't read the parent page, IndexedDB,
+localStorage or cookies, and can't fetch or load remote images.
+
+Notes:
+- The frame is told its width: a sandboxed (out-of-process) frame may report 0×0 while starting.
+- pptx-preview silently renders nothing for decks it can't parse; that's reported as an error.
+- Documents are limited to 50 MB (parsed in memory).
+
 ### 2.3 Search and filters
 - Client-side search over the Dexie index (name contains, case-insensitive), across all folders.
 - Filter chips: Photos / Videos / Documents / Audio (by MIME type and extension). Chips always search the whole drive.

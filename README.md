@@ -15,7 +15,8 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Grid and list views, sorting, breadcrumbs, storage stats
 - Syncs between devices automatically
 - Thumbnails for photos and videos (made in the browser at upload time)
-- Previews: photo gallery (swipe, zoom, arrow keys), **video/audio streaming with seeking**, PDF, text/code
+- Previews: photo gallery (swipe, zoom, arrow keys), **video/audio streaming with seeking**, PDF (with zoom),
+  Word (.docx), PowerPoint (.pptx), Excel/CSV (.xlsx, .xls, .ods, .csv), Markdown, text/code, and ZIP contents
 - Search across all folders (ignores case and accents), plus Photos / Videos / Documents / Audio filters
 - Recent, Starred, and Trash (restore, delete forever, auto-emptied after 30 days, Undo)
 - Multi-select: checkboxes, Ctrl/Cmd-click, Shift-click, Ctrl+A, long-press on phones; bulk download/move/star/trash
@@ -41,6 +42,8 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Every file is a message in your private channel. Its caption holds small JSON metadata (name, folder, size…).
 - Folders are small marker messages with an ID; files point to their folder's ID.
 - The app caches everything in IndexedDB and fetches only what changed (`updates.getChannelDifference`).
+- Document previews (Word, PowerPoint, spreadsheets, Markdown) render inside a **sandboxed frame**
+  that can't reach the app's storage or the network, so a malicious document can't touch your session.
 - Video/audio streaming: a service worker (`public/sw.js`) turns the player's byte-range requests into
   Telegram downloads of just those bytes, so you can seek without downloading the whole file.
 

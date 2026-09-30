@@ -74,14 +74,29 @@ export function fileIcon(item: Item): { Icon: LucideIcon; color: string } {
   }
 }
 
-export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'none'
+export type PreviewKind =
+  | 'image' | 'video' | 'audio' | 'pdf' | 'text'
+  | 'docx' | 'pptx' | 'sheet' | 'markdown' | 'zip'
+  /** Old binary Office formats (.doc, .ppt…) and others no browser library can render. */
+  | 'unsupported-office'
+  | 'none'
 
-const TEXT_EXT = new Set('txt md markdown csv tsv log json xml yml yaml ini cfg conf toml env srt vtt'.split(' '))
+const exts = (list: string) => new Set(list.split(' '))
+const PREVIEW_EXT: [PreviewKind, Set<string>][] = [
+  ['docx', exts('docx docm dotx dotm')],
+  ['pptx', exts('pptx pptm ppsx ppsm potx')],
+  ['sheet', exts('xlsx xlsm xlsb xls ods csv tsv')],
+  ['markdown', exts('md markdown')],
+  ['zip', exts('zip')],
+  ['unsupported-office', exts('doc dot ppt pps pot odt odp rtf pages key numbers')],
+]
+const TEXT_EXT = exts('txt log json xml yml yaml ini cfg conf toml env srt vtt')
 
-/** How the file can be previewed in the browser. */
+/** How the file can be previewed. */
 export function previewKind(item: Item): PreviewKind {
   if (item.kind !== 'file') return 'none'
   const ext = item.name.split('.').pop()?.toLowerCase() ?? ''
+  for (const [kind, set] of PREVIEW_EXT) if (set.has(ext)) return kind
   const cat = category(item)
   if (cat === 'image' || cat === 'video' || cat === 'audio') return cat
   if (item.mime === 'application/pdf' || ext === 'pdf') return 'pdf'

@@ -8,6 +8,7 @@ type Step = 'phone' | 'code' | 'password'
 
 export default function LoginPage() {
   const afterLogin = useDrive((s) => s.afterLogin)
+  const notice = useDrive((s) => s.loginNotice)
   const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
@@ -58,6 +59,9 @@ export default function LoginPage() {
   return (
     <AuthLayout icon={Send} title="TeleDrive" subtitle={subtitles[step]}>
       <form onSubmit={submit} className="space-y-4">
+        {notice && step === 'phone' && (
+          <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">{notice}</p>
+        )}
         {step === 'phone' && (
           <input
             className="input" type="tel" autoComplete="tel" autoFocus placeholder="+91 98765 43210"

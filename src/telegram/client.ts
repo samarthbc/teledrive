@@ -8,6 +8,29 @@ let client: TelegramClient | null = null
 let keys: ApiKeys | null = null
 let connecting: Promise<TelegramClient> | null = null
 
+const CONNECT_TIMEOUT = 25_000
+
+/** Telegram errors meaning this login no longer works and the user must log in again. */
+export const SESSION_LOST_CODES = [
+  'AUTH_KEY_UNREGISTERED', 'AUTH_KEY_DUPLICATED', 'SESSION_REVOKED', 'SESSION_EXPIRED', 'USER_DEACTIVATED',
+]
+
+const lostListeners = new Set<(code: string) => void>()
+
+/** Called when Telegram ends the session (e.g. it was used from two places at once). */
+export function onSessionLost(fn: (code: string) => void): () => void {
+  lostListeners.add(fn)
+  return () => lostListeners.delete(fn)
+}
+
+function checkSessionLost(err: unknown) {
+  const code = (err as { errorMessage?: string })?.errorMessage ?? ''
+  if (SESSION_LOST_CODES.includes(code)) for (const fn of lostListeners) fn(code)
+}
+
+// GramJS reports some connection-level errors only as unhandled rejections
+window.addEventListener('unhandledrejection', (e) => checkSessionLost(e.reason))
+
 export class MissingKeysError extends Error {
   constructor() {
     super('Telegram API keys are not configured')
@@ -36,8 +59,18 @@ export function getClient(): Promise<TelegramClient> {
           appVersion: '0.1.0',
         })
         client.setLogLevel(import.meta.env.DEV ? LogLevel.WARN : LogLevel.ERROR)
+        client.onError = async (err) => checkSessionLost(err)
       }
-      await client.connect()
+      let timer: ReturnType<typeof setTimeout> | undefined
+      await Promise.race([
+        client.connect(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Couldn't reach Telegram. Check your internet connection and try again.")),
+            CONNECT_TIMEOUT,
+          )
+        }),
+      ]).finally(() => clearTimeout(timer))
       return client
     } finally {
       connecting = null
@@ -61,3 +94,9 @@ export async function resetClient(): Promise<void> {
   client = null
   if (c) await c.destroy().catch(() => {})
 }
+
+// During development, hot-reloading this module would otherwise leave the old connection open next
+// to a new one using the same login, which Telegram can treat as a duplicated session
+import.meta.hot?.dispose(() => {
+  void client?.destroy()
+})

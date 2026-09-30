@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:frame && tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
     "android": "npm run build && cap sync android && cap open android",
-    "android:sync": "npm run build && cap sync android"
+    "android:sync": "npm run build && cap sync android",
+    "build:frame": "vite build --config vite.frame.config.ts",
+    "predev": "npm run build:frame"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",
@@ -19,12 +21,19 @@
     "@capacitor/network": "^7.0.4",
     "big-integer": "^1.6.52",
     "dexie": "^4.4.6",
+    "docx-preview": "^0.4.1",
+    "dompurify": "^3.4.16",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.49.0",
+    "marked": "^18.0.14",
     "nanoid": "^5.1.16",
+    "pdfjs-dist": "^5.6.205",
+    "pptx-preview": "^1.0.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",
     "telegram": "^2.26.22",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

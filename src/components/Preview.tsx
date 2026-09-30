@@ -1,16 +1,28 @@
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Info, Loader2, TriangleAlert, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { readBlob, readHead } from '../drive/download'
 import { isAndroid } from '../native/android'
 import { useBackHandler } from '../native/backButton'
 import { canStream, streamUrl } from '../drive/stream'
 import { TransferControl } from '../drive/transfer'
 import type { FileItem } from '../drive/tree'
-import { fileIcon, formatBytes, previewKind } from '../lib/format'
+import { fileIcon, formatBytes, previewKind, type PreviewKind } from '../lib/format'
+import type { FrameKind } from '../viewer/frame'
+
+// Loaded only when needed (pdf.js and the document renderers are large)
+const PdfPreview = lazy(() => import('./previews/PdfPreview'))
+const SandboxedPreview = lazy(() => import('./previews/SandboxedPreview'))
+const ZipPreview = lazy(() => import('./previews/ZipPreview'))
 
 /** Largest file loaded fully into memory for preview (images, PDFs, non-streamed media). */
 const MAX_IN_MEMORY = 100 * 1024 * 1024
+/** Office documents are parsed entirely in the browser; keep that reasonable on phones. */
+const MAX_DOCUMENT = 50 * 1024 * 1024
 const TEXT_PREVIEW_BYTES = 1024 * 1024
+const FRAME_KINDS: PreviewKind[] = ['docx', 'pptx', 'sheet', 'markdown']
+const DOCUMENT_KINDS: PreviewKind[] = [...FRAME_KINDS, 'pdf', 'zip']
+/** Swiping between files only for media; documents need horizontal scrolling. */
+const SWIPE_KINDS: PreviewKind[] = ['image', 'video', 'audio', 'none', 'unsupported-office']
 
 // Keep a few recently viewed files so flipping back and forth is instant
 const blobCache = new Map<string, string>()
@@ -38,6 +50,7 @@ export default function Preview({ files, index, onIndex, onClose, onDownload, on
   const file = files[index]
   useBackHandler(true, onClose)
   const touchX = useRef<number | null>(null)
+  const swipe = file ? SWIPE_KINDS.includes(previewKind(file)) : false
   const prev = index > 0 ? () => onIndex(index - 1) : undefined
   const next = index < files.length - 1 ? () => onIndex(index + 1) : undefined
 
@@ -56,7 +69,7 @@ export default function Preview({ files, index, onIndex, onClose, onDownload, on
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col bg-black text-white"
-      onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+      onTouchStart={(e) => (touchX.current = swipe ? e.touches[0].clientX : null)}
       onTouchEnd={(e) => {
         if (touchX.current === null) return
         const dx = e.changedTouches[0].clientX - touchX.current
@@ -76,6 +89,11 @@ export default function Preview({ files, index, onIndex, onClose, onDownload, on
             {files.length > 1 && ` · ${index + 1} of ${files.length}`}
           </p>
         </div>
+        {isAndroid && (
+          <button className="preview-btn" onClick={() => onOpenWith(file)} aria-label="Open with" disabled={!file.complete}>
+            <ExternalLink className="h-5 w-5" />
+          </button>
+        )}
         <button className="preview-btn" onClick={() => onDetails(file)} aria-label="Details">
           <Info className="h-5 w-5" />
         </button>
@@ -108,19 +126,70 @@ function isMediaFocused() {
 
 function Content({ file, onDownload, onOpenWith }: { file: FileItem; onDownload: () => void; onOpenWith: () => void }) {
   const kind = previewKind(file)
+  const openWith = isAndroid ? onOpenWith : undefined
   if (!file.complete) return <Unavailable file={file} message="This file is incomplete (some parts are missing)." />
-  // Android's WebView has no PDF viewer; other file types open in the app that handles them
-  if (isAndroid && (kind === 'pdf' || kind === 'none'))
-    return <Unavailable file={file} message={kind === 'pdf' ? 'Open this PDF in a PDF app.' : 'No preview for this file type.'} onOpenWith={onOpenWith} onDownload={onDownload} />
   if ((kind === 'video' || kind === 'audio') && canStream()) return <Media file={file} src={streamUrl(file)} kind={kind} />
   if (kind === 'text') return <TextPreview file={file} />
-  if (kind === 'none') return <Unavailable file={file} message="No preview available for this file type." onDownload={onDownload} />
+  if (kind === 'unsupported-office') {
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+    const modern = ['doc', 'dot'].includes(ext) ? '.docx' : ['ppt', 'pps', 'pot'].includes(ext) ? '.pptx' : null
+    return (
+      <Unavailable
+        file={file}
+        message={
+          modern
+            ? `Old .${ext} files can't be previewed. Save it as ${modern} to preview it here, or open it in another app.`
+            : `.${ext} files can't be previewed here. Open it in another app or download it.`
+        }
+        onOpenWith={openWith}
+        onDownload={onDownload}
+      />
+    )
+  }
+  if (kind === 'none') return <Unavailable file={file} message="No preview for this file type." onOpenWith={openWith} onDownload={onDownload} />
+  if (DOCUMENT_KINDS.includes(kind)) {
+    if (file.size > MAX_DOCUMENT)
+      return <Unavailable file={file} message="This document is too large to preview." onOpenWith={openWith} onDownload={onDownload} />
+    return <DocumentPreview file={file} kind={kind} onOpenWith={openWith} onDownload={onDownload} />
+  }
   if (file.size > MAX_IN_MEMORY)
-    return <Unavailable file={file} message="This file is too large to preview." onDownload={onDownload} />
+    return <Unavailable file={file} message="This file is too large to preview." onOpenWith={openWith} onDownload={onDownload} />
   return <InMemory file={file} kind={kind} onDownload={onDownload} />
 }
 
-/** Loads the whole file, then shows it (images, PDFs, media when streaming isn't available). */
+/** Downloads the document into memory, then hands the bytes to the right viewer. */
+function DocumentPreview(props: { file: FileItem; kind: PreviewKind; onOpenWith?: () => void; onDownload: () => void }) {
+  const { file, kind, onOpenWith, onDownload } = props
+  const [bytes, setBytes] = useState<ArrayBuffer | null>(null)
+  const [loaded, setLoaded] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const onError = useCallback((m: string) => setError(m), [])
+
+  useEffect(() => {
+    const ctl = new TransferControl((n) => setLoaded((l) => l + n))
+    readBlob(file, ctl)
+      .then((blob) => blob.arrayBuffer())
+      .then(setBytes, (e) => !ctl.canceled && setError(e instanceof Error ? e.message : String(e)))
+    return () => ctl.cancel()
+  }, [file])
+
+  if (error)
+    return <Unavailable file={file} message={`Couldn't preview this file (${error}).`} onOpenWith={onOpenWith} onDownload={onDownload} />
+  if (!bytes) return <Loading label={`Loading… ${Math.round((loaded / file.size) * 100)}%`} />
+  return (
+    <Suspense fallback={<Loading label="Opening…" />}>
+      {kind === 'pdf' ? (
+        <PdfPreview bytes={bytes} onError={onError} />
+      ) : kind === 'zip' ? (
+        <ZipPreview bytes={bytes} onError={onError} />
+      ) : (
+        <SandboxedPreview kind={kind as FrameKind} bytes={bytes} onError={onError} />
+      )}
+    </Suspense>
+  )
+}
+
+/** Loads the whole file, then shows it (images, and media when streaming isn't available). */
 function InMemory({ file, kind, onDownload }: { file: FileItem; kind: string; onDownload: () => void }) {
   const [url, setUrl] = useState<string | null>(blobCache.get(file.id) ?? null)
   const [loaded, setLoaded] = useState(0)
@@ -154,15 +223,6 @@ function InMemory({ file, kind, onDownload }: { file: FileItem; kind: string; on
           onError={() => setError("Your browser can't display this image format.")}
           className={zoom ? 'max-w-none cursor-zoom-out' : 'max-h-full max-w-full cursor-zoom-in object-contain'}
         />
-      </div>
-    )
-  if (kind === 'pdf')
-    return (
-      <div className="flex h-full w-full flex-col items-center gap-2 p-2 sm:p-4">
-        <iframe src={url} title={file.name} className="w-full max-w-5xl flex-1 rounded-lg bg-white" />
-        <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white">
-          <ExternalLink className="h-4 w-4" /> Open in new tab
-        </a>
       </div>
     )
   return <Media file={file} src={url} kind={kind} />

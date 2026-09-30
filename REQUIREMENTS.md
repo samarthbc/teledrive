@@ -106,6 +106,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Video player with seeking (streamed)
 - [x] Audio player
 - [x] PDF and text file preview
+- [x] Office previews: Word (.docx), PowerPoint (.pptx), Excel/CSV, Markdown, ZIP contents (rendered in a sandbox)
 
 **Organization**
 - [x] Search by file name across all folders

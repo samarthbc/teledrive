@@ -1,4 +1,4 @@
-import { Loader2, TriangleAlert } from 'lucide-react'
+import { Loader2, MonitorSmartphone, TriangleAlert } from 'lucide-react'
 import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import DrivePage from './pages/Drive'
@@ -26,6 +26,19 @@ export default function App() {
 
   if (phase === 'setup') return <SetupPage />
   if (phase === 'login') return <LoginPage />
+  if (phase === 'otherTab')
+    return (
+      <Centered>
+        <MonitorSmartphone className="h-10 w-10 text-brand" />
+        <p className="font-medium">TeleDrive is open in another tab</p>
+        <p className="max-w-sm text-center text-sm text-slate-600 dark:text-slate-400">
+          Using it in two tabs at once can make Telegram end your session, so only one tab can be active.
+        </p>
+        <button className="btn-primary" onClick={() => void boot(true)}>
+          Use here instead
+        </button>
+      </Centered>
+    )
   if (phase === 'error')
     return (
       <Centered>
