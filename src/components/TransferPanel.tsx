@@ -49,7 +49,7 @@ function Row({ t }: { t: Transfer }) {
   const eta = t.speed ? formatDuration((t.size - t.done) / t.speed) : ''
   const status: Record<Transfer['status'], string> = {
     queued: 'Waiting…',
-    running: `${formatBytes(t.done)} of ${formatBytes(t.size)}${t.speed ? ` · ${formatBytes(t.speed)}/s` : ''}${eta ? ` · ${eta} left` : ''}`,
+    running: t.note ?? `${formatBytes(t.done)} of ${formatBytes(t.size)}${t.speed ? ` · ${formatBytes(t.speed)}/s` : ''}${eta ? ` · ${eta} left` : ''}`,
     paused: `Paused · ${formatBytes(t.done)} of ${formatBytes(t.size)}`,
     done: `${t.kind === 'upload' ? 'Uploaded' : 'Downloaded'} · ${formatBytes(t.size)}`,
     error: t.error ?? 'Failed',

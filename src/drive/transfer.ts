@@ -12,7 +12,10 @@ export class TransferControl {
   private paused = false
   private resumeWaiters: (() => void)[] = []
 
-  constructor(private onBytes: (n: number) => void) {}
+  constructor(
+    private onBytes: (n: number) => void,
+    private onNote: (note?: string) => void = () => {},
+  ) {}
 
   get canceled(): boolean {
     return this.controller.signal.aborted
@@ -24,6 +27,11 @@ export class TransferControl {
 
   progress(bytes: number) {
     this.onBytes(bytes)
+  }
+
+  /** Show what the transfer is doing instead of its progress (e.g. "Checking…"); no argument clears it. */
+  note(text?: string) {
+    this.onNote(text)
   }
 
   pause() {

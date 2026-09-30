@@ -302,3 +302,23 @@ export function trashedItems(drive: Drive): Item[] {
 export function locationOf(drive: Drive, item: Item): string {
   return ['My Drive', ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
 }
+
+/**
+ * A file in the drive with the same content: same SHA-256, or (for files uploaded before hashes
+ * were stored) same size and name. Trashed and locked files are ignored.
+ */
+export function findDuplicate(drive: Drive, size: number, name: string, hash: string): FileItem | undefined {
+  let byName: FileItem | undefined
+  for (const i of drive.items.values()) {
+    if (i.kind !== 'file' || i.size !== size || i.locked || !i.complete || isHidden(drive, i)) continue
+    if (i.hash === hash) return i
+    if (!i.hash && i.name.toLowerCase() === name.toLowerCase()) byName ??= i
+  }
+  return byName
+}
+
+/** True if some file might be a duplicate of a file with this size (worth hashing to check). */
+export function hasFileOfSize(drive: Drive, size: number): boolean {
+  for (const i of drive.items.values()) if (i.kind === 'file' && i.size === size && !i.locked && !i.x.tr) return true
+  return false
+}

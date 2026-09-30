@@ -7,6 +7,7 @@ import { storageChannel, storagePeer } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
 import { EncryptedSource, encryptThumb, fileKey, newFileSalt, seal } from './crypto'
+import { sha256 } from './hash'
 import { encode, type ChunkMeta, type FileMeta, type Secret } from './meta'
 import { rememberSecret } from './secrets'
 import { applyMessages, getRecord } from './sync'
@@ -77,6 +78,12 @@ export async function uploadFile(
     key, id: nanoid(10), name, chunks: {}, updated: 0, ...(opts.encrypt && { salt: newFileSalt() }),
   }
   if (opts.hash) state.hash ??= opts.hash
+  // The hash is stored with the file, so later uploads of the same content can be spotted
+  if (!state.hash) {
+    ctl.note('Checking file…')
+    state.hash = await sha256(file, ctl, (done) => ctl.note(`Checking file… ${Math.floor((done / file.size) * 100)}%`))
+    ctl.note()
+  }
   const cryptoKey = state.salt ? await fileKey(state.salt) : null
   // What goes to Telegram: the file itself, or its encrypted form
   const src: ByteSource = cryptoKey ? new EncryptedSource(file, cryptoKey) : file

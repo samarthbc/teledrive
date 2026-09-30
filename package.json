@@ -23,6 +23,7 @@
     "dexie": "^4.4.6",
     "docx-preview": "^0.4.1",
     "dompurify": "^3.4.16",
+    "hash-wasm": "^4.12.0",
     "jszip": "^3.10.2",
     "lucide-react": "^1.49.0",
     "marked": "^18.0.14",

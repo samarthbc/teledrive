@@ -20,7 +20,7 @@ import { ROOT } from '../drive/meta'
 import { createFolder, emptyTrash, move, remove, rename, restore, setStarred, trash, TRASH_DAYS } from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import {
-  breadcrumbs, collectTree, listFolder, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
+  breadcrumbs, collectTree, findDuplicate, hasFileOfSize, listFolder, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
   type FileItem, type Item,
 } from '../drive/tree'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
@@ -29,6 +29,8 @@ import { useBackHandler } from '../native/backButton'
 import { useIncomingShares } from '../native/share'
 import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
 import EncryptionDialog from '../components/dialogs/EncryptionDialog'
+import DuplicatesDialog, { type Duplicate } from '../components/dialogs/DuplicatesDialog'
+import { sha256 } from '../drive/hash'
 import { encrypting, needsUnlock } from '../drive/vault'
 import { FILTERS, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, type SortKey } from '../store/useDrive'
@@ -46,6 +48,13 @@ type Modal =
   | { type: 'logout' }
   | { type: 'backup' }
   | { type: 'encryption'; reason?: string; then?: () => void }
+  | { type: 'duplicates'; duplicates: Duplicate[]; total: number; onSkip: () => void; onUploadAll: () => void }
+
+/** A file to upload and the folder it goes into. */
+interface UploadJob {
+  file: UploadSource
+  folder: string
+}
 
 const SORT_LABELS: Record<SortKey, string> = { name: 'Name', date: 'Date', size: 'Size', type: 'Type' }
 const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash' }
@@ -138,27 +147,63 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const upload = async (files: UploadSource[], into?: string) => {
     const target = into ?? (mode === 'folder' ? current : ROOT)
+    if (!into && (target !== current || mode !== 'folder')) toast('Uploading to My Drive')
+    await queueUploads(files.map((file) => ({ file, folder: target })))
+  }
+
+  /** Check for duplicates (asking what to do if there are any), then queue the uploads. */
+  const queueUploads = async (jobs: UploadJob[]) => {
     const drv = useDrive.getState().drive
     if (needsUnlock(drv))
-      return setModal({ type: 'encryption', reason: 'Encryption is on for this drive. Unlock it to upload.', then: () => void upload(files, into) })
+      return setModal({ type: 'encryption', reason: 'Encryption is on for this drive. Unlock it to upload.', then: () => void queueUploads(jobs) })
+
+    // Only files with the same size as one already in the drive can be duplicates; hash just those
+    const hashes = new Map<UploadJob, string>()
+    const duplicates = new Map<UploadJob, Duplicate>()
+    const suspects = []
+    for (const job of jobs) if (hasFileOfSize(drv, job.file.size) && !(await findResumable(job.file, job.folder))) suspects.push(job)
+    if (suspects.length) toast('Checking for duplicates…')
+    for (const job of suspects) {
+      try {
+        const hash = await sha256(job.file)
+        hashes.set(job, hash)
+        const existing = findDuplicate(drv, job.file.size, job.file.name, hash)
+        if (existing) duplicates.set(job, { name: job.file.name, existing, location: locationOf(drv, existing) })
+      } catch (e) {
+        console.warn('Duplicate check failed', e)
+      }
+    }
+    if (!duplicates.size) return enqueueUploads(jobs, hashes)
+    setModal({
+      type: 'duplicates',
+      duplicates: [...duplicates.values()],
+      total: jobs.length,
+      onSkip: () => enqueueUploads(jobs.filter((j) => !duplicates.has(j)), hashes),
+      onUploadAll: () => enqueueUploads(jobs, hashes),
+    })
+  }
+
+  const enqueueUploads = async (jobs: UploadJob[], hashes: Map<UploadJob, string>) => {
+    const drv = useDrive.getState().drive
     const encrypt = encrypting(drv)
     const taken = new Set<string>()
-    for (const file of Array.from(files)) {
-      const resumable = await findResumable(file, target)
-      let name = resumable?.name ?? uniqueName(drv, target, file.name)
+    for (const job of jobs) {
+      const { file, folder } = job
+      const resumable = await findResumable(file, folder)
+      let name = resumable?.name ?? uniqueName(drv, folder, file.name)
       // Avoid clashes between files in the same batch
-      for (let n = 1; !resumable && taken.has(name.toLowerCase()); n++) {
+      for (let n = 1; !resumable && taken.has(`${folder}|${name.toLowerCase()}`); n++) {
         const dot = file.name.lastIndexOf('.')
         name = dot > 0 ? `${file.name.slice(0, dot)} (${n})${file.name.slice(dot)}` : `${file.name} (${n})`
       }
-      taken.add(name.toLowerCase())
+      taken.add(`${folder}|${name.toLowerCase()}`)
       if (resumable) toast(`Resuming upload of “${name}”`)
-      enqueue('upload', name, file.size, (ctl) => uploadFile(file, name, target, ctl, { encrypt }), async () => {
-        const state = await findResumable(file, target)
+      const hash = hashes.get(job)
+      enqueue('upload', name, file.size, (ctl) => uploadFile(file, name, folder, ctl, { encrypt, hash }), async () => {
+        const state = await findResumable(file, folder)
         if (state) await discard(state)
       })
     }
-    if (!into && (target !== current || mode !== 'folder')) toast('Uploading to My Drive')
   }
 
   const download = async (list: Item[]) => {
@@ -657,6 +702,21 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         />
       )}
       {modal?.type === 'backup' && <CameraBackupDialog onClose={() => setModal(null)} />}
+      {modal?.type === 'duplicates' && (
+        <DuplicatesDialog
+          duplicates={modal.duplicates}
+          total={modal.total}
+          onSkip={() => {
+            setModal(null)
+            void modal.onSkip()
+          }}
+          onUploadAll={() => {
+            setModal(null)
+            void modal.onUploadAll()
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal?.type === 'encryption' && (
         <EncryptionDialog reason={modal.reason} onUnlocked={modal.then} onClose={() => setModal(null)} />
       )}

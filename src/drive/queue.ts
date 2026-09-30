@@ -13,6 +13,8 @@ export interface Transfer {
   error?: string
   /** Bytes per second (smoothed). */
   speed: number
+  /** Shown instead of the progress, e.g. while checking the file before uploading. */
+  note?: string
 }
 
 type Job = (ctl: TransferControl) => Promise<void>
@@ -84,6 +86,9 @@ async function run(t: Transfer) {
       windowBytes = 0
     }
     emit()
+  }, (note) => {
+    t.note = note
+    emit()
   })
   controls.set(t.id, ctl)
   emit()
@@ -100,6 +105,7 @@ async function run(t: Transfer) {
     }
   } finally {
     t.speed = 0
+    t.note = undefined
     controls.delete(t.id)
     // Failed jobs are kept so they can be retried
     if (t.status !== 'error') {

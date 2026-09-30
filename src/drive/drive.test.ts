@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CAPTION_LIMIT, decode, encode, MetaError, ROOT, validateName, type Meta } from './meta'
 import {
   breadcrumbs, buildDrive, collectTree, isDescendant, isHidden, listFolder, locationOf, messageIds, recentFiles,
-  searchItems, starredItems, trashedItems, uniqueName, type MessageRecord,
+  searchItems, starredItems, trashedItems, uniqueName, findDuplicate, hasFileOfSize, type MessageRecord,
 } from './tree'
 
 let nextMsg = 1
@@ -146,5 +146,20 @@ describe('search, trash, starred, recent', () => {
     const d = build()
     expect(locationOf(d, d.items.get('b')!)).toBe('My Drive / Photos')
     expect(locationOf(d, d.items.get('s')!)).toBe('My Drive')
+  })
+})
+
+describe('duplicates', () => {
+  const H = 'a'.repeat(64)
+  const withHash = (id: string, n: string, s: number, h?: string): Meta => ({ ...(file(id, ROOT, n, 1, s) as object), ...(h && { h }) }) as Meta
+
+  it('matches by hash, or by name for files without a hash', () => {
+    const d = buildDrive([rec(withHash('a', 'x.jpg', 100, H)), rec(withHash('b', 'old.jpg', 200))])
+    expect(hasFileOfSize(d, 100)).toBe(true)
+    expect(hasFileOfSize(d, 101)).toBe(false)
+    expect(findDuplicate(d, 100, 'renamed.jpg', H)?.id).toBe('a')
+    expect(findDuplicate(d, 100, 'x.jpg', 'b'.repeat(64))).toBeUndefined()
+    expect(findDuplicate(d, 200, 'OLD.jpg', H)?.id).toBe('b')
+    expect(findDuplicate(d, 200, 'other.jpg', H)).toBeUndefined()
   })
 })
