@@ -297,22 +297,43 @@ and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for ex
 
 ---
 
-## Phase 4: Encryption and More Features
+## Phase 4: Encryption and More Features ✅ (implemented; being tested)
 
-### 4.1 End-to-end encryption (optional per drive)
-- A password is turned into a key with PBKDF2-SHA256 (600k iterations) using WebCrypto. The salt is stored in the config message.
-- Each chunk is encrypted with AES-256-GCM. File content is encrypted in 64 KB blocks, each with its own IV, so streaming and seeking still work.
-- File names are encrypted too (the caption stores ciphertext; `x.enc:1`).
-- The password is never stored remotely; there's an option to remember it on the device.
-- **Warning in the UI:** a lost password means the files can't be recovered.
+### 4.1 End-to-end encryption (optional per drive) — `src/drive/crypto.ts`, `vault.ts`, `secrets.ts`
+- **Keys:** a random 256-bit master key, wrapped (AES-GCM) with a key from the password (PBKDF2-SHA256,
+  600k iterations). The wrapped key, salt and a key ID are stored in the drive's pinned config message
+  (`cfg.e`). Changing the password re-wraps the same master key, so every file stays readable and other
+  devices that remember the key keep working.
+- **Per file:** HKDF(master, random 16-byte salt) → an AES-256-GCM key. The salt is in the caption (`k`).
+- **Content:** encrypted in blocks whose ciphertext is exactly **1 MB** (1 MB − 16 bytes of plaintext + tag),
+  IV = block index. Every 1 MB Telegram download request is one block, so downloads, previews,
+  streaming and seeking work unchanged; each message holds 512 blocks.
+- **Captions:** name, type and hash are sealed into `e` (AES-GCM with a key derived from the master);
+  `x.enc:1`. The Telegram document is named `<id>.bin`, has no thumbnail and a generic type.
+- **Thumbnails:** encrypted and sent as their own message (chunk `pt: 0`); decrypted thumbnails are
+  kept in memory only, never in IndexedDB.
+- **On the device:** "Remember on this device" stores the keys as non-extractable `CryptoKey`s in the
+  drive's IndexedDB. Otherwise they live in memory until the page closes.
+- **Locked state:** encrypted items show as "Encrypted file/folder" with a lock; they can be moved and
+  trashed but not opened. Uploads, new folders and camera backup wait for an unlock.
+- Existing files stay unencrypted when encryption is turned on; there's no way to turn it off.
 
 ### 4.2 Remaining features
-- **Duplicate detection:** SHA-256 at upload (stored as `h` in the caption); warn if it already exists.
-- **Folder upload:** `<input webkitdirectory>` / drag a folder; recreate the structure.
-- **ZIP download:** stream with `client-zip` into the File System Access API.
-- **Share with a Telegram user:** `messages.forwardMessages` to a picked contact.
-- **Multiple drives:** each drive is a separate channel; a drive switcher in the sidebar.
-- **PWA:** manifest + install prompt.
+- **Duplicate detection:** every upload stores its SHA-256 (`h`, or inside `e`), hashed incrementally with
+  `hash-wasm`. Before uploading, only files with the same size as an existing file are hashed; matches
+  (or same size + name for older files without a hash) open a "Skip / Upload anyway" dialog.
+- **Folder upload:** "Upload folder" (`webkitdirectory`; not in the Android app) and dropping folders
+  (`webkitGetAsEntry`). Folders, including empty ones, are created first, then files are queued.
+- **ZIP download:** folders (or selections with folders) download as one ZIP, streamed with `client-zip`.
+- **Send to Telegram:** a chat picker (Saved Messages, people, groups, channels you can post in, and
+  search by name/@username). Files are re-sent by reference with `messages.sendMedia`
+  (`InputMediaDocument`), so nothing is uploaded again; the recipient sees the file name from the
+  original upload. Encrypted files can't be sent.
+- **Multiple drives:** each drive is a channel (`TeleDrive Storage`, `TeleDrive · <name>`) with its own
+  IndexedDB (`teledrive-drive-<channelId>`); account data stays in `teledrive`. Old data is moved into
+  the first drive's database on first start. Switching requires no running transfers. Camera backup
+  belongs to the drive it was turned on in.
+- **PWA:** `manifest.webmanifest`, icons, and an "Install app" button when the browser offers it.
 
 **Phase 4 done when:** every item under REQUIREMENTS §4.4 is checked.
 

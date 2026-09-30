@@ -128,13 +128,13 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Open files in other apps
 
 ### 4.4 Advanced
-- [ ] End-to-end encryption: client-side encryption with a user password before upload
-- [ ] Duplicate detection via file hashes
-- [ ] Folder upload that keeps its structure
-- [ ] Download a folder as a ZIP
-- [ ] Share with Telegram users by forwarding to a contact
-- [ ] Multiple storage channels (e.g. Personal, Work)
-- [ ] Installable PWA for desktop
+- [x] End-to-end encryption: client-side encryption with a user password before upload
+- [x] Duplicate detection via file hashes
+- [x] Folder upload that keeps its structure
+- [x] Download a folder as a ZIP
+- [x] Share with Telegram users by sending to a chat
+- [x] Multiple storage channels (e.g. Personal, Work)
+- [x] Installable PWA for desktop
 
 ### 4.5 Later: camera backup upgrades (Android)
 - [ ] Automatic backup while the app is closed (Android runs it in the background when new photos appear)

@@ -1,9 +1,10 @@
 import {
-  Camera, Check, ChevronDown, Clock, FolderPlus, Plus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
+  Camera, Check, ChevronDown, Clock, Download, FolderPlus, Plus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { driveName } from '../telegram/channel'
+import { installApp, useInstall } from '../lib/install'
 import { driveStats } from '../drive/tree'
 import { formatBytes } from '../lib/format'
 import { useDrive, useRootName } from '../store/useDrive'
@@ -26,6 +27,7 @@ export default function Sidebar(props: {
   const [picking, setPicking] = useState(false)
   const current = drives.find((d) => d.id === currentDrive)
   const rootName = useRootName()
+  const canInstall = useInstall((s) => !!s.event)
   const drive = useDrive((s) => s.drive)
   const unlocked = useDrive((s) => s.unlocked)
   const EncIcon = !drive.encryption ? ShieldCheck : unlocked ? LockOpen : Lock
@@ -124,6 +126,11 @@ export default function Sidebar(props: {
           </p>
           <p className="mt-1 text-slate-400">Unlimited storage on Telegram</p>
         </div>
+        {canInstall && (
+          <button className="btn-ghost w-full justify-start" onClick={() => void installApp()}>
+            <Download className="h-4 w-4" /> Install app
+          </button>
+        )}
         <button className="btn-ghost w-full justify-start" onClick={onLogout}>
           <LogOut className="h-4 w-4" /> Log out
         </button>

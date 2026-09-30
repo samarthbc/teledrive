@@ -2,7 +2,7 @@
 
 A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, and an **Android app**. There's **no backend server**; the app runs on your device and talks to Telegram directly.
 
-> Status: **Phase 3 (Android app)**. See the [roadmap](#roadmap).
+> Status: **Phase 4 (encryption and more)**. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -21,6 +21,13 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Recent, Starred, and Trash (restore, delete forever, auto-emptied after 30 days, Undo)
 - Multi-select: checkboxes, Ctrl/Cmd-click, Shift-click, Ctrl+A, long-press on phones; bulk download/move/star/trash
 - Interrupted uploads resume: retry, or pick the same file again, even after closing the page
+- **End-to-end encryption** (optional): files, names and thumbnails are encrypted on your device with a
+  password before they reach Telegram; streaming and previews still work
+- **Duplicate detection**: warns before uploading a file that's already in the drive
+- **Folder upload** (button or drag-and-drop) keeps the folder structure; **folders download as ZIP**
+- **Send to Telegram**: send files to any chat or contact without uploading them again
+- **Multiple drives** (e.g. Personal, Work), each its own private channel, with a switcher
+- Installable as an app from the browser (PWA)
 - Works at phone width; follows your system's dark/light mode
 
 **Android app** (same code, wrapped with Capacitor):
@@ -118,7 +125,8 @@ android/        Android project (Capacitor); native code in app/src/main/java/co
 ## Privacy and safety
 
 - Your files live in **your own** Telegram account. The API keys only identify the app; they don't give access to anyone's files.
-- Normal Telegram channels are **not end-to-end encrypted**. Optional client-side encryption is planned (Phase 4).
+- Normal Telegram channels are **not end-to-end encrypted**. Turn on **Encryption** in the sidebar to encrypt
+  new files on your device (a forgotten encryption password can't be recovered).
 - Telegram doesn't guarantee storage. Don't keep the **only** copy of important files here.
 - Heavy automated use can trigger rate limits. The app waits and retries automatically.
 - Don't post or delete messages in the **TeleDrive Storage** channel by hand.
@@ -131,7 +139,7 @@ android/        Android project (Capacitor); native code in app/src/main/java/co
 | 1 | Login, storage channel, upload/download, chunking, folders, rename/move/delete, sync | ✅ |
 | 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ✅ |
 | 3 | Android app (Capacitor), share-to-app, camera backup, background transfers | ✅ Tested on a Redmi (Android 14) |
-| 4 | End-to-end encryption, duplicate detection, folder upload, ZIP download, share with contacts, multiple drives, PWA | ⏳ Next |
+| 4 | End-to-end encryption, duplicate detection, folder upload, ZIP download, send to Telegram, multiple drives, PWA | ✅ Being tested |
 | 5 | Camera backup upgrades: backup while the app is closed, more folders | ⏳ Later |
 | 6 | UI updates: dark/light theme switch | ⏳ Later |
 | 7 | Deploy the website | ⏳ Later |
