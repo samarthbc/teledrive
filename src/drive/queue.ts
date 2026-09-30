@@ -168,3 +168,8 @@ export function clearFinished() {
   }
   emit()
 }
+
+/** True while anything is uploading, downloading, paused or waiting. */
+export function hasActiveTransfers(): boolean {
+  return transfers.some((t) => ['queued', 'running', 'paused'].includes(t.status))
+}

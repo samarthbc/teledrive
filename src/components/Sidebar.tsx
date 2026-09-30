@@ -1,10 +1,12 @@
 import {
-  Camera, Clock, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
+  Camera, Check, ChevronDown, Clock, FolderPlus, Plus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
+import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { driveName } from '../telegram/channel'
 import { driveStats } from '../drive/tree'
 import { formatBytes } from '../lib/format'
-import { useDrive } from '../store/useDrive'
+import { useDrive, useRootName } from '../store/useDrive'
 
 export default function Sidebar(props: {
   onUpload: () => void
@@ -13,10 +15,17 @@ export default function Sidebar(props: {
   onNewFolder: () => void
   onLogout: () => void
   onEncryption: () => void
+  onSwitchDrive: (id: string) => void
+  onNewDrive: () => void
   /** Only in the Android app. */
   onCameraBackup?: () => void
 }) {
-  const { onUpload, onUploadFolder, onNewFolder, onLogout, onEncryption, onCameraBackup } = props
+  const { onUpload, onUploadFolder, onNewFolder, onLogout, onEncryption, onSwitchDrive, onNewDrive, onCameraBackup } = props
+  const drives = useDrive((s) => s.drives)
+  const currentDrive = useDrive((s) => s.currentDrive)
+  const [picking, setPicking] = useState(false)
+  const current = drives.find((d) => d.id === currentDrive)
+  const rootName = useRootName()
   const drive = useDrive((s) => s.drive)
   const unlocked = useDrive((s) => s.unlocked)
   const EncIcon = !drive.encryption ? ShieldCheck : unlocked ? LockOpen : Lock
@@ -26,12 +35,52 @@ export default function Sidebar(props: {
 
   return (
     <div className="flex h-full flex-col gap-1 p-4">
-      <div className="mb-5 flex items-center gap-2.5 px-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-white">
+      <button
+        className="mb-1 flex items-center gap-2.5 rounded-xl px-2 py-1 text-left hover:bg-slate-200/70 dark:hover:bg-slate-800"
+        // Doesn't close the phone drawer: it only opens the list
+        onClick={(e) => {
+          e.stopPropagation()
+          setPicking(!picking)
+        }}
+        aria-expanded={picking}
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
           <Send className="h-5 w-5" />
         </div>
-        <span className="text-lg font-semibold">TeleDrive</span>
-      </div>
+        <span className="min-w-0 flex-1">
+          <span className="block text-lg leading-tight font-semibold">TeleDrive</span>
+          <span className="block truncate text-xs text-slate-500">{current ? driveName(current) : ' '}</span>
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${picking ? 'rotate-180' : ''}`} />
+      </button>
+      {picking && (
+        <div className="mb-2 space-y-0.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
+          {drives.map((d) => (
+            <button
+              key={d.id}
+              className="btn w-full justify-start py-1.5 text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-700"
+              onClick={() => {
+                setPicking(false)
+                onSwitchDrive(d.id)
+              }}
+            >
+              <HardDrive className="h-4 w-4" />
+              <span className="truncate">{driveName(d)}</span>
+              {d.id === currentDrive && <Check className="ml-auto h-4 w-4 text-brand" />}
+            </button>
+          ))}
+          <button
+            className="btn w-full justify-start py-1.5 text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-700"
+            onClick={() => {
+              setPicking(false)
+              onNewDrive()
+            }}
+          >
+            <Plus className="h-4 w-4" /> New drive
+          </button>
+        </div>
+      )}
+      <div className="mb-4" />
 
       <button className="btn-primary mb-1 justify-start py-2.5" onClick={onUpload}>
         <Upload className="h-4 w-4" /> Upload files
@@ -46,7 +95,7 @@ export default function Sidebar(props: {
       </button>
 
       <nav className="space-y-0.5">
-        <Link to="/" icon={HardDrive} label="My Drive" active={inDrive} />
+        <Link to="/" icon={HardDrive} label={rootName} active={inDrive} />
         <Link to="/recent" icon={Clock} label="Recent" />
         <Link to="/starred" icon={Star} label="Starred" />
         <Link to="/trash" icon={Trash2} label="Trash" />

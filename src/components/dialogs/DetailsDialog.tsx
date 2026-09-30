@@ -2,12 +2,14 @@ import { Download } from 'lucide-react'
 import { ROOT } from '../../drive/meta'
 import { breadcrumbs, collectTree, type Drive, type Item } from '../../drive/tree'
 import { fileIcon, formatBytes } from '../../lib/format'
+import { useRootName } from '../../store/useDrive'
 import Dialog from '../Dialog'
 
 export default function DetailsDialog(props: { drive: Drive; item: Item; onDownload: () => void; onClose: () => void }) {
   const { drive, item, onDownload, onClose } = props
   const { Icon, color } = fileIcon(item)
-  const location = item.parent === ROOT ? 'My Drive' : ['My Drive', ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
+  const rootName = useRootName()
+  const location = item.parent === ROOT ? rootName : [rootName, ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
 
   const rows: [string, string][] = [['Location', location], ['Created', new Date(item.ts * 1000).toLocaleString()]]
   if (item.x.enc) rows.push(['Encryption', item.locked ? 'Encrypted (locked on this device)' : 'End-to-end encrypted'])

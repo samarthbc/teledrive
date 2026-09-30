@@ -1,5 +1,5 @@
 import { Api } from 'telegram'
-import { delKV, getKV, setKV } from '../db/db'
+import { driveDb } from '../db/db'
 import { storagePeer } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
@@ -29,7 +29,7 @@ export function needsUnlock(drive: Drive): boolean {
 /** Use the key remembered on this device, if it belongs to this drive. */
 export async function restoreKeys(config: EncryptionConfig | undefined): Promise<boolean> {
   if (!config || isUnlocked()) return isUnlocked()
-  const saved = await getKV<Keys>(REMEMBER_KEY)
+  const saved = await driveDb().get<Keys>(REMEMBER_KEY)
   if (!saved || saved.id !== config.id) return false
   setKeys(saved)
   return true
@@ -38,8 +38,8 @@ export async function restoreKeys(config: EncryptionConfig | undefined): Promise
 async function useKeys(keys: Keys, remember: boolean) {
   setKeys(keys)
   // The keys can't be exported: IndexedDB stores them as opaque CryptoKey objects
-  if (remember) await setKV(REMEMBER_KEY, keys)
-  else await delKV(REMEMBER_KEY)
+  if (remember) await driveDb().set(REMEMBER_KEY, keys)
+  else await driveDb().del(REMEMBER_KEY)
 }
 
 /** Throws WrongPasswordError if the password is wrong. */
@@ -47,11 +47,16 @@ export async function unlock(config: EncryptionConfig, password: string, remembe
   await useKeys(await unlockKeys(config, password), remember)
 }
 
-/** Forget the key on this device (encrypted files show as locked again). */
-export async function lock(): Promise<void> {
+/** Drop the key from memory (e.g. when switching drives or logging out). */
+export function forgetKeys(): void {
   setKeys(null)
   clearSecrets()
-  await delKV(REMEMBER_KEY)
+}
+
+/** Forget the key on this device (encrypted files show as locked again). */
+export async function lock(): Promise<void> {
+  forgetKeys()
+  await driveDb().del(REMEMBER_KEY)
 }
 
 /** Turn on encryption for this drive. Existing files stay as they are; new ones are encrypted. */

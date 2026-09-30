@@ -1,7 +1,7 @@
 import bigInt from 'big-integer'
 import { nanoid } from 'nanoid'
 import { Api } from 'telegram'
-import { db, type ChunkState, type UploadState } from '../db/db'
+import { driveDb, type ChunkState, type UploadState } from '../db/db'
 import { errorCode } from '../telegram/auth'
 import { storageChannel, storagePeer } from '../telegram/channel'
 import { getClient } from '../telegram/client'
@@ -58,7 +58,7 @@ export function uploadKey(file: UploadSource, parentId: string): string {
 
 /** An unfinished upload of this file into this folder, if there is one. */
 export function findResumable(file: UploadSource, parentId: string): Promise<UploadState | undefined> {
-  return db.uploads.get(uploadKey(file, parentId))
+  return driveDb().uploads.get(uploadKey(file, parentId))
 }
 
 /**
@@ -74,7 +74,7 @@ export async function uploadFile(
   if (file.size === 0) throw new EmptyFileError()
   const key = uploadKey(file, parentId)
   // A resumed upload keeps its original choice (its first chunks were sent that way)
-  const state: UploadState = (await db.uploads.get(key)) ?? {
+  const state: UploadState = (await driveDb().uploads.get(key)) ?? {
     key, id: nanoid(10), name, chunks: {}, updated: 0, ...(opts.encrypt && { salt: newFileSalt() }),
   }
   if (opts.hash) state.hash ??= opts.hash
@@ -116,7 +116,7 @@ export async function uploadFile(
     if (!force && Date.now() - lastSave < SAVE_INTERVAL) return
     lastSave = Date.now()
     state.updated = lastSave
-    await db.uploads.put(state)
+    await driveDb().uploads.put(state)
   }
 
   // Encrypted files don't reveal their name to Telegram
@@ -155,7 +155,7 @@ export async function uploadFile(
       await save(true)
       await applyMessages(msgs)
     }
-    await db.uploads.delete(key)
+    await driveDb().uploads.delete(key)
   } catch (e) {
     if (e instanceof CanceledError || ctl.canceled) {
       await discard(state)
@@ -194,7 +194,7 @@ export async function discard(state: UploadState): Promise<void> {
     const client = await getClient()
     await client.invoke(new Api.channels.DeleteMessages({ channel: storageChannel(), id: sent })).catch(() => {})
   }
-  await db.uploads.delete(state.key)
+  await driveDb().uploads.delete(state.key)
 }
 
 /**

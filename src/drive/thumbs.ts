@@ -1,4 +1,4 @@
-import { db } from '../db/db'
+import { driveDb } from '../db/db'
 import { fetchThumbnail } from './download'
 import type { FileItem } from './tree'
 
@@ -29,11 +29,11 @@ export function thumbnailUrl(file: FileItem): Promise<string | null> {
 
 async function load(file: FileItem): Promise<string | null> {
   // Thumbnails of encrypted files are kept in memory only, never saved decrypted
-  let blob = file.salt ? undefined : (await db.thumbs.get(file.id))?.blob
+  let blob = file.salt ? undefined : (await driveDb().thumbs.get(file.id))?.blob
   if (!blob) {
     blob = (await limited(() => fetchThumbnail(file).catch(() => null))) ?? undefined
     if (!blob) return null
-    if (!file.salt) await db.thumbs.put({ id: file.id, blob })
+    if (!file.salt) await driveDb().thumbs.put({ id: file.id, blob })
   }
   const url = URL.createObjectURL(blob)
   urls.set(file.id, url)

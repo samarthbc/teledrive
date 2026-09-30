@@ -2,6 +2,7 @@ import { ChevronRight, Folder, HardDrive, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { ROOT } from '../../drive/meta'
 import { breadcrumbs, isDescendant, listFolder, type Drive, type Item } from '../../drive/tree'
+import { useRootName } from '../../store/useDrive'
 import Dialog from '../Dialog'
 
 /** Browse folders and pick a destination. */
@@ -16,6 +17,7 @@ export default function MoveDialog(props: {
   initialFolder?: string
 }) {
   const { drive, items, onMove, onClose } = props
+  const rootName = useRootName()
   const [current, setCurrent] = useState(items[0]?.parent ?? props.initialFolder ?? ROOT)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +59,7 @@ export default function MoveDialog(props: {
     >
       <nav className="mb-2 flex flex-wrap items-center gap-1 text-sm">
         <button className="rounded px-1.5 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setCurrent(ROOT)}>
-          My Drive
+          {rootName}
         </button>
         {breadcrumbs(drive, current).map((f) => (
           <span key={f.id} className="flex items-center gap-1">

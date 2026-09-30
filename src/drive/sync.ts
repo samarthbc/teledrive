@@ -1,5 +1,5 @@
 import { Api } from 'telegram'
-import { db, getKV, KEYS, setKV } from '../db/db'
+import { driveDb, KEYS } from '../db/db'
 import { storageChannel, storagePeer } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { toRecord } from '../telegram/messages'
@@ -26,11 +26,12 @@ function emit() {
 
 /** Load cached records from IndexedDB (instant startup, works offline). */
 export async function loadCache(): Promise<boolean> {
+  const db = driveDb()
   const cached = await db.records.toArray()
   records.clear()
   for (const r of cached) records.set(r.msgId, r)
   emit()
-  return cached.length > 0 || (await getKV<number>(KEYS.pts)) !== undefined
+  return cached.length > 0 || (await db.get<number>(KEYS.pts)) !== undefined
 }
 
 /** Apply messages we just sent or edited ourselves, without waiting for the next sync. */
@@ -56,6 +57,7 @@ async function commit(upserts: MessageRecord[], removals: number[]) {
   upserts = upserts.filter((r) => !removed.has(r.msgId))
   for (const id of removals) records.delete(id)
   for (const r of upserts) records.set(r.msgId, r)
+  const db = driveDb()
   await db.transaction('rw', db.records, async () => {
     if (removals.length) await db.records.bulkDelete(removals)
     if (upserts.length) await db.records.bulkPut(upserts)
@@ -66,7 +68,7 @@ async function commit(upserts: MessageRecord[], removals: number[]) {
 /** Sync with Telegram: incremental if possible, otherwise a full scan. Calls are serialized. */
 export function sync(): Promise<void> {
   running = running.catch(() => {}).then(async () => {
-    const pts = await getKV<number>(KEYS.pts)
+    const pts = await driveDb().get<number>(KEYS.pts)
     if (pts === undefined || !(await syncDifference(pts))) await fullScan()
   })
   return running
@@ -91,10 +93,11 @@ async function fullScan(): Promise<void> {
 
   records.clear()
   for (const [id, r] of fresh) records.set(id, r)
+  const db = driveDb()
   await db.transaction('rw', db.records, db.kv, async () => {
     await db.records.clear()
     await db.records.bulkPut([...fresh.values()])
-    await setKV(KEYS.pts, pts)
+    await db.set(KEYS.pts, pts)
   })
   emit()
 }
@@ -115,7 +118,7 @@ async function syncDifference(startPts: number): Promise<boolean> {
     )
     if (diff instanceof Api.updates.ChannelDifferenceTooLong) return false
     if (diff instanceof Api.updates.ChannelDifferenceEmpty) {
-      await setKV(KEYS.pts, diff.pts)
+      await driveDb().set(KEYS.pts, diff.pts)
       return true
     }
 
@@ -133,7 +136,12 @@ async function syncDifference(startPts: number): Promise<boolean> {
     }
     await commit(upserts, deleted)
     pts = diff.pts
-    await setKV(KEYS.pts, pts)
+    await driveDb().set(KEYS.pts, pts)
     if (diff.final) return true
   }
+}
+
+/** Resolves once no sync is running (e.g. before switching drives). */
+export function syncIdle(): Promise<void> {
+  return running.catch(() => {})
 }

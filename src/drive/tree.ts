@@ -298,9 +298,9 @@ export function trashedItems(drive: Drive): Item[] {
   })
 }
 
-/** "My Drive / Photos / 2026" for the folder an item is in. */
-export function locationOf(drive: Drive, item: Item): string {
-  return ['My Drive', ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
+/** "My Drive / Photos / 2026" for the folder an item is in (`root` is the drive's name). */
+export function locationOf(drive: Drive, item: Item, root = 'My Drive'): string {
+  return [root, ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
 }
 
 /**

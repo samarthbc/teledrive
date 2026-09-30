@@ -36,7 +36,7 @@ import { sha256 } from '../drive/hash'
 import { createFolders, treeFromDrop, treeFromInput, type PickedTree } from '../drive/folderUpload'
 import { encrypting, needsUnlock } from '../drive/vault'
 import { FILTERS, formatDate, type FilterKey } from '../lib/format'
-import { useDrive, type SortKey } from '../store/useDrive'
+import { useDrive, useRootName, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
 
 export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash'
@@ -52,6 +52,7 @@ type Modal =
   | { type: 'backup' }
   | { type: 'encryption'; reason?: string; then?: () => void }
   | { type: 'send'; files: FileItem[] }
+  | { type: 'newDrive' }
   | { type: 'duplicates'; duplicates: Duplicate[]; total: number; onSkip: () => void; onUploadAll: () => void }
 
 /** A file to upload and the folder it goes into. */
@@ -75,6 +76,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const location = useLocation()
   const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout, unlocked } = useDrive()
   const locked = !!drive.encryption && !unlocked
+  const rootName = useRootName()
 
   const [modal, setModal] = useState<Modal | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[] } | null>(null)
@@ -152,7 +154,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const upload = async (files: UploadSource[], into?: string) => {
     const target = into ?? (mode === 'folder' ? current : ROOT)
-    if (!into && (target !== current || mode !== 'folder')) toast('Uploading to My Drive')
+    if (!into && (target !== current || mode !== 'folder')) toast(`Uploading to ${rootName}`)
     await queueUploads(files.map((file) => ({ file, folder: target })))
   }
 
@@ -189,7 +191,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         const hash = await sha256(job.file)
         hashes.set(job, hash)
         const existing = findDuplicate(drv, job.file.size, job.file.name, hash)
-        if (existing) duplicates.set(job, { name: job.file.name, existing, location: locationOf(drv, existing) })
+        if (existing) duplicates.set(job, { name: job.file.name, existing, location: locationOf(drv, existing, rootName) })
       } catch (e) {
         console.warn('Duplicate check failed', e)
       }
@@ -461,6 +463,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       onNewFolder={newFolder}
       onLogout={() => setModal({ type: 'logout' })}
       onEncryption={() => setModal({ type: 'encryption' })}
+      onSwitchDrive={(id) => {
+        if (id === useDrive.getState().currentDrive) return
+        // Folder links belong to one drive, so start at the top of the other one
+        navigate('/')
+        void act(useDrive.getState().switchDrive(id))
+      }}
+      onNewDrive={() => setModal({ type: 'newDrive' })}
       onCameraBackup={isAndroid ? () => setModal({ type: 'backup' }) : undefined}
     />
   )
@@ -469,8 +478,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     mode === 'folder'
       ? undefined
       : mode === 'trash'
-        ? (i: Item) => `Deleted ${formatDate(i.x.tr ?? 0)} · from ${locationOf(drive, i)}`
-        : (i: Item) => locationOf(drive, i)
+        ? (i: Item) => `Deleted ${formatDate(i.x.tr ?? 0)} · from ${locationOf(drive, i, rootName)}`
+        : (i: Item) => locationOf(drive, i, rootName)
 
   return (
     <div className="flex h-full" {...dropHandlers}>
@@ -534,7 +543,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                 {mode === 'folder' ? (
                   <>
                     <button className="rounded-md px-2 py-1 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => openFolder(ROOT)}>
-                      My Drive
+                      {rootName}
                     </button>
                     {crumbs.map((f) => (
                       <span key={f.id} className="flex items-center gap-1">
@@ -675,7 +684,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-brand/10 p-6 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-brand bg-white/90 px-12 py-10 dark:bg-slate-900/90">
             <CloudUpload className="h-12 w-12 text-brand" />
-            <p className="font-medium">Drop to upload to {mode === 'folder' ? (crumbs.at(-1)?.name ?? 'My Drive') : 'My Drive'}</p>
+            <p className="font-medium">Drop to upload to {mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : rootName}</p>
           </div>
         </div>
       )}
@@ -764,6 +773,19 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         />
       )}
       {modal?.type === 'backup' && <CameraBackupDialog onClose={() => setModal(null)} />}
+      {modal?.type === 'newDrive' && (
+        <PromptDialog
+          title="New drive"
+          initial="Work"
+          confirmLabel="Create"
+          onSubmit={async (name) => {
+            navigate('/')
+            await useDrive.getState().createDrive(name)
+            toast(`Created the “${name.trim()}” drive`)
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal?.type === 'send' && <SendDialog files={modal.files} onClose={() => setModal(null)} />}
       {modal?.type === 'duplicates' && (
         <DuplicatesDialog

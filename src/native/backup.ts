@@ -9,6 +9,7 @@ import { isHidden, listFolder, uniqueName } from '../drive/tree'
 import { uploadFile } from '../drive/upload'
 import { encrypting, needsUnlock } from '../drive/vault'
 import { useDrive } from '../store/useDrive'
+import { currentDriveId, driveName } from '../telegram/channel'
 import { isAndroid, Native, PhoneFile, type CameraItem } from './android'
 
 /** Camera backup: uploads new photos/videos from DCIM/Camera into a "Camera Backup" folder. */
@@ -19,6 +20,8 @@ export interface BackupSettings {
   /** Only media added at or after this time (unix seconds) is backed up. */
   since: number
   folderId?: string
+  /** The drive photos go to (the one open when backup was turned on). */
+  driveId?: string
 }
 
 const SETTINGS_KEY = 'backup'
@@ -59,6 +62,11 @@ async function load() {
 export async function updateBackupSettings(changes: Partial<BackupSettings>): Promise<void> {
   await load()
   const settings = { ...useBackup.getState().settings, ...changes }
+  // Turning backup on in another drive moves it there
+  if (changes.enabled && settings.driveId !== currentDriveId()) {
+    settings.driveId = currentDriveId() ?? undefined
+    delete settings.folderId
+  }
   useBackup.setState({ settings, status: settings.enabled ? 'Waiting…' : 'Off' })
   await setKV(SETTINGS_KEY, settings)
   if (settings.enabled) void runBackup()
@@ -85,6 +93,12 @@ export async function runBackup(): Promise<void> {
   try {
     if (!(await Native.mediaPermission({})).granted) {
       return useBackup.setState({ status: 'Needs permission to read photos and videos' })
+    }
+    // Backups belong to one drive; older settings (from before multiple drives) adopt the open one
+    if (!settings.driveId) await updateSettingsQuietly({ driveId: currentDriveId() ?? undefined })
+    else if (settings.driveId !== currentDriveId()) {
+      const target = useDrive.getState().drives.find((d) => d.id === settings.driveId)
+      return useBackup.setState({ status: `Paused: open the “${target ? driveName(target) : 'backup'}” drive to back up` })
     }
     if (needsUnlock(useDrive.getState().drive)) return useBackup.setState({ status: 'Waiting: unlock encrypted files to back up' })
     const net = await Network.getStatus()

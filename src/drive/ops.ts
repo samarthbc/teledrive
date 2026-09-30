@@ -9,7 +9,7 @@ import { encode, ROOT, validateName, type FileMeta, type FolderMeta, type Secret
 import { rememberSecret, secretOf } from './secrets'
 import { encrypting } from './vault'
 import { applyDeleted, applyMessages, getRecord } from './sync'
-import { db } from '../db/db'
+import { driveDb } from '../db/db'
 import { randomLong } from './transfer'
 import { discard } from './upload'
 import {
@@ -109,10 +109,10 @@ export async function emptyTrash(drive: Drive, olderThanDays = 0): Promise<numbe
 export async function cleanup(drive: Drive): Promise<void> {
   await emptyTrash(drive, TRASH_DAYS)
   const cutoff = now() - LEFTOVER_DAYS * DAY
-  for (const state of await db.uploads.toArray()) {
+  for (const state of await driveDb().uploads.toArray()) {
     if (state.updated / 1000 < cutoff) await discard(state)
   }
-  const resumable = new Set((await db.uploads.toArray()).map((u) => u.id))
+  const resumable = new Set((await driveDb().uploads.toArray()).map((u) => u.id))
   const leftovers = drive.orphanChunks.filter((msgId) => {
     const r = getRecord(msgId)
     return r && r.date < cutoff && !(r.meta.t === 'c' && resumable.has(r.meta.id))

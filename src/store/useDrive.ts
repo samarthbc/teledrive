@@ -1,15 +1,17 @@
 import { create } from 'zustand'
 import { loadKeys } from '../config'
-import { clearAccountData, getKV, KEYS, setKV } from '../db/db'
+import { clearAccountData, delKV, getKV, KEYS, openDriveDb, setKV } from '../db/db'
 import { cleanup } from '../drive/ops'
-import { subscribeTransfers, type Transfer } from '../drive/queue'
+import { hasActiveTransfers, subscribeTransfers, type Transfer } from '../drive/queue'
 import { initStreaming } from '../drive/stream'
-import { loadCache, subscribe, sync } from '../drive/sync'
+import { loadCache, subscribe, sync, syncIdle } from '../drive/sync'
 import { resolveSecrets, secretOf, unresolved } from '../drive/secrets'
 import { buildDrive, type Drive, type MessageRecord } from '../drive/tree'
 import * as vault from '../drive/vault'
 import { describeError, errorCode, logOut } from '../telegram/auth'
-import { ensureStorageChannel } from '../telegram/channel'
+import {
+  createDrive, driveName, loadDrives, openStorage, refreshDrives, stillAccessible, type DriveInfo,
+} from '../telegram/channel'
 import { getClient, isAuthorized, onSessionLost, resetClient, SESSION_LOST_CODES } from '../telegram/client'
 import { acquireSessionLock, onSessionTakenOver } from '../telegram/sessionLock'
 
@@ -32,6 +34,9 @@ interface State {
   transfers: Transfer[]
   view: ViewMode
   sort: Sort
+  /** All drives (storage channels) of this account. */
+  drives: DriveInfo[]
+  currentDrive: string | null
   /** The encryption key is available on this device (only meaningful if the drive has encryption on). */
   unlocked: boolean
   boot: (takeOver?: boolean) => Promise<void>
@@ -45,6 +50,9 @@ interface State {
   lock: () => Promise<void>
   enableEncryption: (password: string, remember: boolean) => Promise<void>
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
+  /** Throws if transfers are still running. */
+  switchDrive: (id: string) => Promise<void>
+  createDrive: (name: string) => Promise<void>
 }
 
 const SYNC_INTERVAL = 30_000
@@ -57,6 +65,8 @@ let hasLock = false
 let timer: ReturnType<typeof setInterval> | undefined
 // Startup must never run twice at once (it could create two storage channels)
 let booting: Promise<void> | null = null
+/** No syncing while a different drive is being opened. */
+let switching = false
 
 export const useDrive = create<State>((set, get) => {
   let records: Map<number, MessageRecord> = new Map()
@@ -83,14 +93,39 @@ export const useDrive = create<State>((set, get) => {
 
   const startDrive = async () => {
     set({ phase: 'loading', error: null })
-    await ensureStorageChannel()
-    const hasCache = await loadCache()
-    await restoreKeys()
-    if (hasCache) set({ phase: 'ready' })
+    let drives = await loadDrives()
+    const savedId = await getKV<string>(KEYS.currentDrive)
+    let d = drives.find((x) => x.id === savedId) ?? drives[0]
+    if (!(await stillAccessible(d))) {
+      // Deleted or left: find the drives again (creates a new one if none are left)
+      await delKV(KEYS.drives)
+      drives = await loadDrives()
+      d = drives[0]
+    }
+    set({ drives })
+    await openDrive(d)
+    startAutoSync()
+    // Pick up drives created on other devices (in the background)
+    refreshDrives(drives).then((list) => set({ drives: list }), (e) => console.warn('Drive list refresh failed', e))
+  }
+
+  /** Open a drive: its channel, its local data (shown right away), then sync. */
+  const openDrive = async (d: DriveInfo) => {
+    switching = true
+    try {
+      set({ phase: 'loading', error: null, currentDrive: d.id })
+      await openDriveDb(d.id)
+      openStorage(d)
+      await setKV(KEYS.currentDrive, d.id)
+      const hasCache = await loadCache()
+      await restoreKeys()
+      if (hasCache) set({ phase: 'ready' })
+    } finally {
+      switching = false
+    }
     await get().refresh()
     await restoreKeys()
     set({ phase: 'ready' })
-    startAutoSync()
     // Expire old trash and leftovers of abandoned uploads (in the background)
     cleanup(get().drive).catch((e) => console.error('Cleanup failed', e))
   }
@@ -102,8 +137,8 @@ export const useDrive = create<State>((set, get) => {
     await rebuild()
   }
 
-  const forgetKeys = async () => {
-    await vault.lock()
+  const forgetKeys = () => {
+    vault.forgetKeys()
     set({ unlocked: false })
   }
 
@@ -159,6 +194,8 @@ export const useDrive = create<State>((set, get) => {
     transfers: [],
     view: 'grid',
     sort: { key: 'name', dir: 'asc' },
+    drives: [],
+    currentDrive: null,
     unlocked: false,
 
     boot: (takeOver = false) => {
@@ -196,7 +233,7 @@ export const useDrive = create<State>((set, get) => {
     },
 
     refresh: async () => {
-      if (get().syncing) return
+      if (get().syncing || switching) return
       set({ syncing: true })
       try {
         await sync()
@@ -215,6 +252,7 @@ export const useDrive = create<State>((set, get) => {
       document.removeEventListener('visibilitychange', onVisible)
       await logOut()
       await forgetKeys()
+      set({ drives: [], currentDrive: null })
       set({ drive: buildDrive([]), phase: 'login', loginNotice: null })
     },
 
@@ -237,7 +275,8 @@ export const useDrive = create<State>((set, get) => {
     },
 
     lock: async () => {
-      await forgetKeys()
+      await vault.lock()
+      set({ unlocked: false })
       await rebuild()
     },
 
@@ -248,5 +287,34 @@ export const useDrive = create<State>((set, get) => {
     },
 
     changePassword: (oldPassword, newPassword) => vault.changeEncryptionPassword(get().drive, oldPassword, newPassword),
+
+    switchDrive: async (id) => {
+      if (id === get().currentDrive) return
+      const d = get().drives.find((x) => x.id === id)
+      if (!d) throw new Error('Drive not found')
+      if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before switching drives')
+      await syncIdle()
+      forgetKeys()
+      try {
+        await openDrive(d)
+      } catch (e) {
+        fail(e)
+      }
+    },
+
+    createDrive: async (name) => {
+      if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before adding a drive')
+      const { drive, drives } = await createDrive(name, get().drives)
+      set({ drives })
+      await get().switchDrive(drive.id)
+    },
   }
 })
+
+/** Name of the open drive ("My Drive" for the first one), shown where the top folder is named. */
+export function useRootName(): string {
+  return useDrive((s) => {
+    const d = s.drives.find((x) => x.id === s.currentDrive)
+    return d ? driveName(d) : 'My Drive'
+  })
+}
