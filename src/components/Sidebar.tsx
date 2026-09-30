@@ -1,5 +1,5 @@
 import {
-  Camera, Clock, FolderPlus, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
+  Camera, Clock, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { driveStats } from '../drive/tree'
@@ -8,13 +8,15 @@ import { useDrive } from '../store/useDrive'
 
 export default function Sidebar(props: {
   onUpload: () => void
+  /** Not in the Android app (its file picker can't pick folders). */
+  onUploadFolder?: () => void
   onNewFolder: () => void
   onLogout: () => void
   onEncryption: () => void
   /** Only in the Android app. */
   onCameraBackup?: () => void
 }) {
-  const { onUpload, onNewFolder, onLogout, onEncryption, onCameraBackup } = props
+  const { onUpload, onUploadFolder, onNewFolder, onLogout, onEncryption, onCameraBackup } = props
   const drive = useDrive((s) => s.drive)
   const unlocked = useDrive((s) => s.unlocked)
   const EncIcon = !drive.encryption ? ShieldCheck : unlocked ? LockOpen : Lock
@@ -34,6 +36,11 @@ export default function Sidebar(props: {
       <button className="btn-primary mb-1 justify-start py-2.5" onClick={onUpload}>
         <Upload className="h-4 w-4" /> Upload files
       </button>
+      {onUploadFolder && (
+        <button className="btn-ghost mb-1 justify-start py-2.5" onClick={onUploadFolder}>
+          <FolderUp className="h-4 w-4" /> Upload folder
+        </button>
+      )}
       <button className="btn-ghost mb-4 justify-start py-2.5" onClick={onNewFolder}>
         <FolderPlus className="h-4 w-4" /> New folder
       </button>

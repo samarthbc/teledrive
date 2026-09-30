@@ -31,6 +31,7 @@ import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
 import EncryptionDialog from '../components/dialogs/EncryptionDialog'
 import DuplicatesDialog, { type Duplicate } from '../components/dialogs/DuplicatesDialog'
 import { sha256 } from '../drive/hash'
+import { createFolders, treeFromDrop, treeFromInput, type PickedTree } from '../drive/folderUpload'
 import { encrypting, needsUnlock } from '../drive/vault'
 import { FILTERS, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, type SortKey } from '../store/useDrive'
@@ -81,6 +82,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const [dragging, setDragging] = useState(false)
   const dragDepth = useRef(0)
   const fileInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
   const shares = useIncomingShares((s) => s.files)
   const clearShares = useIncomingShares((s) => s.clear)
@@ -150,6 +152,22 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     if (!into && (target !== current || mode !== 'folder')) toast('Uploading to My Drive')
     await queueUploads(files.map((file) => ({ file, folder: target })))
   }
+
+  /** Upload a picked or dropped folder: recreate its folders, then upload the files into them. */
+  const uploadTree = (tree: PickedTree, into?: string) =>
+    whenUnlocked('Encryption is on for this drive. Unlock it to upload.', () => {
+      const target = into ?? (mode === 'folder' ? current : ROOT)
+      void act(
+        (async () => {
+          if (!tree.files.length && !tree.folders.length) return
+          const n = tree.folders.length
+          if (n > 1) toast(`Creating ${n} folders…`)
+          const ids = await createFolders(() => useDrive.getState().drive, target, tree.folders)
+          await queueUploads(tree.files.map(({ file, dirs }) => ({ file, folder: dirs.length ? ids.get(dirs.join('/'))! : target })))
+          if (!tree.files.length) toast(n === 1 ? 'Folder created (it was empty)' : `${n} folders created (no files in them)`)
+        })(),
+      )
+    })
 
   /** Check for duplicates (asking what to do if there are any), then queue the uploads. */
   const queueUploads = async (jobs: UploadJob[]) => {
@@ -397,16 +415,20 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       e.preventDefault()
       dragDepth.current = 0
       setDragging(false)
-      // Dropped folders show up as empty entries without a type; skip them
-      const files = Array.from(e.dataTransfer.files).filter((f) => f.size > 0 || f.type)
-      if (files.length) void upload(files)
-      else toast('Folder upload is coming in a later version')
+      if (!e.dataTransfer.items?.length) return void upload(Array.from(e.dataTransfer.files))
+      // Walks dropped folders too (has to start while the drop event is running)
+      treeFromDrop(e.dataTransfer.items).then(
+        (tree) => (tree.folders.length ? uploadTree(tree) : void upload(tree.files.map((f) => f.file))),
+        toastError,
+      )
     },
   }
 
   const sidebar = (
     <Sidebar
       onUpload={() => fileInput.current?.click()}
+      // Android's file picker can't pick folders
+      onUploadFolder={isAndroid ? undefined : () => folderInput.current?.click()}
       onNewFolder={newFolder}
       onLogout={() => setModal({ type: 'logout' })}
       onEncryption={() => setModal({ type: 'encryption' })}
@@ -430,6 +452,16 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         hidden
         onChange={(e) => {
           if (e.target.files?.length) void upload(Array.from(e.target.files))
+          e.target.value = ''
+        }}
+      />
+      <input
+        ref={folderInput}
+        type="file"
+        hidden
+        {...{ webkitdirectory: '' }}
+        onChange={(e) => {
+          if (e.target.files?.length) uploadTree(treeFromInput(Array.from(e.target.files)))
           e.target.value = ''
         }}
       />
