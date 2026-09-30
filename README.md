@@ -2,7 +2,7 @@
 
 A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, and an **Android app**. There's **no backend server**; the app runs on your device and talks to Telegram directly.
 
-> Status: **Phase 4 (encryption and more)**. See the [roadmap](#roadmap).
+> Status: **Phase 5 (camera backup upgrades)**. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -33,7 +33,8 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 **Android app** (same code, wrapped with Capacitor):
 
 - "Share → TeleDrive" from any app (Gallery, Files, WhatsApp…), then pick a folder
-- Camera backup: new photos/videos go to a *Camera Backup* folder (Wi-Fi only option)
+- Camera backup: new photos/videos go to a *Camera Backup* folder (Wi-Fi only option); pick more folders
+  (Screenshots, WhatsApp Images…) and turn on **backup while the app is closed**
 - Downloads are saved to **Downloads/TeleDrive**; "Open with…" hands files to other apps (PDFs, documents)
 - Transfers keep running in the background, with progress in a notification
 - Back button closes previews/dialogs, then goes up a folder
@@ -140,7 +141,7 @@ android/        Android project (Capacitor); native code in app/src/main/java/co
 | 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ✅ |
 | 3 | Android app (Capacitor), share-to-app, camera backup, background transfers | ✅ Tested on a Redmi (Android 14) |
 | 4 | End-to-end encryption, duplicate detection, folder upload, ZIP download, send to Telegram, multiple drives, PWA | ✅ Being tested |
-| 5 | Camera backup upgrades: backup while the app is closed, more folders | ⏳ Later |
+| 5 | Camera backup upgrades: backup while the app is closed, more folders | ✅ Being tested |
 | 6 | UI updates: dark/light theme switch | ⏳ Later |
 | 7 | Deploy the website | ⏳ Later |
 

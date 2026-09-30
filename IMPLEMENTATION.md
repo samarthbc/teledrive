@@ -339,7 +339,33 @@ and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for ex
 
 ---
 
-## Phase 5: Camera Backup Upgrades (Android, later)
+## Phase 5: Camera Backup Upgrades (Android) ✅ (implemented; being tested)
+
+### What was built
+- **Several folders (5.2):** `MediaAccess.listFolders()` groups MediaStore photos/videos by `RELATIVE_PATH`
+  (count + newest item for a thumbnail); `listMedia({ paths, since })` replaced `listCameraMedia`. Settings hold
+  `sources: [{ path, since, folderId }]` (older settings = just `DCIM/Camera/`). The camera goes into
+  *Camera Backup*, every other folder into *Camera Backup/<folder name>*. Switching a folder on asks
+  "Only new" or "All N items".
+- **While the app is closed (5.1):** `BackupScheduler` (WorkManager) runs `BackupWorker` when MediaStore
+  images/videos change (content-URI trigger, 20 s settle delay, re-armed after each run with
+  `APPEND_OR_REPLACE`) and hourly as a fallback; Wi-Fi-only → `UNMETERED`, plus "battery not low".
+  The worker:
+  - app on screen → does nothing (the app backs up itself);
+  - app alive in the background → sends `backgroundBackup` to the app's JavaScript and waits for
+    `backgroundBackupDone` (its WebView already holds the session);
+  - app closed → `HeadlessRunner` loads `backup.html` (`src/backup/headless.ts`, a second Vite entry) in a
+    WebView that's never shown, served from `https://localhost` via `WebViewAssetLoader`, so it shares the
+    app's IndexedDB. Photos are reached through `window.TeleDriveHeadless.call()`; `Native` in
+    `android.ts` switches to that bridge automatically.
+  - Runs are capped at 9 minutes (Android's job limit is 10); unfinished uploads resume next time.
+  - Opening the app stops a background run first (`MainActivity`), and the app waits up to 5 s for the
+    session lock, so the two never use the Telegram session at once.
+  - A notification says how many items were backed up; the Camera backup screen shows the last run.
+- Background runs use a normal job, not a foreground service (Android 12+ doesn't allow starting one from
+  the background). Encrypted drives only work in the background if the key is remembered on the phone.
+
+### Original plan
 
 Nice to have, built after everything else.
 

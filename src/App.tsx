@@ -5,6 +5,7 @@ import DrivePage from './pages/Drive'
 import LoginPage from './pages/Login'
 import SetupPage from './pages/Setup'
 import { initCameraBackup } from './native/backup'
+import { driveName } from './telegram/channel'
 import { useDrive } from './store/useDrive'
 
 let backupStarted = false
@@ -21,7 +22,14 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'ready' || backupStarted) return
     backupStarted = true
-    initCameraBackup()
+    initCameraBackup({
+      ready: () => useDrive.getState().phase === 'ready',
+      drive: () => useDrive.getState().drive,
+      driveName: (id) => {
+        const d = useDrive.getState().drives.find((x) => x.id === id)
+        return d && driveName(d)
+      },
+    })
   }, [phase])
 
   if (phase === 'setup') return <SetupPage />

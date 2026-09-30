@@ -6,7 +6,6 @@ import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.database.Cursor;
-import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -14,7 +13,6 @@ import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
-import android.util.Size;
 
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
@@ -35,14 +33,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Android-only features for TeleDrive:
@@ -64,12 +61,15 @@ import java.util.UUID;
 )
 public class TeleDriveNativePlugin extends Plugin {
 
-    private static final int MAX_OPEN_READERS = 8;
-
     /** Files being written: id → output. */
     private final Map<String, Output> outputs = new HashMap<>();
-    /** Open files being read, most recently used last. */
-    private final LinkedHashMap<String, ParcelFileDescriptor> readers = new LinkedHashMap<>(16, 0.75f, true);
+    /** Reading photos/videos and shared files. */
+    private MediaAccess media;
+
+    /** The plugin of the running app (null when the app isn't running). Used by BackupWorker. */
+    static volatile TeleDriveNativePlugin instance;
+    private CountDownLatch appBackup;
+    private volatile String appBackupResult;
     /** Files shared to the app that JavaScript hasn't picked up yet. */
     private final List<JSObject> pendingShares = new ArrayList<>();
 
@@ -82,6 +82,8 @@ public class TeleDriveNativePlugin extends Plugin {
 
     @Override
     public void load() {
+        media = new MediaAccess(getContext());
+        instance = this;
         collectShares(getActivity().getIntent());
     }
 
@@ -314,21 +316,9 @@ public class TeleDriveNativePlugin extends Plugin {
     /** Read up to `length` bytes at `offset` (base64). */
     @PluginMethod
     public void readFile(PluginCall call) {
-        String uriString = call.getString("uri", "");
-        long offset = longArg(call, "offset", 0L);
-        int length = (int) longArg(call, "length", 512 * 1024);
         try {
-            ParcelFileDescriptor pfd = reader(uriString);
-            FileChannel channel = new FileInputStream(pfd.getFileDescriptor()).getChannel();
-            ByteBuffer buf = ByteBuffer.allocate(length);
-            int total = 0;
-            while (total < length) {
-                int n = channel.read(buf, offset + total);
-                if (n <= 0) break;
-                total += n;
-            }
             JSObject ret = new JSObject();
-            ret.put("data", Base64.encodeToString(buf.array(), 0, total, Base64.NO_WRAP));
+            ret.put("data", media.read(call.getString("uri", ""), longArg(call, "offset", 0L), (int) longArg(call, "length", 512 * 1024)));
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Could not read the file: " + e.getMessage(), e);
@@ -337,102 +327,107 @@ public class TeleDriveNativePlugin extends Plugin {
 
     @PluginMethod
     public void closeFile(PluginCall call) {
-        synchronized (readers) {
-            ParcelFileDescriptor pfd = readers.remove(call.getString("uri", ""));
-            closeQuietly(pfd);
-        }
+        media.close(call.getString("uri", ""));
         call.resolve();
-    }
-
-    private ParcelFileDescriptor reader(String uri) throws IOException {
-        synchronized (readers) {
-            ParcelFileDescriptor pfd = readers.get(uri);
-            if (pfd != null) return pfd;
-            pfd = resolver().openFileDescriptor(Uri.parse(uri), "r");
-            if (pfd == null) throw new IOException("File not found");
-            readers.put(uri, pfd);
-            while (readers.size() > MAX_OPEN_READERS) {
-                String eldest = readers.keySet().iterator().next();
-                closeQuietly(readers.remove(eldest));
-            }
-            return pfd;
-        }
-    }
-
-    private static void closeQuietly(ParcelFileDescriptor pfd) {
-        if (pfd == null) return;
-        try {
-            pfd.close();
-        } catch (IOException ignored) {
-        }
     }
 
     /** Small JPEG preview of a photo/video (base64), or no data if Android can't make one. */
     @PluginMethod
     public void thumbnail(PluginCall call) {
         JSObject ret = new JSObject();
-        try {
-            Bitmap bmp = resolver().loadThumbnail(Uri.parse(call.getString("uri", "")), new Size(320, 320), null);
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            bmp.compress(Bitmap.CompressFormat.JPEG, 80, bytes);
-            ret.put("data", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP));
-        } catch (Exception ignored) {
-            // No thumbnail; the upload continues without one
-        }
+        String data = media.thumbnail(call.getString("uri", ""));
+        if (data != null) ret.put("data", data);
         call.resolve(ret);
     }
 
-    /** Camera photos and videos added at or after `since` (unix seconds), oldest first. */
+    /** Photos and videos in the given folders added at or after `since` (unix seconds), oldest first. */
     @PluginMethod
-    public void listCameraMedia(PluginCall call) {
+    public void listMedia(PluginCall call) {
         if (!mediaGranted()) {
             call.reject("Permission to read photos and videos was not granted");
             return;
         }
-        long since = longArg(call, "since", 0L);
-        int limit = (int) longArg(call, "limit", 500);
-        Uri collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL);
-        String[] projection = {
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.DISPLAY_NAME,
-            MediaStore.Files.FileColumns.SIZE,
-            MediaStore.Files.FileColumns.MIME_TYPE,
-            MediaStore.Files.FileColumns.DATE_ADDED,
-            MediaStore.Files.FileColumns.DATE_MODIFIED,
-            MediaStore.Files.FileColumns.MEDIA_TYPE,
-        };
-        String selection = "(" + MediaStore.Files.FileColumns.MEDIA_TYPE + "=? OR " + MediaStore.Files.FileColumns.MEDIA_TYPE + "=?)"
-            + " AND " + MediaStore.Files.FileColumns.DATE_ADDED + ">=?"
-            + " AND " + MediaStore.Files.FileColumns.RELATIVE_PATH + " LIKE ?"
-            + " AND " + MediaStore.Files.FileColumns.SIZE + ">0";
-        String[] args = {
-            String.valueOf(MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE),
-            String.valueOf(MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO),
-            String.valueOf(since),
-            "DCIM/Camera%",
-        };
-        JSArray items = new JSArray();
-        try (Cursor c = resolver().query(collection, projection, selection, args, MediaStore.Files.FileColumns.DATE_ADDED + " ASC")) {
-            while (c != null && c.moveToNext() && items.length() < limit) {
-                long id = c.getLong(0);
-                boolean video = c.getInt(6) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO;
-                Uri base = video ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
-                JSObject o = new JSObject();
-                o.put("id", String.valueOf(id));
-                o.put("uri", ContentUris.withAppendedId(base, id).toString());
-                o.put("name", c.getString(1));
-                o.put("size", c.getLong(2));
-                o.put("mime", c.getString(3) != null ? c.getString(3) : (video ? "video/mp4" : "image/jpeg"));
-                o.put("dateAdded", c.getLong(4));
-                o.put("lastModified", c.getLong(5) * 1000);
-                items.put(o);
-            }
+        try {
+            List<String> paths = new ArrayList<>();
+            JSArray arr = call.getArray("paths", new JSArray());
+            for (int i = 0; i < arr.length(); i++) paths.add(arr.getString(i));
             JSObject ret = new JSObject();
-            ret.put("items", items);
+            ret.put("items", media.listMedia(paths, longArg(call, "since", 0L), (int) longArg(call, "limit", 500)));
             call.resolve(ret);
         } catch (Exception e) {
             call.reject(e.getMessage(), e);
         }
+    }
+
+    /** Folders that contain photos or videos. */
+    @PluginMethod
+    public void listMediaFolders(PluginCall call) {
+        if (!mediaGranted()) {
+            call.reject("Permission to read photos and videos was not granted");
+            return;
+        }
+        try {
+            JSObject ret = new JSObject();
+            ret.put("folders", media.listFolders());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    // ---- Backup while the app is closed ----
+
+    /** Save the settings the background backup needs and (re)schedule it. */
+    @PluginMethod
+    public void scheduleBackgroundBackup(PluginCall call) {
+        BackupScheduler.configure(getContext(), call.getBoolean("enabled", false), call.getBoolean("wifiOnly", true));
+        call.resolve();
+    }
+
+    /**
+     * The app is running in the background: ask its JavaScript to back up, and wait until it says
+     * it's done (JS calls backgroundBackupDone). Called from BackupWorker's thread.
+     */
+    String runBackupInApp(long timeoutMs) throws InterruptedException {
+        CountDownLatch done = new CountDownLatch(1);
+        appBackup = done;
+        appBackupResult = "{\"status\":\"Timed out\"}";
+        notifyListeners("backgroundBackup", new JSObject(), true);
+        done.await(timeoutMs, TimeUnit.MILLISECONDS);
+        appBackup = null;
+        return appBackupResult;
+    }
+
+    /** Stop waiting for the app (Android stopped the job). */
+    void cancelAppBackup() {
+        CountDownLatch done = appBackup;
+        if (done != null) done.countDown();
+    }
+
+    @PluginMethod
+    public void backgroundBackupDone(PluginCall call) {
+        appBackupResult = call.getString("result", "{}");
+        CountDownLatch done = appBackup;
+        if (done != null) done.countDown();
+        call.resolve();
+    }
+
+    /** When the background backup last ran and what it did. */
+    @PluginMethod
+    public void backgroundBackupStatus(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("lastRun", BackupScheduler.lastRun(getContext()));
+        ret.put("lastResult", BackupScheduler.lastResult(getContext()));
+        call.resolve(ret);
+    }
+
+    /** Opens the phone's settings for this app (autostart / battery on some phones). */
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
     }
 
     // ---- Keeping transfers alive ----
@@ -481,10 +476,10 @@ public class TeleDriveNativePlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
-        synchronized (readers) {
-            for (ParcelFileDescriptor pfd : readers.values()) closeQuietly(pfd);
-            readers.clear();
-        }
+        media.closeAll();
+        if (instance == this) instance = null;
+        CountDownLatch done = appBackup;
+        if (done != null) done.countDown();
         for (Output out : outputs.values()) {
             try {
                 out.stream.close();

@@ -2,8 +2,12 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor
 import type { SaveTarget } from '../drive/download'
 import type { ByteSource, UploadSource } from '../drive/upload'
 
-/** True inside the Android app (false on the website). */
-export const isAndroid = Capacitor.getPlatform() === 'android'
+/** The hidden backup page run while the app is closed (see HeadlessRunner.java). */
+const headlessBridge = (window as unknown as { TeleDriveHeadless?: { call(method: string, args: string): string } }).TeleDriveHeadless
+export const isHeadless = !!headlessBridge
+
+/** True inside the Android app, including the background backup page (false on the website). */
+export const isAndroid = Capacitor.getPlatform() === 'android' || isHeadless
 
 export interface PhoneFileInfo {
   uri: string
@@ -17,6 +21,16 @@ export interface CameraItem extends PhoneFileInfo {
   id: string
   /** Unix seconds. */
   dateAdded: number
+  /** Folder (MediaStore relative path, e.g. "DCIM/Camera/"). */
+  path: string
+}
+
+export interface MediaFolder {
+  /** MediaStore relative path, e.g. "DCIM/Screenshots/". */
+  path: string
+  count: number
+  /** The newest photo/video in it (for a thumbnail). */
+  sampleUri: string
 }
 
 /** Native side: android/app/src/main/java/.../TeleDriveNativePlugin.java */
@@ -32,13 +46,35 @@ interface TeleDriveNativePlugin {
   readFile(o: { uri: string; offset: number; length: number }): Promise<{ data: string }>
   closeFile(o: { uri: string }): Promise<void>
   thumbnail(o: { uri: string }): Promise<{ data?: string }>
-  listCameraMedia(o: { since: number; limit?: number }): Promise<{ items: CameraItem[] }>
+  listMedia(o: { paths: string[]; since: number; limit?: number }): Promise<{ items: CameraItem[] }>
+  listMediaFolders(): Promise<{ folders: MediaFolder[] }>
+  scheduleBackgroundBackup(o: { enabled: boolean; wifiOnly: boolean }): Promise<void>
+  backgroundBackupStatus(): Promise<{ lastRun: number; lastResult: string }>
+  backgroundBackupDone(o: { result: string }): Promise<void>
+  openAppSettings(): Promise<void>
+  /** Background backup page only. */
+  network(): Promise<{ connected: boolean; wifi: boolean }>
+  done(o: { result: string }): Promise<void>
+  log(o: { message: string }): Promise<void>
   keepAlive(o: { title: string; text: string; progress: number }): Promise<void>
   stopKeepAlive(): Promise<void>
-  addListener(event: 'shared', fn: () => void): Promise<PluginListenerHandle>
+  addListener(event: 'shared' | 'backgroundBackup', fn: () => void): Promise<PluginListenerHandle>
 }
 
-export const Native = registerPlugin<TeleDriveNativePlugin>('TeleDriveNative')
+/** In the background backup page, the same calls go through a plain WebView bridge. */
+function headlessNative(bridge: NonNullable<typeof headlessBridge>): TeleDriveNativePlugin {
+  return new Proxy({} as TeleDriveNativePlugin, {
+    get: (_, method: string) => async (args?: object) => {
+      const res = JSON.parse(bridge.call(method, JSON.stringify(args ?? {})))
+      if (res.error) throw new Error(res.error)
+      return res
+    },
+  })
+}
+
+export const Native: TeleDriveNativePlugin = headlessBridge
+  ? headlessNative(headlessBridge)
+  : registerPlugin<TeleDriveNativePlugin>('TeleDriveNative')
 
 // ---- base64 (the plugin bridge only carries strings) ----
 

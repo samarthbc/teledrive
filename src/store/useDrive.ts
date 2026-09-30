@@ -8,6 +8,7 @@ import { loadCache, subscribe, sync, syncIdle } from '../drive/sync'
 import { resolveSecrets, secretOf, unresolved } from '../drive/secrets'
 import { buildDrive, type Drive, type MessageRecord } from '../drive/tree'
 import * as vault from '../drive/vault'
+import { isAndroid } from '../native/android'
 import { describeError, errorCode, logOut } from '../telegram/auth'
 import {
   createDrive, driveName, loadDrives, openStorage, refreshDrives, stillAccessible, type DriveInfo,
@@ -204,6 +205,11 @@ export const useDrive = create<State>((set, get) => {
         try {
           if (!hasLock) {
             hasLock = await acquireSessionLock(takeOver)
+            // Android: a background backup may still be letting go of the session (it's stopped when the app opens)
+            for (let i = 0; !hasLock && isAndroid && i < 10; i++) {
+              await new Promise((r) => setTimeout(r, 500))
+              hasLock = await acquireSessionLock()
+            }
             if (!hasLock) return set({ phase: 'otherTab' })
           }
           const [view, sort] = await Promise.all([getKV<ViewMode>(KEYS.view), getKV<Sort>(KEYS.sort)])
