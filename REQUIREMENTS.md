@@ -134,12 +134,17 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [ ] Download a folder as a ZIP
 - [ ] Share with Telegram users by forwarding to a contact
 - [ ] Multiple storage channels (e.g. Personal, Work)
-- [ ] Dark and light theme
 - [ ] Installable PWA for desktop
 
 ### 4.5 Later: camera backup upgrades (Android)
 - [ ] Automatic backup while the app is closed (Android runs it in the background when new photos appear)
 - [ ] Back up more folders (Screenshots, WhatsApp Images, …), each into its own subfolder
+
+### 4.6 UI updates
+- [ ] Dark and light theme with a manual switch (today it only follows the system)
+
+### 4.7 Later: put the website online
+- [ ] Deploy the website (Cloudflare Pages or GitHub Pages)
 
 ---
 

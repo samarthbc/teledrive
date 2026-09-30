@@ -297,7 +297,7 @@ and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for ex
 
 ---
 
-## Phase 4: Encryption and Polish
+## Phase 4: Encryption and More Features
 
 ### 4.1 End-to-end encryption (optional per drive)
 - A password is turned into a key with PBKDF2-SHA256 (600k iterations) using WebCrypto. The salt is stored in the config message.
@@ -312,14 +312,9 @@ and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for ex
 - **ZIP download:** stream with `client-zip` into the File System Access API.
 - **Share with a Telegram user:** `messages.forwardMessages` to a picked contact.
 - **Multiple drives:** each drive is a separate channel; a drive switcher in the sidebar.
-- **Dark/light theme:** Tailwind `dark:` classes; follows the system with a manual override.
 - **PWA:** manifest + install prompt.
 
-### 4.3 Deploy the website
-- `npm run build` → deploy `dist/` to Cloudflare Pages or GitHub Pages.
-- Decide then: build **with** keys (personal) or **without** (users enter their own on the Setup page).
-
-**Phase 4 done when:** every item under REQUIREMENTS §4.4 is checked and the site is live.
+**Phase 4 done when:** every item under REQUIREMENTS §4.4 is checked.
 
 ---
 
@@ -366,6 +361,26 @@ Today only `DCIM/Camera` is backed up.
 Notes: WhatsApp *Sent* folders contain a `.nomedia` file, so Android doesn't index them; only received media is available. Folders under `Android/data` can't be read on Android 11+.
 
 **Done when:** you can turn on Screenshots and WhatsApp Images, and new files from both land in their own subfolders.
+
+---
+
+## Phase 6: UI Updates
+
+### 6.1 Dark/light theme
+- Dark mode already follows the system (Tailwind `dark:` classes).
+- Add a manual switch: System / Light / Dark, saved on the device.
+
+**Phase 6 done when:** every item under REQUIREMENTS §4.6 is checked.
+
+---
+
+## Phase 7: Deploy the Website (later)
+- `npm run build` → deploy `dist/` to Cloudflare Pages or GitHub Pages.
+- Decide then: build **with** keys (personal) or **without** (users enter their own on the Setup page).
+
+**Done when:** the site is live and works like the local version.
+
+---
 
 ### Ideas (not planned yet)
 - **Free up space:** delete photos from the phone once they're confirmed in TeleDrive (uses Android's delete confirmation dialog).
