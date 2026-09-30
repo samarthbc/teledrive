@@ -12,6 +12,13 @@ initBackButton()
 initKeepAlive()
 initShareReceiver()
 
+// Troubleshooting hook, off unless localStorage 'td-debug' is '1' on this device
+if (localStorage.getItem('td-debug') === '1') {
+  void Promise.all([import('telegram'), import('./telegram/client'), import('./drive/transfer')]).then(([tg, c, t]) =>
+    Object.assign(window, { __td: { Api: tg.Api, Buffer, getClient: c.getClient, randomLong: t.randomLong } }),
+  )
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Hash routing works on static hosts (GitHub Pages) and inside the mobile app */}

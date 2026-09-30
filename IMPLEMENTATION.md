@@ -250,6 +250,25 @@ Android only; iOS is not a goal.
 
 **Phase 3 done when:** the APK installs on your phone, you can log in, browse, upload from the gallery via Share, and the camera backup works.
 
+### Device test (Redmi 23124RN87I, Android 14)
+Passed: install + launch, login, thumbnails, video streaming + seeking, back button, Open with…,
+download to Downloads/TeleDrive, Share → TeleDrive (running and cold start), 3 MB multi-part upload
+with **byte-identical** round trip (SHA-256), 40 MB upload continuing in the background with the
+progress notification, camera backup picking up only new photos.
+
+Bugs found and fixed during the test:
+- `PluginCall.getLong()` returns the default when JS sends a small number → reads always started at
+  offset 0 (would corrupt files > 512 KB) and the camera scan ignored its start date. Numbers are now
+  read with `longArg()`, and JS verifies every read has the requested length.
+- Side menu closed in the click *capture* phase, unmounting the tapped button before its handler ran
+  (real taps only). Closes in the bubble phase now.
+- Stale transfer notification after the permission prompt; network-change events every 3 s on MIUI
+  triggering photo scans; see-through preview background; verbose bridge logging slowing transfers.
+
+### Troubleshooting on a device
+Chrome's `chrome://inspect` shows the app's WebView over USB. Setting `localStorage['td-debug'] = '1'`
+and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for experiments.
+
 ---
 
 ## Phase 4: Encryption and Polish

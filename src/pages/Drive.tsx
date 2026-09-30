@@ -370,7 +370,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       {drawer && (
         <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setDrawer(false)}>
           <aside className="h-full w-72 bg-white dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
-            <div onClickCapture={() => setDrawer(false)} className="h-full">
+            {/* Close after the tapped button has handled the click (not in the capture phase, which runs first) */}
+            <div onClick={() => setDrawer(false)} className="h-full">
               {sidebar}
             </div>
           </aside>

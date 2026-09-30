@@ -74,7 +74,11 @@ class PhoneSlice implements ByteSource {
   async arrayBuffer(): Promise<ArrayBuffer> {
     if (this.size === 0) return new ArrayBuffer(0)
     const { data } = await Native.readFile({ uri: this.uri, offset: this.start, length: this.size })
-    return fromBase64(data)
+    const bytes = await fromBase64(data)
+    // Never upload a short or misplaced read as if it were the real data
+    if (bytes.byteLength !== this.size)
+      throw new Error(`Could not read the file (got ${bytes.byteLength} of ${this.size} bytes at ${this.start})`)
+    return bytes
   }
 }
 

@@ -315,8 +315,8 @@ public class TeleDriveNativePlugin extends Plugin {
     @PluginMethod
     public void readFile(PluginCall call) {
         String uriString = call.getString("uri", "");
-        long offset = call.getLong("offset", 0L);
-        int length = call.getInt("length", 512 * 1024);
+        long offset = longArg(call, "offset", 0L);
+        int length = (int) longArg(call, "length", 512 * 1024);
         try {
             ParcelFileDescriptor pfd = reader(uriString);
             FileChannel channel = new FileInputStream(pfd.getFileDescriptor()).getChannel();
@@ -389,8 +389,8 @@ public class TeleDriveNativePlugin extends Plugin {
             call.reject("Permission to read photos and videos was not granted");
             return;
         }
-        long since = call.getLong("since", 0L);
-        int limit = call.getInt("limit", 500);
+        long since = longArg(call, "since", 0L);
+        int limit = (int) longArg(call, "limit", 500);
         Uri collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL);
         String[] projection = {
             MediaStore.Files.FileColumns._ID,
@@ -443,7 +443,7 @@ public class TeleDriveNativePlugin extends Plugin {
         Intent intent = new Intent(getContext(), TransferService.class);
         intent.putExtra("title", call.getString("title", "TeleDrive"));
         intent.putExtra("text", call.getString("text", ""));
-        intent.putExtra("progress", call.getInt("progress", -1));
+        intent.putExtra("progress", (int) longArg(call, "progress", -1));
         try {
             ContextCompat.startForegroundService(getContext(), intent);
             call.resolve();
@@ -460,6 +460,15 @@ public class TeleDriveNativePlugin extends Plugin {
     }
 
     // ---- Helpers ----
+
+    /**
+     * Numeric argument. Don't use PluginCall.getLong/getInt: JSON numbers arrive as Integer or Long
+     * depending on their size, and those methods silently return the default for the other type.
+     */
+    private static long longArg(PluginCall call, String name, long fallback) {
+        Object v = call.getData().opt(name);
+        return v instanceof Number ? ((Number) v).longValue() : fallback;
+    }
 
     private ContentResolver resolver() {
         return getContext().getContentResolver();

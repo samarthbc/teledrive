@@ -52,7 +52,7 @@ export default function Sidebar(props: {
         <div className="rounded-xl bg-slate-100 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
           <p className="font-medium text-slate-900 dark:text-slate-100">{formatBytes(stats.bytes)} used</p>
           <p>
-            {stats.files} files · {stats.folders} folders
+            {stats.files} file{stats.files === 1 ? '' : 's'} · {stats.folders} folder{stats.folders === 1 ? '' : 's'}
           </p>
           <p className="mt-1 text-slate-400">Unlimited storage on Telegram</p>
         </div>

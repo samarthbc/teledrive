@@ -94,19 +94,37 @@ export async function runBackup(): Promise<void> {
     let newItems: CameraItem[] = []
     for (;;) {
       const { items } = await Native.listCameraMedia({ since, limit: BATCH })
+      // Safety net: the list must only contain items from `since` on, and each page must move forward
+      if (items.some((i) => i.dateAdded < since)) throw new Error('Photo list returned items older than requested')
       newItems.push(...items.filter((i) => !done.has(i.id) && !queued.has(i.id)))
       if (items.length < BATCH) break
-      since = items[items.length - 1].dateAdded + 1
+      const next = items[items.length - 1].dateAdded + 1
+      if (next <= since) break
+      since = next
     }
     // The same photo can show up twice across batches with equal timestamps
     newItems = [...new Map(newItems.map((i) => [i.id, i])).values()]
 
+    // Turned off while we were looking? Then don't start anything.
+    if (!useBackup.getState().settings.enabled) return
+
     for (const item of newItems) {
       queued.add(item.id)
       enqueue('upload', item.name, item.size, async (ctl) => {
-        const drive = useDrive.getState().drive
-        await uploadFile(new PhoneFile(item), uniqueName(drive, folderId, item.name), folderId, ctl)
-        await markDone(item.id)
+        let failed = false
+        try {
+          const drive = useDrive.getState().drive
+          await uploadFile(new PhoneFile(item), uniqueName(drive, folderId, item.name), folderId, ctl)
+          await markDone(item.id)
+        } catch (e) {
+          failed = true
+          throw e
+        } finally {
+          // Failed items are picked up again on the next check
+          queued.delete(item.id)
+          if (failed) useBackup.setState({ status: 'Some items failed; will retry' })
+          else if (!queued.size) useBackup.setState({ status: 'Up to date', lastCheck: Date.now() })
+        }
       })
     }
     useBackup.setState({
@@ -138,10 +156,27 @@ async function updateSettingsQuietly(changes: Partial<BackupSettings>) {
   await setKV(SETTINGS_KEY, settings)
 }
 
+const AUTO_CHECK_GAP = 30_000
+let lastAutoCheck = 0
+
+/** Automatic checks are spaced out; "Back up now" calls runBackup() directly. */
+function autoCheck() {
+  if (Date.now() - lastAutoCheck < AUTO_CHECK_GAP) return
+  lastAutoCheck = Date.now()
+  void runBackup()
+}
+
 /** Check for new photos when the app opens, comes back to the foreground, or joins Wi-Fi. */
 export function initCameraBackup(): void {
   if (!isAndroid) return
-  void runBackup()
-  void App.addListener('appStateChange', ({ isActive }) => isActive && void runBackup())
-  void Network.addListener('networkStatusChange', (s) => s.connected && void runBackup())
+  autoCheck()
+  void App.addListener('appStateChange', ({ isActive }) => isActive && autoCheck())
+  // Some phones report a "change" every few seconds; only react when the connection type changes
+  let lastType: string | null = null
+  void Network.addListener('networkStatusChange', (s) => {
+    const type = s.connected ? s.connectionType : 'none'
+    if (type === lastType) return
+    lastType = type
+    if (s.connected) autoCheck()
+  })
 }
