@@ -1,7 +1,7 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, ChevronRight, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen,
   FolderPlus, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Trash2,
-  TriangleAlert, X, ExternalLink, Lock,
+  TriangleAlert, X, ExternalLink, Lock, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -30,6 +30,8 @@ import { useIncomingShares } from '../native/share'
 import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
 import EncryptionDialog from '../components/dialogs/EncryptionDialog'
 import DuplicatesDialog, { type Duplicate } from '../components/dialogs/DuplicatesDialog'
+import SendDialog from '../components/dialogs/SendDialog'
+import { cantSend } from '../telegram/share'
 import { sha256 } from '../drive/hash'
 import { createFolders, treeFromDrop, treeFromInput, type PickedTree } from '../drive/folderUpload'
 import { encrypting, needsUnlock } from '../drive/vault'
@@ -49,6 +51,7 @@ type Modal =
   | { type: 'logout' }
   | { type: 'backup' }
   | { type: 'encryption'; reason?: string; then?: () => void }
+  | { type: 'send'; files: FileItem[] }
   | { type: 'duplicates'; duplicates: Duplicate[]; total: number; onSkip: () => void; onUploadAll: () => void }
 
 /** A file to upload and the folder it goes into. */
@@ -243,6 +246,14 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     }
   }
 
+  const sendToTelegram = (list: Item[]) => {
+    const files = list.filter((i): i is FileItem => i.kind === 'file')
+    if (files.length < list.length) return toastError(new Error('Only files can be sent (not folders)'))
+    const problem = files.map((f) => cantSend(f)).find(Boolean)
+    if (problem) return toastError(new Error(files.length === 1 ? problem : `Some of these files can't be sent. ${problem}`))
+    setModal({ type: 'send', files })
+  }
+
   /** Folders (and everything in them) as one ZIP file. */
   const downloadAsZip = async (list: Item[]) => {
     const { entries, skipped, bytes } = zipEntries(useDrive.getState().drive, list)
@@ -363,6 +374,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       ...(isAndroid && item.kind === 'file'
         ? [{ label: 'Open with…', icon: ExternalLink, onClick: () => openWith(item), disabled: !item.complete }]
         : []),
+      ...(item.kind === 'file' ? [{ label: 'Send to Telegram…', icon: Send, onClick: () => sendToTelegram([item]) }] : []),
       ...(mode !== 'folder' ? [{ label: 'Show in folder', icon: FolderInput, onClick: () => openFolder(item.parent) }] : []),
       { label: 'Rename', icon: Pencil, onClick: () => setModal({ type: 'rename', item }) },
       { label: 'Move', icon: FolderInput, onClick: () => setModal({ type: 'move', items: [item] }) },
@@ -506,6 +518,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
               allStarred={selection.every((i) => i.x.fav)}
               onClear={clearSelection}
               onDownload={() => void download(selection)}
+              onSend={() => sendToTelegram(selection)}
               onMove={() => setModal({ type: 'move', items: selection })}
               onStar={() => void act(toggleStar(selection))}
               onTrash={() => void act(moveToTrash(selection))}
@@ -751,6 +764,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         />
       )}
       {modal?.type === 'backup' && <CameraBackupDialog onClose={() => setModal(null)} />}
+      {modal?.type === 'send' && <SendDialog files={modal.files} onClose={() => setModal(null)} />}
       {modal?.type === 'duplicates' && (
         <DuplicatesDialog
           duplicates={modal.duplicates}
@@ -803,6 +817,7 @@ function SelectionBar(props: {
   allStarred: boolean
   onClear: () => void
   onDownload: () => void
+  onSend: () => void
   onMove: () => void
   onStar: () => void
   onTrash: () => void
@@ -829,6 +844,9 @@ function SelectionBar(props: {
         <>
           <button className="icon-btn" onClick={p.onDownload} aria-label="Download" title="Download">
             <Download className="h-4 w-4" />
+          </button>
+          <button className="icon-btn" onClick={p.onSend} aria-label="Send to Telegram" title="Send to Telegram">
+            <Send className="h-4 w-4" />
           </button>
           <button className="icon-btn" onClick={p.onMove} aria-label="Move" title="Move">
             <FolderInput className="h-4 w-4" />

@@ -1,0 +1,126 @@
+import { Bookmark, Loader2, Search, Send } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FileItem } from '../../drive/tree'
+import { describeError } from '../../telegram/auth'
+import { listChats, searchPeople, sendFiles, type Chat } from '../../telegram/share'
+import { toast } from '../../store/useToast'
+import Dialog from '../Dialog'
+
+let cachedChats: Chat[] | null = null
+
+/** Pick a Telegram chat and send files to it. */
+export default function SendDialog({ files, onClose }: { files: FileItem[]; onClose: () => void }) {
+  const [chats, setChats] = useState<Chat[] | null>(cachedChats)
+  const [found, setFound] = useState<Chat[]>([])
+  const [query, setQuery] = useState('')
+  const [chosen, setChosen] = useState<Chat | null>(null)
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    listChats().then(
+      (c) => {
+        cachedChats = c
+        setChats(c)
+      },
+      (e) => setError(describeError(e)),
+    )
+  }, [])
+
+  // Also look up people by name or @username (debounced)
+  useEffect(() => {
+    const q = query.trim().replace(/^@/, '')
+    if (q.length < 3) return setFound([])
+    const timer = setTimeout(() => {
+      searchPeople(q).then(setFound, () => setFound([]))
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase().replace(/^@/, '')
+    const local = (chats ?? []).filter((c) => !q || c.title.toLowerCase().includes(q) || c.subtitle.toLowerCase().includes(q))
+    const keys = new Set(local.map((c) => c.key))
+    return [...local, ...found.filter((c) => !keys.has(c.key))]
+  }, [chats, found, query])
+
+  const parts = files.reduce((n, f) => n + f.parts.length, 0)
+  const what = files.length === 1 ? `“${files[0].name}”` : `${files.length} files`
+
+  const send = async () => {
+    if (!chosen) return
+    setBusy(true)
+    setError(null)
+    try {
+      await sendFiles(chosen.peer, files, message.trim())
+      toast(`Sent ${what} to ${chosen.title}`)
+      onClose()
+    } catch (e) {
+      setError(describeError(e))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog
+      title={`Send ${what}`}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn-primary" disabled={!chosen || busy} onClick={() => void send()}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Send{chosen ? ` to ${chosen.title}` : ''}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3 pb-2 text-sm">
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input className="input pl-9" autoFocus placeholder="Search chats or @username" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+          {!chats && !error && (
+            <li className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+            </li>
+          )}
+          {chats && !shown.length && <li className="py-6 text-center text-slate-500">No chats found</li>}
+          {shown.map((c) => (
+            <li key={c.key}>
+              <button
+                className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left ${chosen?.key === c.key ? 'bg-brand/10' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                onClick={() => setChosen(c)}
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/15 font-medium text-brand-dark dark:text-brand">
+                  {c.key === 'self' ? <Bookmark className="h-4 w-4" /> : initials(c.title)}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{c.title}</span>
+                  <span className="block truncate text-xs text-slate-500">{c.subtitle}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {chosen && (
+          <input className="input" placeholder="Add a message (optional)" value={message} onChange={(e) => setMessage(e.target.value)} />
+        )}
+        {parts > files.length && (
+          <p className="text-xs text-slate-500">Files over 512 MB arrive as several parts (.part1, .part2, …), because that's how they're stored.</p>
+        )}
+        {error && <p className="text-red-600">{error}</p>}
+      </div>
+    </Dialog>
+  )
+}
+
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/)
+  return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase() || '?'
+}

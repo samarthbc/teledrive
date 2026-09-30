@@ -284,7 +284,8 @@ async function getBlock(doc: DocRef, offset: number, thumbSize = ''): Promise<Ui
   })
 }
 
-async function refreshDoc(part: Part): Promise<DocRef> {
+/** Get a fresh file reference for a part (they expire after a while). */
+export async function refreshDoc(part: Part): Promise<DocRef> {
   const client = await getClient()
   const res = await client.invoke(
     new Api.channels.GetMessages({ channel: storageChannel(), id: [new Api.InputMessageID({ id: part.msgId })] }),
