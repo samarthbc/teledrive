@@ -73,3 +73,28 @@ export function fileIcon(item: Item): { Icon: LucideIcon; color: string } {
       return { Icon: File, color: 'text-slate-400' }
   }
 }
+
+export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'none'
+
+const TEXT_EXT = new Set('txt md markdown csv tsv log json xml yml yaml ini cfg conf toml env srt vtt'.split(' '))
+
+/** How the file can be previewed in the browser. */
+export function previewKind(item: Item): PreviewKind {
+  if (item.kind !== 'file') return 'none'
+  const ext = item.name.split('.').pop()?.toLowerCase() ?? ''
+  const cat = category(item)
+  if (cat === 'image' || cat === 'video' || cat === 'audio') return cat
+  if (item.mime === 'application/pdf' || ext === 'pdf') return 'pdf'
+  if (item.mime.startsWith('text/') || cat === 'code' || TEXT_EXT.has(ext)) return 'text'
+  return 'none'
+}
+
+/** Filter chips: which files belong to each. */
+export const FILTERS = {
+  image: { label: 'Photos', match: (i: Item) => category(i) === 'image' },
+  video: { label: 'Videos', match: (i: Item) => category(i) === 'video' },
+  document: { label: 'Documents', match: (i: Item) => ['document', 'code'].includes(category(i)) },
+  audio: { label: 'Audio', match: (i: Item) => category(i) === 'audio' },
+} as const
+
+export type FilterKey = keyof typeof FILTERS

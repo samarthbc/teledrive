@@ -22,6 +22,8 @@ const MAX_CONCURRENT = 2
 
 const transfers: Transfer[] = []
 const jobs = new Map<string, Job>()
+/** Cleanup to run if a failed or waiting transfer is canceled (e.g. discard saved upload progress). */
+const discards = new Map<string, () => Promise<void>>()
 const controls = new Map<string, TransferControl>()
 const listeners = new Set<Listener>()
 let emitScheduled = false
@@ -43,10 +45,13 @@ function emit() {
   })
 }
 
-export function enqueue(kind: Transfer['kind'], name: string, size: number, job: Job): string {
+export function enqueue(
+  kind: Transfer['kind'], name: string, size: number, job: Job, onDiscard?: () => Promise<void>,
+): string {
   const id = nanoid(8)
   transfers.push({ id, kind, name, size, done: 0, status: 'queued', speed: 0 })
   jobs.set(id, job)
+  if (onDiscard) discards.set(id, onDiscard)
   emit()
   pump()
   return id
@@ -95,7 +100,11 @@ async function run(t: Transfer) {
   } finally {
     t.speed = 0
     controls.delete(t.id)
-    jobs.delete(t.id)
+    // Failed jobs are kept so they can be retried
+    if (t.status !== 'error') {
+      jobs.delete(t.id)
+      discards.delete(t.id)
+    }
     emit()
     pump()
   }
@@ -121,17 +130,34 @@ export function resumeTransfer(id: string) {
 export function cancelTransfer(id: string) {
   const t = find(id)
   if (!t) return
-  if (t.status === 'queued') {
+  if (t.status === 'queued' || t.status === 'error') {
     t.status = 'canceled'
     jobs.delete(id)
+    discards.get(id)?.().catch((e) => console.error('Discard failed', e))
+    discards.delete(id)
   } else controls.get(id)?.cancel()
   emit()
+}
+
+/** Run a failed transfer again (uploads continue from where they stopped). */
+export function retryTransfer(id: string) {
+  const t = find(id)
+  if (t?.status !== 'error' || !jobs.has(id)) return
+  t.status = 'queued'
+  t.done = 0
+  t.error = undefined
+  emit()
+  pump()
 }
 
 /** Remove finished/failed/canceled entries from the list. */
 export function clearFinished() {
   for (let i = transfers.length - 1; i >= 0; i--) {
-    if (!['queued', 'running', 'paused'].includes(transfers[i].status)) transfers.splice(i, 1)
+    if (!['queued', 'running', 'paused'].includes(transfers[i].status)) {
+      jobs.delete(transfers[i].id)
+      discards.delete(transfers[i].id)
+      transfers.splice(i, 1)
+    }
   }
   emit()
 }

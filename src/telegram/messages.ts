@@ -19,13 +19,20 @@ export function docRef(msg: Api.Message): DocRef | undefined {
   const media = msg.media
   if (!(media instanceof Api.MessageMediaDocument) || !(media.document instanceof Api.Document)) return undefined
   const d = media.document
-  return {
+  const ref: DocRef = {
     docId: d.id.toString(),
     accessHash: d.accessHash.toString(),
     fileRef: new Uint8Array(d.fileReference),
     dcId: d.dcId,
     size: d.size.toJSNumber(),
   }
+  // Largest downloadable thumbnail (stripped/inline ones are too blurry to use)
+  const thumbs = (d.thumbs ?? []).filter(
+    (t): t is Api.PhotoSize | Api.PhotoSizeProgressive => t instanceof Api.PhotoSize || t instanceof Api.PhotoSizeProgressive,
+  )
+  const best = thumbs.sort((a, b) => b.w * b.h - a.w * a.h)[0]
+  if (best) ref.thumb = best.type
+  return ref
 }
 
 /** Messages contained in an Updates response (e.g. after sending or editing). */

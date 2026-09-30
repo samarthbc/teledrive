@@ -1,12 +1,15 @@
-import { FolderPlus, HardDrive, LogOut, Send, Upload } from 'lucide-react'
+import { Clock, FolderPlus, HardDrive, LogOut, Send, Star, Trash2, Upload, type LucideIcon } from 'lucide-react'
+import { NavLink, useLocation } from 'react-router-dom'
 import { driveStats } from '../drive/tree'
 import { formatBytes } from '../lib/format'
 import { useDrive } from '../store/useDrive'
 
-export default function Sidebar(props: { onUpload: () => void; onNewFolder: () => void; onLogout: () => void; onHome: () => void }) {
-  const { onUpload, onNewFolder, onLogout, onHome } = props
+export default function Sidebar(props: { onUpload: () => void; onNewFolder: () => void; onLogout: () => void }) {
+  const { onUpload, onNewFolder, onLogout } = props
   const drive = useDrive((s) => s.drive)
+  const { pathname } = useLocation()
   const stats = driveStats(drive)
+  const inDrive = pathname === '/' || pathname.startsWith('/folder/')
 
   return (
     <div className="flex h-full flex-col gap-1 p-4">
@@ -24,9 +27,12 @@ export default function Sidebar(props: { onUpload: () => void; onNewFolder: () =
         <FolderPlus className="h-4 w-4" /> New folder
       </button>
 
-      <button className="btn justify-start bg-brand/10 text-brand-dark dark:text-brand" onClick={onHome}>
-        <HardDrive className="h-4 w-4" /> My Drive
-      </button>
+      <nav className="space-y-0.5">
+        <Link to="/" icon={HardDrive} label="My Drive" active={inDrive} />
+        <Link to="/recent" icon={Clock} label="Recent" />
+        <Link to="/starred" icon={Star} label="Starred" />
+        <Link to="/trash" icon={Trash2} label="Trash" />
+      </nav>
 
       <div className="mt-auto space-y-3">
         <div className="rounded-xl bg-slate-100 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
@@ -41,5 +47,22 @@ export default function Sidebar(props: { onUpload: () => void; onNewFolder: () =
         </button>
       </div>
     </div>
+  )
+}
+
+function Link({ to, icon: Icon, label, active }: { to: string; icon: LucideIcon; label: string; active?: boolean }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `btn w-full justify-start ${
+          (active ?? isActive)
+            ? 'bg-brand/10 text-brand-dark dark:text-brand'
+            : 'text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
+        }`
+      }
+    >
+      <Icon className="h-4 w-4" /> {label}
+    </NavLink>
   )
 }

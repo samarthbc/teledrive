@@ -6,8 +6,12 @@ import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
 import { encode, ROOT, validateName, type FileMeta, type FolderMeta } from './meta'
 import { applyDeleted, applyMessages, getRecord } from './sync'
+import { db } from '../db/db'
 import { randomLong } from './transfer'
-import { collectTree, isDescendant, messageIds, uniqueName, type Drive, type Item } from './tree'
+import { discard } from './upload'
+import {
+  collectTree, isDescendant, isHidden, messageIds, trashedItems, uniqueName, type Drive, type Item,
+} from './tree'
 
 const DELETE_BATCH = 100
 
@@ -53,6 +57,58 @@ export async function move(drive: Drive, items: Item[], targetId: string): Promi
     if (item.parent === targetId) continue
     await editMeta(item, { p: targetId, n: uniqueName(drive, targetId, item.name) })
   }
+}
+
+const DAY = 24 * 60 * 60
+export const TRASH_DAYS = 30
+/** Chunks of uploads that were never finished are removed after this long. */
+const LEFTOVER_DAYS = 7
+
+const now = () => Math.floor(Date.now() / 1000)
+
+export async function trash(items: Item[]): Promise<void> {
+  for (const item of items) await editMeta(item, { x: { ...item.x, tr: now() } })
+}
+
+/** Take items out of the trash. If their folder is gone or still in the trash, they go to My Drive. */
+export async function restore(drive: Drive, items: Item[]): Promise<void> {
+  for (const item of items) {
+    const { tr: _, ...x } = item.x
+    const parent = drive.items.get(item.parent)
+    const p = parent && !isHidden(drive, parent) ? item.parent : ROOT
+    await editMeta(item, { x, p, n: uniqueName(drive, p, item.name, item.id) })
+  }
+}
+
+export async function setStarred(items: Item[], starred: boolean): Promise<void> {
+  for (const item of items) {
+    if (!!item.x.fav === starred) continue
+    const { fav: _, ...rest } = item.x
+    await editMeta(item, { x: starred ? { ...rest, fav: 1 } : rest })
+  }
+}
+
+/** Delete everything in the trash (or only what has been there longer than `olderThanDays`). */
+export async function emptyTrash(drive: Drive, olderThanDays = 0): Promise<number> {
+  const cutoff = now() - olderThanDays * DAY
+  const items = trashedItems(drive).filter((i) => (i.x.tr ?? 0) <= cutoff)
+  if (items.length) await remove(drive, items)
+  return items.length
+}
+
+/** Housekeeping on startup: expire old trash and chunks of abandoned uploads. */
+export async function cleanup(drive: Drive): Promise<void> {
+  await emptyTrash(drive, TRASH_DAYS)
+  const cutoff = now() - LEFTOVER_DAYS * DAY
+  for (const state of await db.uploads.toArray()) {
+    if (state.updated / 1000 < cutoff) await discard(state)
+  }
+  const resumable = new Set((await db.uploads.toArray()).map((u) => u.id))
+  const leftovers = drive.orphanChunks.filter((msgId) => {
+    const r = getRecord(msgId)
+    return r && r.date < cutoff && !(r.meta.t === 'c' && resumable.has(r.meta.id))
+  })
+  if (leftovers.length) await deleteMessages(leftovers)
 }
 
 /** Permanently delete items (folders include everything inside them). */

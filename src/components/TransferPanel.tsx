@@ -1,6 +1,6 @@
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Pause, Play, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Pause, Play, RotateCcw, X } from 'lucide-react'
 import { useState } from 'react'
-import { cancelTransfer, clearFinished, pauseTransfer, resumeTransfer, type Transfer } from '../drive/queue'
+import { cancelTransfer, clearFinished, pauseTransfer, resumeTransfer, retryTransfer, type Transfer } from '../drive/queue'
 import { formatBytes, formatDuration } from '../lib/format'
 import { useDrive } from '../store/useDrive'
 
@@ -81,7 +81,12 @@ function Row({ t }: { t: Transfer }) {
           <Play className="h-4 w-4" />
         </button>
       )}
-      {ACTIVE.includes(t.status) && (
+      {t.status === 'error' && (
+        <button className="icon-btn h-8 w-8" onClick={() => retryTransfer(t.id)} aria-label="Retry" title="Retry">
+          <RotateCcw className="h-4 w-4" />
+        </button>
+      )}
+      {(ACTIVE.includes(t.status) || t.status === 'error') && (
         <button className="icon-btn h-8 w-8" onClick={() => cancelTransfer(t.id)} aria-label="Cancel">
           <X className="h-4 w-4" />
         </button>

@@ -79,46 +79,46 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 ### 4.1 Core (MVP)
 
 **Account & setup**
-- [ ] Log in with Telegram (phone, code, 2FA)
-- [ ] Auto-create or find the storage channel on first launch
-- [ ] Persist the session per device
-- [ ] Log out
+- [x] Log in with Telegram (phone, code, 2FA)
+- [x] Auto-create or find the storage channel on first launch
+- [x] Persist the session per device
+- [x] Log out
 
 **File management**
-- [ ] Upload files, several at once, with drag-and-drop on the website
-- [ ] Download files
-- [ ] Folders: create, rename, delete, nesting
-- [ ] Rename, move, and delete files
-- [ ] Upload/download progress bars with pause and cancel
-- [ ] Automatic chunking of files over 2 GB
+- [x] Upload files, several at once, with drag-and-drop on the website
+- [x] Download files
+- [x] Folders: create, rename, delete, nesting
+- [x] Rename, move, and delete files
+- [x] Upload/download progress bars with pause and cancel
+- [x] Automatic chunking of files over 2 GB
 
 **Browsing**
-- [ ] Grid view and list view
-- [ ] Sort by name, date, size, or type
-- [ ] Breadcrumb navigation (`Home › Photos › 2026`)
-- [ ] File details: size, type, upload date, uploading device
-- [ ] Storage stats: total files and total size used
+- [x] Grid view and list view
+- [x] Sort by name, date, size, or type
+- [x] Breadcrumb navigation (`Home › Photos › 2026`)
+- [x] File details: size, type, upload date, uploading device
+- [x] Storage stats: total files and total size used
 
 ### 4.2 Quality of life
 
 **Previews**
-- [ ] Image thumbnails and a full-screen gallery viewer
-- [ ] Video player with seeking (streamed)
-- [ ] Audio player
-- [ ] PDF and text file preview
+- [x] Image thumbnails and a full-screen gallery viewer
+- [x] Video player with seeking (streamed)
+- [x] Audio player
+- [x] PDF and text file preview
 
 **Organization**
-- [ ] Search by file name across all folders
-- [ ] Filters: Photos, Videos, Documents, Audio
-- [ ] Favorites / starred files
-- [ ] Recent files
-- [ ] Trash bin with restore (hidden trash path, auto-deleted after 30 days)
-- [ ] Multi-select for bulk move, delete, or download
+- [x] Search by file name across all folders
+- [x] Filters: Photos, Videos, Documents, Audio (search the whole drive)
+- [x] Favorites / starred files
+- [x] Recent files
+- [x] Trash bin with restore (hidden trash path, auto-deleted after 30 days)
+- [x] Multi-select for bulk move, delete, or download
 
 **Sync & performance**
-- [ ] Local cache so the file list opens instantly
-- [ ] Automatic sync between devices
-- [ ] Resume interrupted uploads
+- [x] Local cache so the file list opens instantly
+- [x] Automatic sync between devices
+- [x] Resume interrupted uploads
 
 ### 4.3 Mobile-specific
 - [ ] Share-to-app: share from any app (e.g. the gallery) and upload directly

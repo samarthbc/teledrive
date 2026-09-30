@@ -7,6 +7,8 @@ export interface DocRef {
   fileRef: Uint8Array
   dcId: number
   size: number
+  /** Thumbnail size type (e.g. "m"), if Telegram has a thumbnail for this document. */
+  thumb?: string
 }
 
 /** One channel message, parsed. Stored in IndexedDB. */
@@ -209,4 +211,62 @@ export function driveStats(drive: Drive): { files: number; folders: number; byte
     } else folders++
   }
   return { files, folders, bytes }
+}
+
+/** True if the item or any folder above it is in the trash. */
+export function isHidden(drive: Drive, item: Item): boolean {
+  const seen = new Set<string>()
+  let cur: Item | undefined = item
+  while (cur && !seen.has(cur.id)) {
+    if (cur.x.tr) return true
+    seen.add(cur.id)
+    cur = drive.items.get(cur.parent)
+  }
+  return false
+}
+
+/** Visible (non-trashed) items matching a name query and an optional filter. */
+export function searchItems(drive: Drive, query: string, filter?: (item: Item) => boolean, limit = 500): Item[] {
+  const terms = normalize(query).split(/\s+/).filter(Boolean)
+  const out: Item[] = []
+  for (const item of drive.items.values()) {
+    if (filter && !filter(item)) continue
+    const name = normalize(item.name)
+    if (!terms.every((t) => name.includes(t))) continue
+    if (isHidden(drive, item)) continue
+    out.push(item)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+function normalize(s: string): string {
+  // Strip accents so "cafe" matches "Café"
+  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+}
+
+/** Most recently added files. */
+export function recentFiles(drive: Drive, limit = 100): Item[] {
+  return [...drive.items.values()]
+    .filter((i) => i.kind === 'file' && !isHidden(drive, i))
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, limit)
+}
+
+export function starredItems(drive: Drive): Item[] {
+  return [...drive.items.values()].filter((i) => i.x.fav && !isHidden(drive, i))
+}
+
+/** Items put in the trash directly (not those that are only inside a trashed folder). */
+export function trashedItems(drive: Drive): Item[] {
+  return [...drive.items.values()].filter((i) => {
+    if (!i.x.tr) return false
+    const parent = drive.items.get(i.parent)
+    return !parent || !isHidden(drive, parent)
+  })
+}
+
+/** "My Drive / Photos / 2026" for the folder an item is in. */
+export function locationOf(drive: Drive, item: Item): string {
+  return ['My Drive', ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
 }

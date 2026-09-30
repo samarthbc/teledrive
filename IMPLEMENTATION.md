@@ -206,7 +206,7 @@ Name conflicts in the same folder are auto-renamed to `name (1).ext`.
 
 ### 2.3 Search and filters
 - Client-side search over the Dexie index (name contains, case-insensitive), across all folders.
-- Filter chips: Photos / Videos / Documents / Audio (by MIME type).
+- Filter chips: Photos / Videos / Documents / Audio (by MIME type and extension). Chips always search the whole drive.
 
 ### 2.4 Favorites, recent, trash
 - Favorite: `x.fav` flag. Recent: sort by `ts`.

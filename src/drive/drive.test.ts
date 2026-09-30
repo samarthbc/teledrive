@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { CAPTION_LIMIT, decode, encode, MetaError, ROOT, validateName, type Meta } from './meta'
 import {
-  breadcrumbs, buildDrive, collectTree, isDescendant, listFolder, messageIds, uniqueName,
-  type MessageRecord,
+  breadcrumbs, buildDrive, collectTree, isDescendant, isHidden, listFolder, locationOf, messageIds, recentFiles,
+  searchItems, starredItems, trashedItems, uniqueName, type MessageRecord,
 } from './tree'
 
 let nextMsg = 1
@@ -106,5 +106,45 @@ describe('tree', () => {
     const d = buildDrive([rec({ ...folder('t', ROOT, 'Old'), x: { tr: 1 } } as Meta)])
     expect(listFolder(d, ROOT)).toEqual([])
     expect(listFolder(d, ROOT, true)).toHaveLength(1)
+  })
+})
+
+describe('search, trash, starred, recent', () => {
+  const build = () =>
+    buildDrive([
+      rec(folder('ph', ROOT, 'Photos'), 1),
+      rec({ ...file('b', 'ph', 'Beach Café.jpg'), ts: 30 } as Meta, 2),
+      rec({ ...folder('old', ROOT, 'Old stuff'), x: { tr: 100 } } as Meta, 3),
+      rec({ ...file('in', 'old', 'beach-old.jpg'), ts: 50 } as Meta, 4),
+      rec({ ...file('s', ROOT, 'notes.txt'), ts: 10, x: { fav: 1 } } as Meta, 5),
+      rec({ ...file('t', 'ph', 'gone.jpg'), x: { tr: 200 } } as Meta, 6),
+    ])
+
+  it('finds items across folders, ignoring case and accents', () => {
+    const d = build()
+    expect(searchItems(d, 'cafe').map((i) => i.id)).toEqual(['b'])
+    expect(searchItems(d, 'BEACH jpg').map((i) => i.id)).toEqual(['b'])
+    expect(searchItems(d, '', (i) => i.kind === 'file').map((i) => i.id).sort()).toEqual(['b', 's'])
+  })
+
+  it('excludes trashed items and everything inside trashed folders', () => {
+    const d = build()
+    expect(isHidden(d, d.items.get('in')!)).toBe(true)
+    expect(searchItems(d, 'beach').map((i) => i.id)).toEqual(['b'])
+    expect(recentFiles(d).map((i) => i.id)).toEqual(['b', 's'])
+  })
+
+  it('lists only top-level trashed items', () => {
+    expect(trashedItems(build()).map((i) => i.id).sort()).toEqual(['old', 't'])
+  })
+
+  it('lists starred items', () => {
+    expect(starredItems(build()).map((i) => i.id)).toEqual(['s'])
+  })
+
+  it('describes item locations', () => {
+    const d = build()
+    expect(locationOf(d, d.items.get('b')!)).toBe('My Drive / Photos')
+    expect(locationOf(d, d.items.get('s')!)).toBe('My Drive')
   })
 })

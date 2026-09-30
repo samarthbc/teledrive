@@ -37,8 +37,12 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<DrivePage />} />
-      <Route path="/folder/:folderId" element={<DrivePage />} />
+      <Route path="/" element={<DrivePage mode="folder" />} />
+      <Route path="/folder/:folderId" element={<DrivePage mode="folder" />} />
+      <Route path="/search" element={<DrivePage mode="search" />} />
+      <Route path="/recent" element={<DrivePage mode="recent" />} />
+      <Route path="/starred" element={<DrivePage mode="starred" />} />
+      <Route path="/trash" element={<DrivePage mode="trash" />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import { loadKeys } from '../config'
 import { getKV, KEYS, setKV } from '../db/db'
+import { cleanup } from '../drive/ops'
 import { subscribeTransfers, type Transfer } from '../drive/queue'
+import { initStreaming } from '../drive/stream'
 import { loadCache, subscribe, sync } from '../drive/sync'
 import { buildDrive, type Drive } from '../drive/tree'
 import { describeError, errorCode, logOut } from '../telegram/auth'
@@ -42,6 +44,10 @@ let booting: Promise<void> | null = null
 export const useDrive = create<State>((set, get) => {
   subscribe((records) => set({ drive: buildDrive(records.values()) }))
   subscribeTransfers((transfers) => set({ transfers }))
+  initStreaming((id) => {
+    const item = get().drive.items.get(id)
+    return item?.kind === 'file' ? item : undefined
+  })
 
   const startDrive = async () => {
     set({ phase: 'loading', error: null })
@@ -51,6 +57,8 @@ export const useDrive = create<State>((set, get) => {
     await get().refresh()
     set({ phase: 'ready' })
     startAutoSync()
+    // Expire old trash and leftovers of abandoned uploads (in the background)
+    cleanup(get().drive).catch((e) => console.error('Cleanup failed', e))
   }
 
   const startAutoSync = () => {

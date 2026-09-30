@@ -2,7 +2,7 @@
 
 A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, and (soon) a mobile app. There's **no backend server**; the app runs on your device and talks to Telegram directly.
 
-> Status: **Phase 1 (core drive)**. See the [roadmap](#roadmap).
+> Status: **Phase 2 (previews, search, trash)**. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -14,6 +14,12 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Folders: create, rename, move, delete, nest
 - Grid and list views, sorting, breadcrumbs, storage stats
 - Syncs between devices automatically
+- Thumbnails for photos and videos (made in the browser at upload time)
+- Previews: photo gallery (swipe, zoom, arrow keys), **video/audio streaming with seeking**, PDF, text/code
+- Search across all folders (ignores case and accents), plus Photos / Videos / Documents / Audio filters
+- Recent, Starred, and Trash (restore, delete forever, auto-emptied after 30 days, Undo)
+- Multi-select: checkboxes, Ctrl/Cmd-click, Shift-click, Ctrl+A, long-press on phones; bulk download/move/star/trash
+- Interrupted uploads resume: retry, or pick the same file again, even after closing the page
 - Works at phone width; follows your system's dark/light mode
 
 ## How it works
@@ -27,6 +33,8 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Every file is a message in your private channel. Its caption holds small JSON metadata (name, folder, size…).
 - Folders are small marker messages with an ID; files point to their folder's ID.
 - The app caches everything in IndexedDB and fetches only what changed (`updates.getChannelDifference`).
+- Video/audio streaming: a service worker (`public/sw.js`) turns the player's byte-range requests into
+  Telegram downloads of just those bytes, so you can seek without downloading the whole file.
 
 Full details: [REQUIREMENTS.md](REQUIREMENTS.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md)
 
@@ -68,11 +76,13 @@ npm run build    # production build in dist/
 ```
 src/
 ├── telegram/   client, login flow, storage channel, message parsing
-├── drive/      metadata format, folder tree, sync, upload, download, file ops, transfer queue
+├── drive/      metadata format, folder tree, sync, upload (resumable), download, streaming,
+│               thumbnails, file ops (trash/star), transfer queue
 ├── db/         IndexedDB (Dexie): session, cache, settings
 ├── store/      app state (Zustand)
 ├── pages/      Setup, Login, Drive
-└── components/ file views, dialogs, menus, transfer panel
+└── components/ file views, preview, dialogs, menus, transfer panel
+public/sw.js    service worker for video/audio streaming
 ```
 
 ## Privacy and safety
@@ -88,8 +98,8 @@ src/
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Project setup | ✅ |
-| 1 | Login, storage channel, upload/download, chunking, folders, rename/move/delete, sync | ✅ Built, needs testing |
-| 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ⏳ |
+| 1 | Login, storage channel, upload/download, chunking, folders, rename/move/delete, sync | ✅ |
+| 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ✅ Built, needs testing |
 | 3 | Android/iOS app (Capacitor), share-to-app, camera backup | ⏳ |
 | 4 | End-to-end encryption, duplicate detection, ZIP download, deploy | ⏳ |
 

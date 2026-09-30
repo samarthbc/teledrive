@@ -41,6 +41,61 @@ export async function pickSaveTarget(file: FileItem): Promise<SaveTarget | null>
   return memoryTarget(file)
 }
 
+/**
+ * Ask where to save several files: one folder picker (Chrome/Edge), otherwise normal browser
+ * downloads. Must be called directly from a click handler.
+ */
+export async function pickSaveTargets(files: FileItem[]): Promise<Map<string, SaveTarget> | null> {
+  if (files.length === 1) {
+    const t = await pickSaveTarget(files[0])
+    return t ? new Map([[files[0].id, t]]) : null
+  }
+  const w = window as unknown as { showDirectoryPicker?: (o: object) => Promise<DirectoryHandleLike> }
+  const targets = new Map<string, SaveTarget>()
+  if (w.showDirectoryPicker) {
+    let dir: DirectoryHandleLike
+    try {
+      dir = await w.showDirectoryPicker({ mode: 'readwrite' })
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return null
+      for (const f of files) targets.set(f.id, memoryTarget(f))
+      return targets
+    }
+    const used = new Set<string>()
+    for (const f of files) {
+      let name = f.name
+      for (let n = 1; used.has(name.toLowerCase()); n++) {
+        const dot = f.name.lastIndexOf('.')
+        name = dot > 0 ? `${f.name.slice(0, dot)} (${n})${f.name.slice(dot)}` : `${f.name} (${n})`
+      }
+      used.add(name.toLowerCase())
+      targets.set(f.id, lazyTarget(async () => (await dir.getFileHandle(name, { create: true })).createWritable()))
+    }
+    return targets
+  }
+  for (const f of files) targets.set(f.id, memoryTarget(f))
+  return targets
+}
+
+interface DirectoryHandleLike {
+  getFileHandle(name: string, o: { create: boolean }): Promise<FileSystemFileHandleLike>
+}
+
+type WritableLike = Awaited<ReturnType<FileSystemFileHandleLike['createWritable']>>
+
+/** Opens the file only when the download actually starts. */
+function lazyTarget(open: () => Promise<WritableLike>): SaveTarget {
+  let stream: Promise<WritableLike> | null = null
+  const get = () => (stream ??= open())
+  return {
+    write: async (c) => (await get()).write(c),
+    close: async () => (await get()).close(),
+    abort: async () => {
+      if (stream) await (await stream).abort()
+    },
+  }
+}
+
 interface FileSystemFileHandleLike {
   createWritable(): Promise<{ write(c: Uint8Array): Promise<void>; close(): Promise<void>; abort(): Promise<void> }>
 }
@@ -85,28 +140,16 @@ export async function downloadFile(file: FileItem, target: SaveTarget, ctl: Tran
 /** Stream one part (Telegram document) in order, with a few requests in flight. */
 async function* readPart(part: Part, ctl: TransferControl): AsyncGenerator<Uint8Array> {
   if (!part.doc) throw new Error('Missing file data')
-  let doc = part.doc
-  const count = Math.ceil(doc.size / REQUEST_SIZE)
+  const count = Math.ceil(part.doc.size / REQUEST_SIZE)
   const inFlight = new Map<number, Promise<Uint8Array>>()
   let next = 0
 
-  const fetchBlock = async (i: number): Promise<Uint8Array> => {
-    await ctl.checkpoint()
-    try {
-      return await getBlock(doc, i * REQUEST_SIZE)
-    } catch (e) {
-      if (!(e as { errorMessage?: string }).errorMessage?.startsWith('FILE_REFERENCE_')) throw e
-      // File references expire; refresh from the message and retry once
-      doc = await refreshDoc(part)
-      return getBlock(doc, i * REQUEST_SIZE)
-    }
-  }
-
   for (let i = 0; i < count; i++) {
     while (next < count && next < i + PARALLEL_REQUESTS) {
-      const p = fetchBlock(next)
+      const block = next++
+      const p = ctl.checkpoint().then(() => fetchBlock(part, block * REQUEST_SIZE))
       p.catch(() => {}) // handled when awaited below
-      inFlight.set(next++, p)
+      inFlight.set(block, p)
     }
     const bytes = await inFlight.get(i)!
     inFlight.delete(i)
@@ -114,13 +157,52 @@ async function* readPart(part: Part, ctl: TransferControl): AsyncGenerator<Uint8
   }
 }
 
-async function getBlock(doc: DocRef, offset: number): Promise<Uint8Array> {
+/** One 1 MB block of a part. Refreshes the file reference once if it has expired. */
+export async function fetchBlock(part: Part, offset: number, thumbSize = ''): Promise<Uint8Array> {
+  if (!part.doc) throw new Error('Missing file data')
+  try {
+    return await getBlock(part.doc, offset, thumbSize)
+  } catch (e) {
+    if (!(e as { errorMessage?: string }).errorMessage?.startsWith('FILE_REFERENCE_')) throw e
+    return getBlock(await refreshDoc(part), offset, thumbSize)
+  }
+}
+
+export const BLOCK_SIZE = REQUEST_SIZE
+
+/** Read a whole (small) file into memory, e.g. for previews. */
+export async function readBlob(file: FileItem, ctl: TransferControl): Promise<Blob> {
+  const chunks: Uint8Array[] = []
+  for (const part of file.parts) {
+    for await (const bytes of readPart(part, ctl)) {
+      chunks.push(bytes)
+      ctl.progress(bytes.length)
+    }
+  }
+  return new Blob(chunks as BlobPart[], { type: file.mime })
+}
+
+/** Read the first bytes of a file (e.g. to preview a text file). */
+export async function readHead(file: FileItem, maxBytes: number): Promise<Uint8Array> {
+  const bytes = await fetchBlock(file.parts[0], 0)
+  return bytes.subarray(0, maxBytes)
+}
+
+/** Download the thumbnail Telegram stores with the file's first part, if any. */
+export async function fetchThumbnail(file: FileItem): Promise<Blob | null> {
+  const part = file.parts[0]
+  if (!part?.doc?.thumb) return null
+  const bytes = await fetchBlock(part, 0, part.doc.thumb)
+  return new Blob([bytes as BlobPart], { type: 'image/jpeg' })
+}
+
+async function getBlock(doc: DocRef, offset: number, thumbSize = ''): Promise<Uint8Array> {
   const client = await getClient()
   const location = new Api.InputDocumentFileLocation({
     id: bigInt(doc.docId),
     accessHash: bigInt(doc.accessHash),
     fileReference: Buffer.from(doc.fileRef),
-    thumbSize: '',
+    thumbSize,
   })
   const request = new Api.upload.GetFile({ location, offset: bigInt(offset), limit: REQUEST_SIZE, precise: false })
   let dcId = doc.dcId
