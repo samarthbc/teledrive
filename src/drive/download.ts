@@ -1,5 +1,4 @@
 import bigInt from 'big-integer'
-import { Buffer } from 'buffer'
 import { Api, errors } from 'telegram'
 import { storageChannel } from '../telegram/channel'
 import { getClient } from '../telegram/client'

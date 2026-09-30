@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer'
 import { nanoid } from 'nanoid'
 import { Api } from 'telegram'
 import { storageChannel, storagePeer } from '../telegram/channel'
