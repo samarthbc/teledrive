@@ -9,6 +9,10 @@ export interface UploadState {
   name: string
   chunks: Record<number, ChunkState>
   updated: number
+  /** Salt of the file's encryption key, if the upload is encrypted. */
+  salt?: string
+  /** SHA-256 of the content (hex). */
+  hash?: string
 }
 
 export interface ChunkState {

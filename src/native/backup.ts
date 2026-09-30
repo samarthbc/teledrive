@@ -7,6 +7,7 @@ import { createFolder } from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import { isHidden, listFolder, uniqueName } from '../drive/tree'
 import { uploadFile } from '../drive/upload'
+import { encrypting, needsUnlock } from '../drive/vault'
 import { useDrive } from '../store/useDrive'
 import { isAndroid, Native, PhoneFile, type CameraItem } from './android'
 
@@ -85,6 +86,7 @@ export async function runBackup(): Promise<void> {
     if (!(await Native.mediaPermission({})).granted) {
       return useBackup.setState({ status: 'Needs permission to read photos and videos' })
     }
+    if (needsUnlock(useDrive.getState().drive)) return useBackup.setState({ status: 'Waiting: unlock encrypted files to back up' })
     const net = await Network.getStatus()
     if (!net.connected) return useBackup.setState({ status: 'Waiting for internet' })
     if (settings.wifiOnly && net.connectionType !== 'wifi') return useBackup.setState({ status: 'Waiting for Wi-Fi' })
@@ -114,7 +116,8 @@ export async function runBackup(): Promise<void> {
         let failed = false
         try {
           const drive = useDrive.getState().drive
-          await uploadFile(new PhoneFile(item), uniqueName(drive, folderId, item.name), folderId, ctl)
+          if (needsUnlock(drive)) throw new Error('Encrypted files are locked')
+          await uploadFile(new PhoneFile(item), uniqueName(drive, folderId, item.name), folderId, ctl, { encrypt: encrypting(drive) })
           await markDone(item.id)
         } catch (e) {
           failed = true

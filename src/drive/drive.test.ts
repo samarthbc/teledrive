@@ -24,7 +24,7 @@ describe('meta', () => {
   })
 
   it('rejects invalid part numbers', () => {
-    expect(decode('{"td":1,"t":"c","id":"x","pt":0}')).toBeNull()
+    expect(decode('{"td":1,"t":"c","id":"x","pt":-1}')).toBeNull()
     expect(decode('{"td":1,"t":"f","id":"x","p":"root","n":"a","s":1,"of":0}')).toBeNull()
   })
 

@@ -4,6 +4,7 @@ import { storageChannel } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { docRef } from '../telegram/messages'
 import { isAndroid, phoneSaveTarget } from '../native/android'
+import { CIPHER_BLOCK, decryptBlock, decryptThumb, fileKey } from './crypto'
 import type { DocRef, FileItem, Part } from './tree'
 import { applyMessages } from './sync'
 import { TransferControl, withRetry } from './transfer'
@@ -131,8 +132,8 @@ function memoryTarget(file: FileItem): SaveTarget {
 export async function downloadFile(file: FileItem, target: SaveTarget, ctl: TransferControl): Promise<void> {
   if (!file.complete) throw new Error('This file is incomplete (some parts are missing)')
   try {
-    for (const part of file.parts) {
-      for await (const bytes of readPart(part, ctl)) {
+    for (const i of file.parts.keys()) {
+      for await (const bytes of readPart(file, i, ctl)) {
         await target.write(bytes)
         ctl.progress(bytes.length)
       }
@@ -144,17 +145,24 @@ export async function downloadFile(file: FileItem, target: SaveTarget, ctl: Tran
   }
 }
 
-/** Stream one part (Telegram document) in order, with a few requests in flight. */
-async function* readPart(part: Part, ctl: TransferControl): AsyncGenerator<Uint8Array> {
+/** Stream one part (Telegram document) in order, with a few requests in flight. Decrypts if needed. */
+async function* readPart(file: FileItem, index: number, ctl: TransferControl): AsyncGenerator<Uint8Array> {
+  const part = file.parts[index]
   if (!part.doc) throw new Error('Missing file data')
   const count = Math.ceil(part.doc.size / REQUEST_SIZE)
+  const key = file.salt ? await fileKey(file.salt) : null
+  // Encrypted blocks are numbered across the whole file
+  const firstBlock = file.parts.slice(0, index).reduce((n, p) => n + (p.doc?.size ?? 0), 0) / CIPHER_BLOCK
   const inFlight = new Map<number, Promise<Uint8Array>>()
   let next = 0
 
   for (let i = 0; i < count; i++) {
     while (next < count && next < i + PARALLEL_REQUESTS) {
       const block = next++
-      const p = ctl.checkpoint().then(() => fetchBlock(part, block * REQUEST_SIZE))
+      const p = ctl
+        .checkpoint()
+        .then(() => fetchBlock(part, block * REQUEST_SIZE))
+        .then((bytes) => (key ? decryptBlock(key, firstBlock + block, bytes) : bytes))
       p.catch(() => {}) // handled when awaited below
       inFlight.set(block, p)
     }
@@ -180,8 +188,8 @@ export const BLOCK_SIZE = REQUEST_SIZE
 /** Read a whole (small) file into memory, e.g. for previews. */
 export async function readBlob(file: FileItem, ctl: TransferControl): Promise<Blob> {
   const chunks: Uint8Array[] = []
-  for (const part of file.parts) {
-    for await (const bytes of readPart(part, ctl)) {
+  for (const i of file.parts.keys()) {
+    for await (const bytes of readPart(file, i, ctl)) {
       chunks.push(bytes)
       ctl.progress(bytes.length)
     }
@@ -192,11 +200,17 @@ export async function readBlob(file: FileItem, ctl: TransferControl): Promise<Bl
 /** Read the first bytes of a file (e.g. to preview a text file). */
 export async function readHead(file: FileItem, maxBytes: number): Promise<Uint8Array> {
   const bytes = await fetchBlock(file.parts[0], 0)
-  return bytes.subarray(0, maxBytes)
+  const plain = file.salt ? await decryptBlock(await fileKey(file.salt), 0, bytes) : bytes
+  return plain.subarray(0, maxBytes)
 }
 
 /** Download the thumbnail Telegram stores with the file's first part, if any. */
 export async function fetchThumbnail(file: FileItem): Promise<Blob | null> {
+  // Encrypted files keep an encrypted thumbnail in its own message
+  if (file.salt) {
+    if (!file.thumbPart) return null
+    return decryptThumb(await fileKey(file.salt), await fetchBlock(file.thumbPart, 0))
+  }
   const part = file.parts[0]
   if (!part?.doc?.thumb) return null
   const bytes = await fetchBlock(part, 0, part.doc.thumb)

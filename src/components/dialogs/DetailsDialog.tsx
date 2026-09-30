@@ -10,6 +10,7 @@ export default function DetailsDialog(props: { drive: Drive; item: Item; onDownl
   const location = item.parent === ROOT ? 'My Drive' : ['My Drive', ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
 
   const rows: [string, string][] = [['Location', location], ['Created', new Date(item.ts * 1000).toLocaleString()]]
+  if (item.x.enc) rows.push(['Encryption', item.locked ? 'Encrypted (locked on this device)' : 'End-to-end encrypted'])
   if (item.kind === 'file') {
     rows.unshift(['Size', `${formatBytes(item.size)} (${item.size.toLocaleString()} bytes)`], ['Type', item.mime])
     rows.push(['Stored as', item.partsTotal === 1 ? '1 Telegram message' : `${item.partsTotal} Telegram messages`])
@@ -26,7 +27,7 @@ export default function DetailsDialog(props: { drive: Drive; item: Item; onDownl
       title="Details"
       onClose={onClose}
       footer={
-        item.kind === 'file' && item.complete ? (
+        item.kind === 'file' && item.complete && !item.locked ? (
           <button className="btn-primary" onClick={onDownload}>
             <Download className="h-4 w-4" /> Download
           </button>

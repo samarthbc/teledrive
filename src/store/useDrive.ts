@@ -5,7 +5,9 @@ import { cleanup } from '../drive/ops'
 import { subscribeTransfers, type Transfer } from '../drive/queue'
 import { initStreaming } from '../drive/stream'
 import { loadCache, subscribe, sync } from '../drive/sync'
-import { buildDrive, type Drive } from '../drive/tree'
+import { resolveSecrets, secretOf, unresolved } from '../drive/secrets'
+import { buildDrive, type Drive, type MessageRecord } from '../drive/tree'
+import * as vault from '../drive/vault'
 import { describeError, errorCode, logOut } from '../telegram/auth'
 import { ensureStorageChannel } from '../telegram/channel'
 import { getClient, isAuthorized, onSessionLost, resetClient, SESSION_LOST_CODES } from '../telegram/client'
@@ -30,12 +32,19 @@ interface State {
   transfers: Transfer[]
   view: ViewMode
   sort: Sort
+  /** The encryption key is available on this device (only meaningful if the drive has encryption on). */
+  unlocked: boolean
   boot: (takeOver?: boolean) => Promise<void>
   afterLogin: () => Promise<void>
   refresh: () => Promise<void>
   logout: () => Promise<void>
   setView: (v: ViewMode) => void
   setSort: (s: Sort) => void
+  /** Throws WrongPasswordError if the password is wrong. */
+  unlock: (password: string, remember: boolean) => Promise<void>
+  lock: () => Promise<void>
+  enableEncryption: (password: string, remember: boolean) => Promise<void>
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>
 }
 
 const SYNC_INTERVAL = 30_000
@@ -50,7 +59,22 @@ let timer: ReturnType<typeof setInterval> | undefined
 let booting: Promise<void> | null = null
 
 export const useDrive = create<State>((set, get) => {
-  subscribe((records) => set({ drive: buildDrive(records.values()) }))
+  let records: Map<number, MessageRecord> = new Map()
+  let buildSeq = 0
+  /** Rebuild the tree, decrypting new encrypted names first (synchronous when there are none). */
+  const rebuild = async () => {
+    const seq = ++buildSeq
+    const todo = unresolved(records.values())
+    if (todo.length) {
+      await resolveSecrets(todo)
+      if (seq !== buildSeq) return
+    }
+    set({ drive: buildDrive(records.values(), secretOf) })
+  }
+  subscribe((r) => {
+    records = r
+    void rebuild()
+  })
   subscribeTransfers((transfers) => set({ transfers }))
   initStreaming((id) => {
     const item = get().drive.items.get(id)
@@ -61,12 +85,26 @@ export const useDrive = create<State>((set, get) => {
     set({ phase: 'loading', error: null })
     await ensureStorageChannel()
     const hasCache = await loadCache()
+    await restoreKeys()
     if (hasCache) set({ phase: 'ready' })
     await get().refresh()
+    await restoreKeys()
     set({ phase: 'ready' })
     startAutoSync()
     // Expire old trash and leftovers of abandoned uploads (in the background)
     cleanup(get().drive).catch((e) => console.error('Cleanup failed', e))
+  }
+
+  /** Use the encryption key remembered on this device, if any. */
+  const restoreKeys = async () => {
+    if (get().unlocked || !(await vault.restoreKeys(get().drive.encryption))) return
+    set({ unlocked: true })
+    await rebuild()
+  }
+
+  const forgetKeys = async () => {
+    await vault.lock()
+    set({ unlocked: false })
   }
 
   const startAutoSync = () => {
@@ -87,6 +125,7 @@ export const useDrive = create<State>((set, get) => {
     clearInterval(timer)
     document.removeEventListener('visibilitychange', onVisible)
     await resetClient()
+    await forgetKeys()
     await clearAccountData()
     set({
       drive: buildDrive([]),
@@ -120,6 +159,7 @@ export const useDrive = create<State>((set, get) => {
     transfers: [],
     view: 'grid',
     sort: { key: 'name', dir: 'asc' },
+    unlocked: false,
 
     boot: (takeOver = false) => {
       booting ??= (async () => {
@@ -174,6 +214,7 @@ export const useDrive = create<State>((set, get) => {
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisible)
       await logOut()
+      await forgetKeys()
       set({ drive: buildDrive([]), phase: 'login', loginNotice: null })
     },
 
@@ -186,5 +227,26 @@ export const useDrive = create<State>((set, get) => {
       set({ sort })
       void setKV(KEYS.sort, sort)
     },
+
+    unlock: async (password, remember) => {
+      const config = get().drive.encryption
+      if (!config) throw new Error('Encryption is not on for this drive')
+      await vault.unlock(config, password, remember)
+      set({ unlocked: true })
+      await rebuild()
+    },
+
+    lock: async () => {
+      await forgetKeys()
+      await rebuild()
+    },
+
+    enableEncryption: async (password, remember) => {
+      await vault.enableEncryption(get().drive, password, remember)
+      set({ unlocked: true })
+      await rebuild()
+    },
+
+    changePassword: (oldPassword, newPassword) => vault.changeEncryptionPassword(get().drive, oldPassword, newPassword),
   }
 })

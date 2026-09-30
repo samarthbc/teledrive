@@ -1,4 +1,6 @@
-import { Camera, Clock, FolderPlus, HardDrive, LogOut, Send, Star, Trash2, Upload, type LucideIcon } from 'lucide-react'
+import {
+  Camera, Clock, FolderPlus, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
+} from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { driveStats } from '../drive/tree'
 import { formatBytes } from '../lib/format'
@@ -8,11 +10,14 @@ export default function Sidebar(props: {
   onUpload: () => void
   onNewFolder: () => void
   onLogout: () => void
+  onEncryption: () => void
   /** Only in the Android app. */
   onCameraBackup?: () => void
 }) {
-  const { onUpload, onNewFolder, onLogout, onCameraBackup } = props
+  const { onUpload, onNewFolder, onLogout, onEncryption, onCameraBackup } = props
   const drive = useDrive((s) => s.drive)
+  const unlocked = useDrive((s) => s.unlocked)
+  const EncIcon = !drive.encryption ? ShieldCheck : unlocked ? LockOpen : Lock
   const { pathname } = useLocation()
   const stats = driveStats(drive)
   const inDrive = pathname === '/' || pathname.startsWith('/folder/')
@@ -46,6 +51,13 @@ export default function Sidebar(props: {
             <Camera className="h-4 w-4" /> Camera backup
           </button>
         )}
+        <button
+          className="btn w-full justify-start text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
+          onClick={onEncryption}
+        >
+          <EncIcon className="h-4 w-4" /> Encryption
+          <span className="ml-auto text-xs text-slate-400">{!drive.encryption ? 'Off' : unlocked ? 'Unlocked' : 'Locked'}</span>
+        </button>
       </nav>
 
       <div className="mt-auto space-y-3">

@@ -4,7 +4,10 @@ import { errorCode } from '../telegram/auth'
 import { storageChannel, storagePeer } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
-import { encode, ROOT, validateName, type FileMeta, type FolderMeta } from './meta'
+import { seal } from './crypto'
+import { encode, ROOT, validateName, type FileMeta, type FolderMeta, type Secret } from './meta'
+import { rememberSecret, secretOf } from './secrets'
+import { encrypting } from './vault'
 import { applyDeleted, applyMessages, getRecord } from './sync'
 import { db } from '../db/db'
 import { randomLong } from './transfer'
@@ -19,8 +22,13 @@ export async function createFolder(drive: Drive, parentId: string, name: string)
   const error = validateName(name)
   if (error) throw new Error(error)
   const id = nanoid(10)
-  const meta: FolderMeta = {
-    td: 1, t: 'd', id, p: parentId, n: uniqueName(drive, parentId, name.trim()), ts: Math.floor(Date.now() / 1000),
+  const n = uniqueName(drive, parentId, name.trim())
+  const ts = Math.floor(Date.now() / 1000)
+  let meta: FolderMeta = { td: 1, t: 'd', id, p: parentId, n, ts }
+  if (encrypting(drive)) {
+    const e = await seal({ n } satisfies Secret)
+    rememberSecret(e, { n })
+    meta = { td: 1, t: 'd', id, p: parentId, n: '', ts, x: { enc: 1 }, e }
   }
   const client = await getClient()
   const res = await client.invoke(
@@ -38,6 +46,7 @@ export async function createFolder(drive: Drive, parentId: string, name: string)
 export async function rename(drive: Drive, item: Item, name: string): Promise<void> {
   const error = validateName(name)
   if (error) throw new Error(error)
+  if (item.locked) throw new Error('Unlock encrypted files to rename this item')
   const newName = uniqueName(drive, item.parent, name.trim(), item.id)
   if (newName === item.name) return
   await editMeta(item, { n: newName })
@@ -130,10 +139,22 @@ export async function deleteMessages(ids: number[]): Promise<void> {
 async function editMeta(item: Item, changes: Partial<Pick<FileMeta, 'p' | 'n' | 'x'>>): Promise<void> {
   const current = getRecord(item.msgId)?.meta
   if (!current || (current.t !== 'd' && current.t !== 'f')) throw new Error('Item not found. Try refreshing.')
+  let meta = { ...current, ...changes }
+  if (current.e) {
+    // Encrypted item: the name lives in the encrypted part. Unknown while locked, so it stays as it is.
+    const { n, ...rest } = changes
+    meta = { ...current, ...rest }
+    const secret = secretOf(current.e)
+    if (n !== undefined && secret && n !== secret.n) {
+      const next: Secret = { ...secret, n }
+      meta.e = await seal(next)
+      rememberSecret(meta.e, next)
+    }
+  }
   const client = await getClient()
   try {
     const res = await client.invoke(
-      new Api.messages.EditMessage({ peer: storagePeer(), id: item.msgId, message: encode({ ...current, ...changes }) }),
+      new Api.messages.EditMessage({ peer: storagePeer(), id: item.msgId, message: encode(meta) }),
     )
     await applyMessages(messagesFromUpdates(res))
   } catch (e) {

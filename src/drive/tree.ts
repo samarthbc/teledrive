@@ -1,4 +1,5 @@
-import { ROOT, type Flags, type Meta } from './meta'
+import type { EncryptionConfig } from './crypto'
+import { ROOT, type Flags, type Meta, type Secret } from './meta'
 
 /** Where a Telegram document lives; enough to download it without re-fetching the message. */
 export interface DocRef {
@@ -33,6 +34,8 @@ export interface FolderItem {
   msgId: number
   ts: number
   x: Flags
+  /** Encrypted, and the drive is locked: the real name isn't known. */
+  locked: boolean
 }
 
 export interface FileItem {
@@ -50,6 +53,14 @@ export interface FileItem {
   parts: Part[]
   /** False when some chunks are missing (e.g. interrupted upload). */
   complete: boolean
+  /** Encrypted, and the drive is locked: the real name isn't known. */
+  locked: boolean
+  /** Salt of the file's encryption key, if the file is encrypted. */
+  salt?: string
+  /** SHA-256 of the content (hex), if known. */
+  hash?: string
+  /** Encrypted thumbnail (encrypted files only). */
+  thumbPart?: Part
 }
 
 export type Item = FolderItem | FileItem
@@ -60,34 +71,52 @@ export interface Drive {
   /** Chunk messages whose file no longer exists (safe to delete). */
   orphanChunks: number[]
   configMsgId?: number
+  /** Set when encryption is turned on for this drive. */
+  encryption?: EncryptionConfig
 }
 
-export function buildDrive(records: Iterable<MessageRecord>): Drive {
+export const LOCKED_FILE_NAME = 'Encrypted file'
+export const LOCKED_FOLDER_NAME = 'Encrypted folder'
+
+/**
+ * Build the folder tree from channel messages. `secretOf` returns the decrypted caption fields of
+ * encrypted items (undefined while the drive is locked).
+ */
+export function buildDrive(records: Iterable<MessageRecord>, secretOf: (sealed: string) => Secret | undefined = () => undefined): Drive {
   const items = new Map<string, Item>()
   const chunks = new Map<string, Part[]>()
   let configMsgId: number | undefined
+  let encryption: EncryptionConfig | undefined
 
   const sorted = [...records].sort((a, b) => a.msgId - b.msgId)
   for (const r of sorted) {
     const m = r.meta
     if (m.t === 'cfg') {
-      configMsgId ??= r.msgId
+      if (configMsgId === undefined) {
+        configMsgId = r.msgId
+        encryption = m.e
+      }
     } else if (m.t === 'c') {
       const list = chunks.get(m.id) ?? []
       list.push({ pt: m.pt, msgId: r.msgId, doc: r.doc })
       chunks.set(m.id, list)
     } else if (!items.has(m.id)) {
       // On duplicate IDs the oldest message wins
+      const secret = m.e ? secretOf(m.e) : undefined
+      const locked = !!m.e && !secret
       if (m.t === 'd') {
         items.set(m.id, {
-          kind: 'folder', id: m.id, parent: m.p, name: m.n, msgId: r.msgId,
-          ts: m.ts ?? r.date, x: m.x ?? {},
+          kind: 'folder', id: m.id, parent: m.p, name: m.e ? (secret?.n ?? LOCKED_FOLDER_NAME) : m.n, msgId: r.msgId,
+          ts: m.ts ?? r.date, x: m.x ?? {}, locked,
         })
       } else {
         items.set(m.id, {
-          kind: 'file', id: m.id, parent: m.p, name: m.n, msgId: r.msgId,
-          ts: m.ts || r.date, x: m.x ?? {}, size: m.s, mime: m.m, partsTotal: m.of,
-          parts: [{ pt: 1, msgId: r.msgId, doc: r.doc }], complete: false,
+          kind: 'file', id: m.id, parent: m.p, name: m.e ? (secret?.n ?? LOCKED_FILE_NAME) : m.n, msgId: r.msgId,
+          ts: m.ts || r.date, x: m.x ?? {}, size: m.s,
+          mime: m.e ? (secret?.m ?? 'application/octet-stream') : m.m,
+          partsTotal: m.of, parts: [{ pt: 1, msgId: r.msgId, doc: r.doc }], complete: false, locked,
+          ...(m.k && { salt: m.k }),
+          ...((m.e ? secret?.h : m.h) && { hash: m.e ? secret!.h : m.h }),
         })
       }
     }
@@ -101,7 +130,8 @@ export function buildDrive(records: Iterable<MessageRecord>): Drive {
       continue
     }
     for (const c of list) {
-      if (c.pt > 1 && c.pt <= item.partsTotal && !item.parts.some((p) => p.pt === c.pt)) item.parts.push(c)
+      if (c.pt === 0 && item.salt) item.thumbPart ??= c
+      else if (c.pt > 1 && c.pt <= item.partsTotal && !item.parts.some((p) => p.pt === c.pt)) item.parts.push(c)
     }
   }
 
@@ -119,7 +149,7 @@ export function buildDrive(records: Iterable<MessageRecord>): Drive {
     children.set(parent, list)
   }
 
-  return { items, children, orphanChunks, configMsgId }
+  return { items, children, orphanChunks, configMsgId, encryption }
 }
 
 function reachesRoot(items: Map<string, Item>, id: string): boolean {
@@ -181,7 +211,9 @@ export function collectTree(drive: Drive, id: string): Item[] {
 
 /** All message IDs that make up the given items (folder markers + every file part). */
 export function messageIds(items: Item[]): number[] {
-  return items.flatMap((i) => (i.kind === 'file' ? i.parts.map((p) => p.msgId) : [i.msgId]))
+  return items.flatMap((i) =>
+    i.kind === 'file' ? [...i.parts.map((p) => p.msgId), ...(i.thumbPart ? [i.thumbPart.msgId] : [])] : [i.msgId],
+  )
 }
 
 /** "photo.jpg" → "photo (1).jpg" if the name is already taken in that folder. */

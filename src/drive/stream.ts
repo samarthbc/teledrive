@@ -1,10 +1,11 @@
+import { decryptBlock, fileKey, PLAIN_BLOCK } from './crypto'
 import { BLOCK_SIZE, fetchBlock } from './download'
 import type { FileItem } from './tree'
 
 // Page side of streaming (see public/sw.js). The service worker forwards media Range requests here;
 // we answer with up to MAX_REPLY bytes and prefetch the next blocks so playback stays smooth.
 
-const MAX_REPLY = 2 * BLOCK_SIZE
+const MAX_REPLY = 2 * 1024 * 1024
 const PREFETCH = 3
 const CACHE_BLOCKS = 48
 
@@ -54,12 +55,14 @@ async function onMessage(e: MessageEvent) {
 
 /** Bytes from `start` up to `end` (inclusive), capped at MAX_REPLY. */
 export async function readRange(file: FileItem, start: number, end?: number): Promise<Uint8Array> {
+  // Encrypted files: each 1 MB block on Telegram holds slightly less than 1 MB of the file
+  const bs = file.salt ? PLAIN_BLOCK : BLOCK_SIZE
   const last = Math.min(end ?? Infinity, start + MAX_REPLY - 1, file.size - 1)
-  const firstBlock = Math.floor(start / BLOCK_SIZE)
-  const lastBlock = Math.floor(last / BLOCK_SIZE)
+  const firstBlock = Math.floor(start / bs)
+  const lastBlock = Math.floor(last / bs)
   const blocks = await Promise.all(range(firstBlock, lastBlock).map((b) => block(file, b)))
 
-  const totalBlocks = Math.ceil(file.size / BLOCK_SIZE)
+  const totalBlocks = Math.ceil(file.size / bs)
   for (const b of range(lastBlock + 1, Math.min(lastBlock + PREFETCH, totalBlocks - 1))) {
     block(file, b).catch(() => {})
   }
@@ -67,7 +70,7 @@ export async function readRange(file: FileItem, start: number, end?: number): Pr
   const out = new Uint8Array(last - start + 1)
   let offset = 0
   for (const [i, bytes] of blocks.entries()) {
-    const from = i === 0 ? start - firstBlock * BLOCK_SIZE : 0
+    const from = i === 0 ? start - firstBlock * bs : 0
     const slice = bytes.subarray(from, Math.min(bytes.length, from + out.length - offset))
     out.set(slice, offset)
     offset += slice.length
@@ -75,7 +78,7 @@ export async function readRange(file: FileItem, start: number, end?: number): Pr
   return out
 }
 
-/** A 1 MB block of the file, located across its parts (cached, LRU). */
+/** A block of the file (1 MB on Telegram), located across its parts, decrypted if needed (cached, LRU). */
 function block(file: FileItem, index: number): Promise<Uint8Array> {
   const key = `${file.id}:${index}`
   const hit = cache.get(key)
@@ -92,7 +95,9 @@ function block(file: FileItem, index: number): Promise<Uint8Array> {
     if (offset < size) break
     offset -= size
   }
-  const p = fetchBlock(part, offset)
+  const p = file.salt
+    ? Promise.all([fetchBlock(part, offset), fileKey(file.salt)]).then(([bytes, k]) => decryptBlock(k, index, bytes))
+    : fetchBlock(part, offset)
   cache.set(key, p)
   p.catch(() => cache.delete(key))
   while (cache.size > CACHE_BLOCKS) cache.delete(cache.keys().next().value!)

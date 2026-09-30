@@ -1,7 +1,7 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, ChevronRight, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen,
   FolderPlus, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Trash2,
-  TriangleAlert, X, ExternalLink,
+  TriangleAlert, X, ExternalLink, Lock,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -28,6 +28,8 @@ import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } fr
 import { useBackHandler } from '../native/backButton'
 import { useIncomingShares } from '../native/share'
 import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
+import EncryptionDialog from '../components/dialogs/EncryptionDialog'
+import { encrypting, needsUnlock } from '../drive/vault'
 import { FILTERS, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
@@ -43,6 +45,7 @@ type Modal =
   | { type: 'details'; item: Item }
   | { type: 'logout' }
   | { type: 'backup' }
+  | { type: 'encryption'; reason?: string; then?: () => void }
 
 const SORT_LABELS: Record<SortKey, string> = { name: 'Name', date: 'Date', size: 'Size', type: 'Type' }
 const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash' }
@@ -57,7 +60,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout } = useDrive()
+  const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout, unlocked } = useDrive()
+  const locked = !!drive.encryption && !unlocked
 
   const [modal, setModal] = useState<Modal | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[] } | null>(null)
@@ -124,9 +128,20 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   // ---- Actions ----
 
+  /** Run `action` now, or after the user unlocks encryption (needed to add encrypted files and folders). */
+  const whenUnlocked = (reason: string, action: () => void) => {
+    if (needsUnlock(useDrive.getState().drive)) setModal({ type: 'encryption', reason, then: action })
+    else action()
+  }
+  const newFolder = () =>
+    whenUnlocked('Encryption is on for this drive. Unlock it to add folders.', () => setModal({ type: 'newFolder' }))
+
   const upload = async (files: UploadSource[], into?: string) => {
     const target = into ?? (mode === 'folder' ? current : ROOT)
     const drv = useDrive.getState().drive
+    if (needsUnlock(drv))
+      return setModal({ type: 'encryption', reason: 'Encryption is on for this drive. Unlock it to upload.', then: () => void upload(files, into) })
+    const encrypt = encrypting(drv)
     const taken = new Set<string>()
     for (const file of Array.from(files)) {
       const resumable = await findResumable(file, target)
@@ -138,7 +153,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       }
       taken.add(name.toLowerCase())
       if (resumable) toast(`Resuming upload of “${name}”`)
-      enqueue('upload', name, file.size, (ctl) => uploadFile(file, name, target, ctl), async () => {
+      enqueue('upload', name, file.size, (ctl) => uploadFile(file, name, target, ctl, { encrypt }), async () => {
         const state = await findResumable(file, target)
         if (state) await discard(state)
       })
@@ -147,6 +162,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   }
 
   const download = async (list: Item[]) => {
+    if (list.some((i) => i.locked)) return setModal({ type: 'encryption', reason: 'Unlock encrypted files to download them.' })
     const files = list.filter((i): i is FileItem => i.kind === 'file' && i.complete)
     if (!files.length) return toastError(new Error('Select files to download (folders are not supported yet)'))
     if (files.length < list.length) toast('Folders and incomplete files were skipped')
@@ -194,8 +210,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const open = (item: Item) => {
     if (mode === 'trash') return setModal({ type: 'details', item })
+    if (item.locked) return setModal({ type: 'encryption', reason: 'This item is encrypted. Enter your password to open it.' })
     if (item.kind === 'folder') return openFolder(item.id)
-    const files = items.filter((i): i is FileItem => i.kind === 'file')
+    const files = items.filter((i): i is FileItem => i.kind === 'file' && !i.locked)
     setPreview({ files, index: files.findIndex((f) => f.id === item.id) })
   }
 
@@ -248,6 +265,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         { label: 'Restore', icon: ArchiveRestore, onClick: () => void act(restoreItems([item])) },
         { label: 'Details', icon: Info, onClick: () => setModal({ type: 'details', item }) },
         { label: 'Delete forever', icon: Trash2, danger: true, onClick: () => setModal({ type: 'deleteForever', items: [item] }) },
+      ]
+    if (item.locked)
+      return [
+        { label: 'Unlock', icon: Lock, onClick: () => setModal({ type: 'encryption' }) },
+        { label: 'Move', icon: FolderInput, onClick: () => setModal({ type: 'move', items: [item] }) },
+        { label: 'Details', icon: Info, onClick: () => setModal({ type: 'details', item }) },
+        { label: 'Move to trash', icon: Trash2, danger: true, onClick: () => void act(moveToTrash([item])) },
       ]
     return [
       item.kind === 'file'
@@ -338,8 +362,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const sidebar = (
     <Sidebar
       onUpload={() => fileInput.current?.click()}
-      onNewFolder={() => setModal({ type: 'newFolder' })}
+      onNewFolder={newFolder}
       onLogout={() => setModal({ type: 'logout' })}
+      onEncryption={() => setModal({ type: 'encryption' })}
       onCameraBackup={isAndroid ? () => setModal({ type: 'backup' }) : undefined}
     />
   )
@@ -481,6 +506,16 @@ export default function DrivePage({ mode }: { mode: Mode }) {
               ))}
             </div>
           )}
+          {locked && mode !== 'trash' && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
+              <span className="flex items-center gap-2">
+                <Lock className="h-4 w-4 shrink-0" /> Encrypted files are locked on this device.
+              </span>
+              <button className="btn-ghost py-1 text-brand" onClick={() => setModal({ type: 'encryption' })}>
+                Unlock
+              </button>
+            </div>
+          )}
           {mode === 'trash' && items.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
               <span>Items in the trash are deleted forever after {TRASH_DAYS} days.</span>
@@ -512,7 +547,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
               searched={!!query}
               isRoot={current === ROOT}
               onUpload={() => fileInput.current?.click()}
-              onNewFolder={() => setModal({ type: 'newFolder' })}
+              onNewFolder={newFolder}
             />
           )}
         </div>
@@ -622,6 +657,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         />
       )}
       {modal?.type === 'backup' && <CameraBackupDialog onClose={() => setModal(null)} />}
+      {modal?.type === 'encryption' && (
+        <EncryptionDialog reason={modal.reason} onUnlocked={modal.then} onClose={() => setModal(null)} />
+      )}
       {shares.length > 0 && !modal && (
         <MoveDialog
           drive={drive}

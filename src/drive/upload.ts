@@ -6,7 +6,9 @@ import { errorCode } from '../telegram/auth'
 import { storageChannel, storagePeer } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
-import { encode, type ChunkMeta, type FileMeta } from './meta'
+import { EncryptedSource, encryptThumb, fileKey, newFileSalt, seal } from './crypto'
+import { encode, type ChunkMeta, type FileMeta, type Secret } from './meta'
+import { rememberSecret } from './secrets'
 import { applyMessages, getRecord } from './sync'
 import { makeThumbnail } from './thumbnail'
 import { CanceledError, randomLong, TransferControl, withRetry } from './transfer'
@@ -42,6 +44,13 @@ export class EmptyFileError extends Error {
   }
 }
 
+export interface UploadOptions {
+  /** Encrypt the file (the drive has encryption on and is unlocked). */
+  encrypt: boolean
+  /** SHA-256 of the content (hex), if already computed. */
+  hash?: string
+}
+
 export function uploadKey(file: UploadSource, parentId: string): string {
   return `${parentId}|${file.name}|${file.size}|${file.lastModified}`
 }
@@ -58,18 +67,36 @@ export function findResumable(file: UploadSource, parentId: string): Promise<Upl
  * Progress is saved as it goes: if the upload fails (or the page is closed), uploading the same
  * file into the same folder again continues where it stopped. Canceling discards everything.
  */
-export async function uploadFile(file: UploadSource, name: string, parentId: string, ctl: TransferControl): Promise<void> {
+export async function uploadFile(
+  file: UploadSource, name: string, parentId: string, ctl: TransferControl, opts: UploadOptions,
+): Promise<void> {
   if (file.size === 0) throw new EmptyFileError()
   const key = uploadKey(file, parentId)
-  const state: UploadState = (await db.uploads.get(key)) ?? { key, id: nanoid(10), name, chunks: {}, updated: 0 }
-  const total = Math.ceil(file.size / CHUNK_SIZE)
+  // A resumed upload keeps its original choice (its first chunks were sent that way)
+  const state: UploadState = (await db.uploads.get(key)) ?? {
+    key, id: nanoid(10), name, chunks: {}, updated: 0, ...(opts.encrypt && { salt: newFileSalt() }),
+  }
+  if (opts.hash) state.hash ??= opts.hash
+  const cryptoKey = state.salt ? await fileKey(state.salt) : null
+  // What goes to Telegram: the file itself, or its encrypted form
+  const src: ByteSource = cryptoKey ? new EncryptedSource(file, cryptoKey) : file
+  const total = Math.ceil(src.size / CHUNK_SIZE)
   const mime = file.type || 'application/octet-stream'
-  const caption = () =>
-    encode({
-      td: 1, t: 'f', id: state.id, p: parentId, n: state.name, s: file.size, m: mime, of: total,
-      ts: Math.floor(Date.now() / 1000),
+  const caption = async () => {
+    const ts = Math.floor(Date.now() / 1000)
+    if (!state.salt)
+      return encode({
+        td: 1, t: 'f', id: state.id, p: parentId, n: state.name, s: file.size, m: mime, of: total, ts,
+        ...(state.hash && { h: state.hash }),
+      } satisfies FileMeta)
+    const secret: Secret = { n: state.name, m: mime, ...(state.hash && { h: state.hash }) }
+    const e = await seal(secret)
+    rememberSecret(e, secret)
+    return encode({
+      td: 1, t: 'f', id: state.id, p: parentId, n: '', s: file.size, m: '', of: total, ts, x: { enc: 1 }, k: state.salt, e,
     } satisfies FileMeta)
-  caption() // validate before uploading anything
+  }
+  await caption() // validate before uploading anything
 
   // Chunks sent earlier may have been deleted since (e.g. by the cleanup of old leftovers)
   for (const [pt, cs] of Object.entries(state.chunks)) {
@@ -85,23 +112,34 @@ export async function uploadFile(file: UploadSource, name: string, parentId: str
     await db.uploads.put(state)
   }
 
+  // Encrypted files don't reveal their name to Telegram
+  const baseName = cryptoKey ? `${state.id}.bin` : state.name
+
   try {
-    for (const pt of [...Array.from({ length: total - 1 }, (_, i) => i + 2), 1]) {
-      const blob = file.slice((pt - 1) * CHUNK_SIZE, pt * CHUNK_SIZE)
+    // Encrypted files: the encrypted thumbnail (part 0) is sent before the main message
+    const order = [...Array.from({ length: total - 1 }, (_, i) => i + 2), ...(cryptoKey ? [0] : []), 1]
+    for (const pt of order) {
+      if (pt === 0) {
+        await sendEncryptedThumb(file, mime, cryptoKey!, state.id, (state.chunks[0] ??= {}), ctl)
+        await save(true)
+        continue
+      }
+      const blob = src.slice((pt - 1) * CHUNK_SIZE, pt * CHUNK_SIZE)
       const cs = (state.chunks[pt] ??= {})
       if (cs.msgId) {
         ctl.progress(blob.size)
         continue
       }
-      const fileName = total === 1 ? state.name : `${state.name}.part${pt}`
+      const fileName = total === 1 ? baseName : `${baseName}.part${pt}`
       const isMain = pt === 1
-      const thumb = isMain ? await thumbnailFor(file, mime) : null
+      // Encrypted files get their (encrypted) thumbnail separately
+      const thumb = isMain && !cryptoKey ? await thumbnailFor(file, mime) : null
 
       const msgs = await sendWithRepair(ctl, blob, fileName, cs, save, async (inputFile) => {
         const thumbFile = thumb ? await uploadSmall(thumb, 'thumb.jpg') : undefined
         return sendDocument(
-          inputFile, thumbFile, fileName, isMain ? mime : 'application/octet-stream',
-          isMain ? caption() : encode({ td: 1, t: 'c', id: state.id, pt } satisfies ChunkMeta), ctl,
+          inputFile, thumbFile, fileName, isMain && !cryptoKey ? mime : 'application/octet-stream',
+          isMain ? await caption() : encode({ td: 1, t: 'c', id: state.id, pt } satisfies ChunkMeta), ctl,
         )
       })
       cs.msgId = msgs[0].id
@@ -119,6 +157,22 @@ export async function uploadFile(file: UploadSource, name: string, parentId: str
     }
     throw e
   }
+}
+
+/** Encrypted files: send the thumbnail, encrypted, as its own message (part 0). */
+async function sendEncryptedThumb(
+  file: UploadSource, mime: string, key: CryptoKey, id: string, cs: ChunkState, ctl: TransferControl,
+): Promise<void> {
+  if (cs.msgId) return
+  const thumb = await thumbnailFor(file, mime)
+  if (!thumb) return
+  const inputFile = await uploadSmall(await encryptThumb(key, thumb), `${id}.thumb`)
+  const msgs = await sendDocument(
+    inputFile, undefined, `${id}.thumb`, 'application/octet-stream',
+    encode({ td: 1, t: 'c', id, pt: 0 } satisfies ChunkMeta), ctl,
+  )
+  cs.msgId = msgs[0].id
+  await applyMessages(msgs)
 }
 
 async function thumbnailFor(file: UploadSource, mime: string): Promise<Blob | null> {

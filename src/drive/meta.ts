@@ -1,5 +1,7 @@
 // Caption metadata format. See IMPLEMENTATION.md → "Metadata design".
 
+import type { EncryptionConfig } from './crypto'
+
 export const FORMAT_VERSION = 1
 export const ROOT = 'root'
 export const CAPTION_LIMIT = 1024
@@ -11,14 +13,25 @@ export interface Flags {
   enc?: 1
 }
 
+/** Encrypted fields of a folder or file caption (see `e`). */
+export interface Secret {
+  n: string
+  m?: string
+  /** SHA-256 of the content (hex). */
+  h?: string
+}
+
 export interface FolderMeta {
   td: 1
   t: 'd'
   id: string
   p: string
+  /** Empty when encrypted (the name is in `e`). */
   n: string
   ts?: number
   x?: Flags
+  /** Encrypted Secret (base64), when x.enc is set. */
+  e?: string
 }
 
 export interface FileMeta {
@@ -32,12 +45,19 @@ export interface FileMeta {
   of: number
   ts: number
   x?: Flags
+  /** SHA-256 of the content (hex); inside `e` for encrypted files. */
+  h?: string
+  /** Encrypted Secret (base64), when x.enc is set. */
+  e?: string
+  /** Salt of the file's encryption key (base64), when x.enc is set. */
+  k?: string
 }
 
 export interface ChunkMeta {
   td: 1
   t: 'c'
   id: string
+  /** Part number (1..of). 0 is the encrypted thumbnail of an encrypted file. */
   pt: number
 }
 
@@ -45,6 +65,8 @@ export interface ConfigMeta {
   td: 1
   t: 'cfg'
   app: 'teledrive'
+  /** Set once encryption is turned on for this drive. */
+  e?: EncryptionConfig
 }
 
 export type Meta = FolderMeta | FileMeta | ChunkMeta | ConfigMeta
@@ -60,6 +82,12 @@ export function encode(meta: Meta): string {
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 const isInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0
 const isPartIndex = (v: unknown): v is number => isInt(v) && (v as number) >= 1
+const isHash = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v)
+
+function isEncryptionConfig(v: unknown): v is EncryptionConfig {
+  const c = v as EncryptionConfig
+  return !!c && typeof c === 'object' && c.v === 1 && isStr(c.id) && isStr(c.s) && isStr(c.k) && isInt(c.i) && c.i > 0
+}
 
 /** Parse a message caption. Returns null for anything that isn't valid TeleDrive metadata. */
 export function decode(text: string | undefined | null): Meta | null {
@@ -72,23 +100,29 @@ export function decode(text: string | undefined | null): Meta | null {
   }
   if (!o || typeof o !== 'object' || o.td !== FORMAT_VERSION) return null
   const x = o.x && typeof o.x === 'object' ? (o.x as Flags) : undefined
+  // Encrypted items carry their name in `e` instead of `n`
+  const sealed = x?.enc === 1 && isStr(o.e) ? o.e : undefined
+  const name = sealed ? '' : o.n
 
   switch (o.t) {
     case 'd':
-      if (!isStr(o.id) || !isStr(o.p) || !isStr(o.n)) return null
-      return { td: 1, t: 'd', id: o.id, p: o.p, n: o.n, ts: isInt(o.ts) ? o.ts : undefined, x }
+      if (!isStr(o.id) || !isStr(o.p) || !(sealed || isStr(name))) return null
+      return { td: 1, t: 'd', id: o.id, p: o.p, n: name as string, ts: isInt(o.ts) ? o.ts : undefined, x, ...(sealed && { e: sealed }) }
     case 'f':
-      if (!isStr(o.id) || !isStr(o.p) || !isStr(o.n) || !isInt(o.s) || !isPartIndex(o.of)) return null
+      if (!isStr(o.id) || !isStr(o.p) || !(sealed || isStr(name)) || !isInt(o.s) || !isPartIndex(o.of)) return null
+      if (sealed && !isStr(o.k)) return null
       return {
-        td: 1, t: 'f', id: o.id, p: o.p, n: o.n, s: o.s,
+        td: 1, t: 'f', id: o.id, p: o.p, n: name as string, s: o.s,
         m: typeof o.m === 'string' ? o.m : 'application/octet-stream',
         of: o.of, ts: isInt(o.ts) ? o.ts : 0, x,
+        ...(isHash(o.h) && { h: o.h }),
+        ...(sealed && { e: sealed, k: o.k as string }),
       }
     case 'c':
-      if (!isStr(o.id) || !isPartIndex(o.pt)) return null
+      if (!isStr(o.id) || !isInt(o.pt)) return null
       return { td: 1, t: 'c', id: o.id, pt: o.pt }
     case 'cfg':
-      return { td: 1, t: 'cfg', app: 'teledrive' }
+      return { td: 1, t: 'cfg', app: 'teledrive', ...(isEncryptionConfig(o.e) && { e: o.e }) }
     default:
       return null
   }

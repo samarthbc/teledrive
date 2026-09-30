@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, MoreVertical, Star } from 'lucide-react'
+import { AlertTriangle, Check, Lock, MoreVertical, Star } from 'lucide-react'
 import { useRef } from 'react'
 import type { Item } from '../drive/tree'
 import { formatBytes, formatDate } from '../lib/format'
@@ -174,6 +174,11 @@ function Badges({ item }: { item: Item }) {
   return (
     <>
       {item.x.fav && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Starred" />}
+      {item.x.enc && (
+        <span title={item.locked ? 'Encrypted: unlock to open' : 'End-to-end encrypted'}>
+          <Lock className={`h-3.5 w-3.5 shrink-0 ${item.locked ? 'text-slate-400' : 'text-emerald-500'}`} />
+        </span>
+      )}
       {item.kind === 'file' && !item.complete && (
         <span title="Some parts of this file are missing">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
