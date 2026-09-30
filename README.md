@@ -1,0 +1,98 @@
+# TeleDrive
+
+A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, and (soon) a mobile app. There's **no backend server**; the app runs on your device and talks to Telegram directly.
+
+> Status: **Phase 1 (core drive)**. See the [roadmap](#roadmap).
+
+## Features
+
+- Log in with your Telegram account (phone → code → 2FA password)
+- Files are stored in a private channel (**TeleDrive Storage**) in your own account, created automatically
+- Upload multiple files with drag-and-drop, with progress, speed, pause and cancel
+- Files over 2 GB are split into chunks automatically
+- Download files (streamed straight to disk in Chrome/Edge, so size isn't limited by memory)
+- Folders: create, rename, move, delete, nest
+- Grid and list views, sorting, breadcrumbs, storage stats
+- Syncs between devices automatically
+- Works at phone width; follows your system's dark/light mode
+
+## How it works
+
+```
+ Your browser / phone ──── MTProto (WebSocket) ────► Telegram
+   • GramJS                                            private channel =
+   • IndexedDB cache                                   files + metadata
+```
+
+- Every file is a message in your private channel. Its caption holds small JSON metadata (name, folder, size…).
+- Folders are small marker messages with an ID; files point to their folder's ID.
+- The app caches everything in IndexedDB and fetches only what changed (`updates.getChannelDifference`).
+
+Full details: [REQUIREMENTS.md](REQUIREMENTS.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md)
+
+## Getting started
+
+### 1. Prerequisites
+
+- [Node.js](https://nodejs.org) 20+
+- Telegram API keys: log in at [my.telegram.org](https://my.telegram.org) → **API development tools** → create an app (any title) → copy **api_id** and **api_hash**
+
+### 2. Install
+
+```bash
+git clone https://github.com/samarthbc/teledrive.git
+cd teledrive
+npm install
+cp .env.example .env
+```
+
+Put your keys in `.env`:
+
+```
+VITE_TG_API_ID=12345678
+VITE_TG_API_HASH=your32characterhashhere
+```
+
+`.env` is git-ignored. Never commit it. If you leave it empty, the app asks for the keys on first launch and stores them on that device only.
+
+### 3. Run
+
+```bash
+npm run dev      # http://localhost:5173
+npm test         # unit tests
+npm run build    # production build in dist/
+```
+
+## Project structure
+
+```
+src/
+├── telegram/   client, login flow, storage channel, message parsing
+├── drive/      metadata format, folder tree, sync, upload, download, file ops, transfer queue
+├── db/         IndexedDB (Dexie): session, cache, settings
+├── store/      app state (Zustand)
+├── pages/      Setup, Login, Drive
+└── components/ file views, dialogs, menus, transfer panel
+```
+
+## Privacy and safety
+
+- Your files live in **your own** Telegram account. The API keys only identify the app; they don't give access to anyone's files.
+- Normal Telegram channels are **not end-to-end encrypted**. Optional client-side encryption is planned (Phase 4).
+- Telegram doesn't guarantee storage. Don't keep the **only** copy of important files here.
+- Heavy automated use can trigger rate limits. The app waits and retries automatically.
+- Don't post or delete messages in the **TeleDrive Storage** channel by hand.
+
+## Roadmap
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Project setup | ✅ |
+| 1 | Login, storage channel, upload/download, chunking, folders, rename/move/delete, sync | ✅ Built, needs testing |
+| 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ⏳ |
+| 3 | Android/iOS app (Capacitor), share-to-app, camera backup | ⏳ |
+| 4 | End-to-end encryption, duplicate detection, ZIP download, deploy | ⏳ |
+
+## Tech stack
+
+React · TypeScript · Vite · Tailwind CSS · [GramJS](https://github.com/gram-js/gramjs) · Dexie · Zustand · Vitest
