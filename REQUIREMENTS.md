@@ -136,6 +136,10 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [ ] Dark and light theme
 - [ ] Installable PWA for desktop
 
+### 4.5 Later: camera backup upgrades (Android)
+- [ ] Automatic backup while the app is closed (Android runs it in the background when new photos appear)
+- [ ] Back up more folders (Screenshots, WhatsApp Images, …), each into its own subfolder
+
 ---
 
 ## 5. Out of Scope (not possible without a backend)
@@ -165,3 +169,4 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **2** | Thumbnails, image and video preview, search, multi-select, trash |
 | **3** | Mobile app via Capacitor, share-to-app, camera backup |
 | **4** | Encryption, duplicate detection, ZIP download, polish |
+| **5** | Camera backup upgrades: background backup, more folders (later) |

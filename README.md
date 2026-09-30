@@ -129,6 +129,7 @@ android/        Android project (Capacitor); native code in app/src/main/java/co
 | 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ✅ |
 | 3 | Android app (Capacitor), share-to-app, camera backup, background transfers | ✅ Tested on a Redmi (Android 14) |
 | 4 | End-to-end encryption, duplicate detection, ZIP download, deploy | ⏳ |
+| 5 | Camera backup upgrades: backup while the app is closed, more folders | ⏳ Later |
 
 ## Tech stack
 

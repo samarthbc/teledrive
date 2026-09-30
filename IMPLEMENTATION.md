@@ -297,6 +297,56 @@ and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for ex
 
 ---
 
+## Phase 5: Camera Backup Upgrades (Android, later)
+
+Nice to have, built after everything else.
+
+### 5.1 Automatic backup while the app is closed
+Today backup only checks when the app is open. Goal: new photos upload on their own, like Google Photos.
+
+**The challenge:** all Telegram logic (GramJS, session, upload code) lives in the WebView, and there is no WebView when the app is closed.
+
+**Approach: a headless WebView run by WorkManager**
+| Piece | How |
+|---|---|
+| Trigger | WorkManager job with a **content URI trigger** on `MediaStore.Images`/`Video` (fires when photos are added), plus a periodic fallback (every ~1 h) |
+| Constraints | Wi-Fi only → `NetworkType.UNMETERED`; also "battery not low" |
+| Runner | The worker starts `TransferService` (foreground, with notification), which creates a **WebView without an Activity** and loads a small second entry point (`backup.html`, a separate Vite entry) |
+| Same data | Loaded from the same origin (`https://localhost` via `WebViewAssetLoader`), so it shares IndexedDB: the Telegram session, the file index, and the backed-up photo list |
+| Native access | A small `addJavascriptInterface` bridge for listing and reading photos (Capacitor plugins need an Activity) |
+| Finish | The runner reports "done", and the service destroys the WebView and stops |
+| No double work | Skip if the app is open (it backs up itself); a lock in IndexedDB stops two runners at once |
+
+**Things to handle**
+- Xiaomi/MIUI and similar: background work is blocked unless **Autostart** is allowed and battery saver is off for TeleDrive. Show a one-time guide with a button to the right settings screen.
+- Android 15 limits `dataSync` foreground services to 6 h/day, which is plenty for photos.
+- Two sessions uploading at once (app + runner) is safe on Telegram's side, but the index cache must merge, not overwrite; each side applies only its own new messages, and a normal sync picks up the rest.
+- New setting: **"Back up in the background"** (off by default), shown under Camera backup.
+
+**Done when:** with the app swiped away and the phone locked on Wi-Fi, a new photo appears in Camera Backup within minutes.
+
+### 5.2 Back up more folders
+Today only `DCIM/Camera` is backed up.
+
+| Piece | How |
+|---|---|
+| Find folders | Native `listMediaFolders()`: group `MediaStore` images/videos by `RELATIVE_PATH`, with a count and a sample thumbnail (Screenshots, WhatsApp Images, Telegram, Instagram, Downloads…) |
+| Choose | Camera backup settings get a **folder list with toggles**; Camera stays on by default |
+| Upload to | A subfolder per source, e.g. `Camera Backup/Screenshots`; Camera itself keeps going to `Camera Backup` |
+| Start point | Per folder: "only new" or "everything", as with Camera today |
+| Tracking | Same backed-up ID list (MediaStore IDs are unique across folders) |
+| Native | Generalize `listCameraMedia` to `listMedia({ paths, since })` |
+
+Notes: WhatsApp *Sent* folders contain a `.nomedia` file, so Android doesn't index them; only received media is available. Folders under `Android/data` can't be read on Android 11+.
+
+**Done when:** you can turn on Screenshots and WhatsApp Images, and new files from both land in their own subfolders.
+
+### Ideas (not planned yet)
+- **Free up space:** delete photos from the phone once they're confirmed in TeleDrive (uses Android's delete confirmation dialog).
+- **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).
+
+---
+
 ## Testing Checklist (every phase)
 
 - [ ] Unit tests pass (`npm test`)
