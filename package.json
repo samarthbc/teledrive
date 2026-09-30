@@ -1,0 +1,36 @@
+{
+  "name": "teledrive",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "big-integer": "^1.6.52",
+    "buffer": "^6.0.3",
+    "dexie": "^4.4.6",
+    "lucide-react": "^1.49.0",
+    "nanoid": "^5.1.16",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "telegram": "^2.26.22",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vite-plugin-node-polyfills": "^0.28.0",
+    "vitest": "^4.1.11"
+  }
+}
