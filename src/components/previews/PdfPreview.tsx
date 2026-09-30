@@ -7,8 +7,11 @@ const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
 async function openPdf(bytes: ArrayBuffer): Promise<PDFDocumentProxy> {
   const [pdfjs, worker] = await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')])
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+  // pdf.js moves the buffer to its worker (the original becomes empty), so give it a copy:
+  // the viewer can open the same bytes again (re-render, React dev mode running effects twice)
+  const data = new Uint8Array(bytes.slice(0))
   // No eval (defense against malicious PDFs), no XFA forms
-  return pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, enableXfa: false }).promise
+  return pdfjs.getDocument({ data, isEvalSupported: false, enableXfa: false }).promise
 }
 
 /** PDF viewer: pages are drawn onto canvases (pdf.js), only when scrolled into view. */
