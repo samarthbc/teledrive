@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CAPTION_LIMIT, decode, encode, MetaError, ROOT, validateName, type Meta } from './meta'
 import {
   breadcrumbs, buildDrive, collectTree, isDescendant, isHidden, listFolder, locationOf, messageIds, recentFiles,
-  searchItems, starredItems, trashedItems, uniqueName, findDuplicate, hasFileOfSize, type MessageRecord,
+  searchItems, starredItems, trashedItems, uniqueName, findDuplicate, hasFileOfSize, zipEntries, type MessageRecord,
 } from './tree'
 
 let nextMsg = 1
@@ -161,5 +161,18 @@ describe('duplicates', () => {
     expect(findDuplicate(d, 100, 'x.jpg', 'b'.repeat(64))).toBeUndefined()
     expect(findDuplicate(d, 200, 'OLD.jpg', H)?.id).toBe('b')
     expect(findDuplicate(d, 200, 'other.jpg', H)).toBeUndefined()
+  })
+})
+
+describe('zipEntries', () => {
+  it('includes folders with their contents, keeps empty folders and skips incomplete files', () => {
+    const d = buildDrive([
+      rec(folder('f', ROOT, 'Trip')), rec(folder('e', 'f', 'Empty')), rec(file('a', 'f', 'a.jpg')),
+      rec(file('b', 'f', 'broken.bin', 2)), rec(file('c', ROOT, 'a.jpg')),
+    ])
+    const { entries, skipped, bytes } = zipEntries(d, [d.items.get('f')!, d.items.get('c')!])
+    expect(entries.map((e) => e.path).sort()).toEqual(['Trip', 'Trip/Empty', 'Trip/a.jpg', 'a.jpg'])
+    expect(skipped).toBe(1)
+    expect(bytes).toBe(20)
   })
 })

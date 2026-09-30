@@ -322,3 +322,43 @@ export function hasFileOfSize(drive: Drive, size: number): boolean {
   for (const i of drive.items.values()) if (i.kind === 'file' && i.size === size && !i.locked && !i.x.tr) return true
   return false
 }
+
+/** One entry in a ZIP: a file, or a folder (kept so empty folders survive). */
+export interface ZipEntry {
+  path: string
+  file?: FileItem
+}
+
+/**
+ * The files and folders to put in a ZIP for the selected items (folders with everything inside).
+ * Locked (encrypted) and incomplete files can't be downloaded; they are counted in `skipped`.
+ */
+export function zipEntries(drive: Drive, items: Item[]): { entries: ZipEntry[]; skipped: number; bytes: number } {
+  const entries: ZipEntry[] = []
+  const used = new Set<string>()
+  let skipped = 0
+  let bytes = 0
+  const unique = (path: string) => {
+    let p = path
+    for (let n = 1; used.has(p.toLowerCase()); n++) {
+      const dot = path.lastIndexOf('.')
+      p = dot > path.lastIndexOf('/') + 1 ? `${path.slice(0, dot)} (${n})${path.slice(dot)}` : `${path} (${n})`
+    }
+    used.add(p.toLowerCase())
+    return p
+  }
+  const walk = (item: Item, prefix: string) => {
+    if (item.kind === 'file') {
+      if (item.locked || !item.complete) return void skipped++
+      entries.push({ path: unique(prefix + item.name), file: item })
+      bytes += item.size
+      return
+    }
+    if (item.locked) return void skipped++
+    const path = unique(prefix + item.name)
+    entries.push({ path })
+    for (const child of listFolder(drive, item.id)) walk(child, `${path}/`)
+  }
+  for (const item of items) walk(item, '')
+  return { entries, skipped, bytes }
+}

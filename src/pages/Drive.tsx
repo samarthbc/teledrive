@@ -15,12 +15,12 @@ import Preview from '../components/Preview'
 import Sidebar from '../components/Sidebar'
 import Toasts from '../components/Toasts'
 import TransferPanel from '../components/TransferPanel'
-import { downloadFile, pickSaveTargets } from '../drive/download'
+import { downloadFile, downloadZip, pickSaveTarget, pickSaveTargets } from '../drive/download'
 import { ROOT } from '../drive/meta'
 import { createFolder, emptyTrash, move, remove, rename, restore, setStarred, trash, TRASH_DAYS } from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import {
-  breadcrumbs, collectTree, findDuplicate, hasFileOfSize, listFolder, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
+  breadcrumbs, collectTree, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
   type FileItem, type Item,
 } from '../drive/tree'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
@@ -226,9 +226,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const download = async (list: Item[]) => {
     if (list.some((i) => i.locked)) return setModal({ type: 'encryption', reason: 'Unlock encrypted files to download them.' })
+    if (list.some((i) => i.kind === 'folder')) return downloadAsZip(list)
     const files = list.filter((i): i is FileItem => i.kind === 'file' && i.complete)
-    if (!files.length) return toastError(new Error('Select files to download (folders are not supported yet)'))
-    if (files.length < list.length) toast('Folders and incomplete files were skipped')
+    if (!files.length) return toastError(new Error("These files are incomplete and can't be downloaded"))
+    if (files.length < list.length) toast('Incomplete files were skipped')
     // Must run first, while the click still counts as a user gesture
     const targets = await pickSaveTargets(files)
     if (!targets) return
@@ -240,6 +241,22 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         if (uri) toast(`Saved “${f.name}” to Downloads/TeleDrive`, { label: 'Open', onClick: () => void act(openWithOtherApp(uri, f.mime)) })
       })
     }
+  }
+
+  /** Folders (and everything in them) as one ZIP file. */
+  const downloadAsZip = async (list: Item[]) => {
+    const { entries, skipped, bytes } = zipEntries(useDrive.getState().drive, list)
+    if (!entries.length) return toastError(new Error('Nothing to download'))
+    const name = list.length === 1 ? `${list[0].name}.zip` : `TeleDrive ${new Date().toISOString().slice(0, 10)}.zip`
+    // Must run first, while the click still counts as a user gesture
+    const target = await pickSaveTarget({ name, mime: 'application/zip' })
+    if (!target) return
+    if (skipped) toast(`${skipped} locked or incomplete item${skipped === 1 ? ' was' : 's were'} left out of the ZIP`)
+    enqueue('download', name, bytes, async (ctl) => {
+      await downloadZip(entries, target, ctl)
+      const uri = (target as PhoneSaveTarget).uri
+      if (uri) toast(`Saved “${name}” to Downloads/TeleDrive`, { label: 'Open', onClick: () => void act(openWithOtherApp(uri, 'application/zip')) })
+    })
   }
 
   /** Android: fetch into the app's cache, then hand it to another app (PDF viewer, etc.). */
@@ -340,9 +357,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       item.kind === 'file'
         ? { label: 'Preview', icon: Eye, onClick: () => open(item) }
         : { label: 'Open', icon: FolderOpen, onClick: () => openFolder(item.id) },
-      ...(item.kind === 'file'
-        ? [{ label: 'Download', icon: Download, onClick: () => void download([item]), disabled: !item.complete }]
-        : []),
+      item.kind === 'file'
+        ? { label: 'Download', icon: Download, onClick: () => void download([item]), disabled: !item.complete }
+        : { label: 'Download as ZIP', icon: Download, onClick: () => void download([item]) },
       ...(isAndroid && item.kind === 'file'
         ? [{ label: 'Open with…', icon: ExternalLink, onClick: () => openWith(item), disabled: !item.complete }]
         : []),

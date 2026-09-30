@@ -5,13 +5,20 @@ import { getClient } from '../telegram/client'
 import { docRef } from '../telegram/messages'
 import { isAndroid, phoneSaveTarget } from '../native/android'
 import { CIPHER_BLOCK, decryptBlock, decryptThumb, fileKey } from './crypto'
-import type { DocRef, FileItem, Part } from './tree'
+import { makeZip } from 'client-zip'
+import type { DocRef, FileItem, Part, ZipEntry } from './tree'
 import { applyMessages } from './sync'
 import { TransferControl, withRetry } from './transfer'
 
 /** Download request size (Telegram maximum; offsets stay 1 MB aligned). */
 const REQUEST_SIZE = 1024 * 1024
 const PARALLEL_REQUESTS = 4
+
+/** What a save target needs to know about the file being saved. */
+interface SaveAs {
+  name: string
+  mime: string
+}
 
 /** Where downloaded bytes go. */
 export interface SaveTarget {
@@ -24,7 +31,7 @@ export interface SaveTarget {
  * Ask where to save. Must be called directly from a click handler (browsers require a user gesture).
  * Returns null if the user dismissed the save dialog.
  */
-export async function pickSaveTarget(file: FileItem): Promise<SaveTarget | null> {
+export async function pickSaveTarget(file: SaveAs): Promise<SaveTarget | null> {
   // The Android app saves straight into Downloads/TeleDrive
   if (isAndroid) return phoneSaveTarget(file.name, file.mime, 'downloads')
   const w = window as unknown as { showSaveFilePicker?: (o: object) => Promise<FileSystemFileHandleLike> }
@@ -109,7 +116,7 @@ interface FileSystemFileHandleLike {
 }
 
 /** Collects the file in memory, then triggers a normal browser download. */
-function memoryTarget(file: FileItem): SaveTarget {
+function memoryTarget(file: SaveAs): SaveTarget {
   const parts: Uint8Array[] = []
   return {
     write: async (c) => {
@@ -142,6 +149,37 @@ export async function downloadFile(file: FileItem, target: SaveTarget, ctl: Tran
   } catch (e) {
     await target.abort().catch(() => {})
     throw e
+  }
+}
+
+/** Download files and folders as one ZIP (streamed: it never has to fit in memory). */
+export async function downloadZip(entries: ZipEntry[], target: SaveTarget, ctl: TransferControl): Promise<void> {
+  const inputs = entries.map((e) =>
+    e.file
+      ? { name: e.path, lastModified: new Date(e.file.ts * 1000), size: e.file.size, input: fileStream(e.file, ctl) }
+      : { name: `${e.path}/` },
+  )
+  try {
+    const reader = makeZip(inputs).getReader()
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      await target.write(value)
+    }
+    await target.close()
+  } catch (e) {
+    await target.abort().catch(() => {})
+    throw e
+  }
+}
+
+/** A file's content as a stream of chunks (only starts downloading when read). */
+async function* fileStream(file: FileItem, ctl: TransferControl): AsyncGenerator<Uint8Array> {
+  for (const i of file.parts.keys()) {
+    for await (const bytes of readPart(file, i, ctl)) {
+      ctl.progress(bytes.length)
+      yield bytes
+    }
   }
 }
 
