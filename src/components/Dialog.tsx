@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect } from 'react'
+import { useBackHandler } from '../native/backButton'
 
 export default function Dialog(props: {
   title: string
@@ -9,6 +10,7 @@ export default function Dialog(props: {
   wide?: boolean
 }) {
   const { title, onClose, children, footer, wide } = props
+  useBackHandler(true, onClose)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()

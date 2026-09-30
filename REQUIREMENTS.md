@@ -7,7 +7,7 @@ A personal cloud drive that uses Telegram as unlimited storage, with a website a
 ## 1. Goals
 
 - Unlimited, free cloud storage built on Telegram
-- Manage files from both a **website** and a **mobile app** (Android/iOS)
+- Manage files from both a **website** and an **Android app** (iOS is not a goal)
 - **No hosted backend**: nothing to run or pay for
 - Automatic sync between all devices
 
@@ -65,7 +65,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | App | React + TypeScript (Vite) |
 | Telegram | GramJS |
 | Local storage | IndexedDB |
-| Mobile | Capacitor (wraps the web app into native Android/iOS apps) |
+| Mobile | Capacitor 7 (wraps the web app into a native Android app; Android 10+) |
 | Website hosting | Static hosting: GitHub Pages / Cloudflare Pages / Vercel (free, no server code) |
 
 ### Configuration
@@ -121,10 +121,10 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Resume interrupted uploads
 
 ### 4.3 Mobile-specific
-- [ ] Share-to-app: share from any app (e.g. the gallery) and upload directly
-- [ ] Automatic camera backup of new photos and videos (on iOS, runs when the app is opened because background uploads are limited)
-- [ ] Offline access to downloaded files
-- [ ] Open files in other apps
+- [x] Share-to-app: share from any app (e.g. the gallery) and upload directly
+- [x] Automatic camera backup of new photos and videos (on iOS, runs when the app is opened because background uploads are limited)
+- [x] Offline access to downloaded files (saved to Downloads/TeleDrive)
+- [x] Open files in other apps
 
 ### 4.4 Advanced
 - [ ] End-to-end encryption: client-side encryption with a user password before upload

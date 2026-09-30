@@ -1,6 +1,8 @@
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Info, Loader2, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { readBlob, readHead } from '../drive/download'
+import { isAndroid } from '../native/android'
+import { useBackHandler } from '../native/backButton'
 import { canStream, streamUrl } from '../drive/stream'
 import { TransferControl } from '../drive/transfer'
 import type { FileItem } from '../drive/tree'
@@ -28,10 +30,13 @@ interface Props {
   onClose: () => void
   onDownload: (file: FileItem) => void
   onDetails: (file: FileItem) => void
+  /** Android: open the file in another app (PDF viewer, etc.). */
+  onOpenWith: (file: FileItem) => void
 }
 
-export default function Preview({ files, index, onIndex, onClose, onDownload, onDetails }: Props) {
+export default function Preview({ files, index, onIndex, onClose, onDownload, onDetails, onOpenWith }: Props) {
   const file = files[index]
+  useBackHandler(true, onClose)
   const touchX = useRef<number | null>(null)
   const prev = index > 0 ? () => onIndex(index - 1) : undefined
   const next = index < files.length - 1 ? () => onIndex(index + 1) : undefined
@@ -80,7 +85,7 @@ export default function Preview({ files, index, onIndex, onClose, onDownload, on
       </header>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
-        <Content key={file.id} file={file} onDownload={() => onDownload(file)} />
+        <Content key={file.id} file={file} onDownload={() => onDownload(file)} onOpenWith={() => onOpenWith(file)} />
         {prev && (
           <button className="preview-btn absolute left-2 hidden bg-black/40 sm:flex" onClick={prev} aria-label="Previous">
             <ChevronLeft className="h-6 w-6" />
@@ -101,9 +106,12 @@ function isMediaFocused() {
   return tag === 'VIDEO' || tag === 'AUDIO'
 }
 
-function Content({ file, onDownload }: { file: FileItem; onDownload: () => void }) {
+function Content({ file, onDownload, onOpenWith }: { file: FileItem; onDownload: () => void; onOpenWith: () => void }) {
   const kind = previewKind(file)
   if (!file.complete) return <Unavailable file={file} message="This file is incomplete (some parts are missing)." />
+  // Android's WebView has no PDF viewer; other file types open in the app that handles them
+  if (isAndroid && (kind === 'pdf' || kind === 'none'))
+    return <Unavailable file={file} message={kind === 'pdf' ? 'Open this PDF in a PDF app.' : 'No preview for this file type.'} onOpenWith={onOpenWith} onDownload={onDownload} />
   if ((kind === 'video' || kind === 'audio') && canStream()) return <Media file={file} src={streamUrl(file)} kind={kind} />
   if (kind === 'text') return <TextPreview file={file} />
   if (kind === 'none') return <Unavailable file={file} message="No preview available for this file type." onDownload={onDownload} />
@@ -208,13 +216,19 @@ function Big({ file }: { file: FileItem }) {
   return <Icon className={`h-20 w-20 ${color}`} strokeWidth={1} />
 }
 
-function Unavailable({ file, message, onDownload }: { file: FileItem; message: string; onDownload?: () => void }) {
+function Unavailable(props: { file: FileItem; message: string; onDownload?: () => void; onOpenWith?: () => void }) {
+  const { file, message, onDownload, onOpenWith } = props
   return (
     <div className="flex max-w-sm flex-col items-center gap-4 p-6 text-center">
       {message.includes('incomplete') ? <TriangleAlert className="h-12 w-12 text-amber-400" /> : <Big file={file} />}
       <p className="text-sm text-white/70">{message}</p>
+      {onOpenWith && (
+        <button className="btn-primary" onClick={onOpenWith}>
+          <ExternalLink className="h-4 w-4" /> Open with…
+        </button>
+      )}
       {onDownload && (
-        <button className="btn-primary" onClick={onDownload}>
+        <button className={onOpenWith ? 'btn-ghost text-white/80 hover:bg-white/10' : 'btn-primary'} onClick={onDownload}>
           <Download className="h-4 w-4" /> Download ({formatBytes(file.size)})
         </button>
       )}

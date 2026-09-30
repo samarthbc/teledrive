@@ -220,27 +220,33 @@ Name conflicts in the same folder are auto-renamed to `name (1).ext`.
 
 ---
 
-## Phase 3: Mobile App (Capacitor)
+## Phase 3: Android App (Capacitor)
 
-### 3.1 Wrap the app
-- `npm i @capacitor/core @capacitor/cli @capacitor/android` → `npx cap init` → `npx cap add android`.
-- Build: `npm run build && npx cap sync android` → open in Android Studio → run on phone or emulator.
-- Check that GramJS WebSockets and IndexedDB work in the Android WebView.
+Android only; iOS is not a goal.
 
-### 3.2 Native integrations
-| Feature | Plugin / approach |
+### Decisions
+| Decision | Reason |
 |---|---|
-| Save downloads to phone storage | `@capacitor/filesystem` (write chunks, no whole-file Blob) |
-| Open in other apps | `@capacitor/share` / file opener plugin |
-| Share-to-app (receive files) | Android intent filter + `send-intent` community plugin |
-| Camera backup | Media plugin to list new photos/videos since the last backup, then queue uploads to `/Camera Backup` |
-| Offline files | Downloaded files are tracked in Dexie and opened from local storage |
-| Back button, status bar | `@capacitor/app`, `@capacitor/status-bar` |
+| **Capacitor** (not native Kotlin / React Native / Flutter) | Reuses 100% of the web app; Android's WebView is Chrome, so GramJS, IndexedDB and the streaming service worker work unchanged |
+| Capacitor **7** | Capacitor 8 needs Node 22; 7 runs on Node 20 and is stable. Upgrade later with `npx cap migrate` |
+| `capacitor.config.json` (not `.ts`) | The CLI can't load `.ts` configs with TypeScript 7 |
+| **minSdk 29** (Android 10+) | Scoped storage + `MediaStore.Downloads` without legacy code paths |
+| One custom plugin (`TeleDriveNativePlugin.java`) | Fewer dependencies than several community plugins, and exactly the behavior we need |
+| `allowBackup=false` + data extraction rules | The Telegram session lives in app storage; it must not be copied to cloud backups |
 
-- Camera backup: foreground only at first, with a "Wi-Fi only" option. Background upload (Android WorkManager) is a stretch goal.
+### What the native plugin does
+| Feature | How |
+|---|---|
+| Downloads | `MediaStore.Downloads` → `Downloads/TeleDrive/…`; bytes streamed from JS in 1 MB base64 pieces |
+| Open with… / PDFs | Download into the cache, share via `FileProvider`, `ACTION_VIEW` chooser (WebView has no PDF viewer) |
+| Share → TeleDrive | `SEND` / `SEND_MULTIPLE` intent filters; JS reads shared files in 512 KB slices (`PhoneFile`), then a folder picker |
+| Camera backup | `MediaStore.Files` query for `DCIM/Camera` images/videos; backed-up IDs stored in IndexedDB; runs on open/resume/network change; Wi-Fi-only option |
+| Thumbnails for phone files | `ContentResolver.loadThumbnail` |
+| Background transfers | Foreground service (`dataSync`) + partial wake lock while the transfer queue is busy; JS keeps running because Capacitor's `KeepRunning` is on |
+| Back button | Stack of handlers (preview → dialog → menu → selection → drawer), then history, then minimize |
 
-### 3.3 iOS (optional, needs a Mac)
-- `npx cap add ios` → build in Xcode. Same code; test share extension and photo library permissions.
+### Build
+`npm run android` (build + sync + open Android Studio) → Run ▶, or `./gradlew assembleDebug` with `JAVA_HOME` set to Android Studio's JBR.
 
 **Phase 3 done when:** the APK installs on your phone, you can log in, browse, upload from the gallery via Share, and the camera backup works.
 

@@ -3,6 +3,7 @@ import { Api, errors } from 'telegram'
 import { storageChannel } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { docRef } from '../telegram/messages'
+import { isAndroid, phoneSaveTarget } from '../native/android'
 import type { DocRef, FileItem, Part } from './tree'
 import { applyMessages } from './sync'
 import { TransferControl, withRetry } from './transfer'
@@ -23,6 +24,8 @@ export interface SaveTarget {
  * Returns null if the user dismissed the save dialog.
  */
 export async function pickSaveTarget(file: FileItem): Promise<SaveTarget | null> {
+  // The Android app saves straight into Downloads/TeleDrive
+  if (isAndroid) return phoneSaveTarget(file.name, file.mime, 'downloads')
   const w = window as unknown as { showSaveFilePicker?: (o: object) => Promise<FileSystemFileHandleLike> }
   if (w.showSaveFilePicker) {
     try {
@@ -52,6 +55,10 @@ export async function pickSaveTargets(files: FileItem[]): Promise<Map<string, Sa
   }
   const w = window as unknown as { showDirectoryPicker?: (o: object) => Promise<DirectoryHandleLike> }
   const targets = new Map<string, SaveTarget>()
+  if (isAndroid) {
+    for (const f of files) targets.set(f.id, phoneSaveTarget(f.name, f.mime, 'downloads'))
+    return targets
+  }
   if (w.showDirectoryPicker) {
     let dir: DirectoryHandleLike
     try {

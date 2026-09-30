@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Match the web app's light theme (slate-50 / white) -->
+    <color name="app_background">#F8FAFC</color>
+    <color name="app_bars">#FFFFFF</color>
+</resources>

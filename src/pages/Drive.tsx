@@ -1,7 +1,7 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, ChevronRight, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen,
   FolderPlus, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Trash2,
-  TriangleAlert, X,
+  TriangleAlert, X, ExternalLink,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -23,7 +23,11 @@ import {
   breadcrumbs, collectTree, listFolder, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
   type FileItem, type Item,
 } from '../drive/tree'
-import { discard, findResumable, uploadFile } from '../drive/upload'
+import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
+import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } from '../native/android'
+import { useBackHandler } from '../native/backButton'
+import { useIncomingShares } from '../native/share'
+import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
 import { FILTERS, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
@@ -38,6 +42,7 @@ type Modal =
   | { type: 'emptyTrash' }
   | { type: 'details'; item: Item }
   | { type: 'logout' }
+  | { type: 'backup' }
 
 const SORT_LABELS: Record<SortKey, string> = { name: 'Name', date: 'Date', size: 'Size', type: 'Type' }
 const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash' }
@@ -64,6 +69,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const dragDepth = useRef(0)
   const fileInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
+  const shares = useIncomingShares((s) => s.files)
+  const clearShares = useIncomingShares((s) => s.clear)
 
   const query = params.get('q') ?? ''
   // The input keeps its own text; the URL follows it (reading back from the URL drops fast keystrokes)
@@ -107,14 +114,18 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     if (mode === 'folder') lastFolderPath = location.pathname
   }, [mode, location.pathname])
 
+  // Android back button: close the drawer, then clear the selection
+  useBackHandler(drawer, () => setDrawer(false))
+  useBackHandler(selected.size > 0, () => setSelected(new Set()))
+
   const openFolder = (id: string) => navigate(id === ROOT ? '/' : `/folder/${id}`)
   const closeMenu = useCallback(() => setMenu(null), [])
   const clearSelection = () => setSelected(new Set())
 
   // ---- Actions ----
 
-  const upload = async (files: FileList | File[]) => {
-    const target = mode === 'folder' ? current : ROOT
+  const upload = async (files: UploadSource[], into?: string) => {
+    const target = into ?? (mode === 'folder' ? current : ROOT)
     const drv = useDrive.getState().drive
     const taken = new Set<string>()
     for (const file of Array.from(files)) {
@@ -132,7 +143,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         if (state) await discard(state)
       })
     }
-    if (target !== current || mode !== 'folder') toast('Uploading to My Drive')
+    if (!into && (target !== current || mode !== 'folder')) toast('Uploading to My Drive')
   }
 
   const download = async (list: Item[]) => {
@@ -142,7 +153,24 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     // Must run first, while the click still counts as a user gesture
     const targets = await pickSaveTargets(files)
     if (!targets) return
-    for (const f of files) enqueue('download', f.name, f.size, (ctl) => downloadFile(f, targets.get(f.id)!, ctl))
+    for (const f of files) {
+      const target = targets.get(f.id)!
+      enqueue('download', f.name, f.size, async (ctl) => {
+        await downloadFile(f, target, ctl)
+        const uri = (target as PhoneSaveTarget).uri
+        if (uri) toast(`Saved “${f.name}” to Downloads/TeleDrive`, { label: 'Open', onClick: () => void act(openWithOtherApp(uri, f.mime)) })
+      })
+    }
+  }
+
+  /** Android: fetch into the app's cache, then hand it to another app (PDF viewer, etc.). */
+  const openWith = (f: FileItem) => {
+    if (!f.complete) return toastError(new Error('This file is incomplete and cannot be opened'))
+    enqueue('download', f.name, f.size, async (ctl) => {
+      const target = phoneSaveTarget(f.name, f.mime, 'cache')
+      await downloadFile(f, target, ctl)
+      await openWithOtherApp(target.uri!, f.mime)
+    })
   }
 
   const moveToTrash = async (list: Item[]) => {
@@ -228,6 +256,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       ...(item.kind === 'file'
         ? [{ label: 'Download', icon: Download, onClick: () => void download([item]), disabled: !item.complete }]
         : []),
+      ...(isAndroid && item.kind === 'file'
+        ? [{ label: 'Open with…', icon: ExternalLink, onClick: () => openWith(item), disabled: !item.complete }]
+        : []),
       ...(mode !== 'folder' ? [{ label: 'Show in folder', icon: FolderInput, onClick: () => openFolder(item.parent) }] : []),
       { label: 'Rename', icon: Pencil, onClick: () => setModal({ type: 'rename', item }) },
       { label: 'Move', icon: FolderInput, onClick: () => setModal({ type: 'move', items: [item] }) },
@@ -309,6 +340,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       onUpload={() => fileInput.current?.click()}
       onNewFolder={() => setModal({ type: 'newFolder' })}
       onLogout={() => setModal({ type: 'logout' })}
+      onCameraBackup={isAndroid ? () => setModal({ type: 'backup' }) : undefined}
     />
   )
 
@@ -513,6 +545,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           onClose={() => setPreview(null)}
           onDownload={(f) => void download([f])}
           onDetails={(item) => setModal({ type: 'details', item })}
+          onOpenWith={openWith}
         />
       )}
       {menu && <Menu {...menu} onClose={closeMenu} />}
@@ -585,6 +618,22 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             setModal(null)
           }}
           onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'backup' && <CameraBackupDialog onClose={() => setModal(null)} />}
+      {shares.length > 0 && !modal && (
+        <MoveDialog
+          drive={drive}
+          items={[]}
+          title={`Save ${shares.length === 1 ? `“${shares[0].name}”` : `${shares.length} files`} to TeleDrive`}
+          confirmLabel="Save here"
+          initialFolder={mode === 'folder' ? current : ROOT}
+          onMove={async (target) => {
+            const files = shares
+            clearShares()
+            await upload(files, target)
+          }}
+          onClose={clearShares}
         />
       )}
       {modal?.type === 'logout' && (

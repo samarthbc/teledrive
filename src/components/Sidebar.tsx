@@ -1,11 +1,17 @@
-import { Clock, FolderPlus, HardDrive, LogOut, Send, Star, Trash2, Upload, type LucideIcon } from 'lucide-react'
+import { Camera, Clock, FolderPlus, HardDrive, LogOut, Send, Star, Trash2, Upload, type LucideIcon } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { driveStats } from '../drive/tree'
 import { formatBytes } from '../lib/format'
 import { useDrive } from '../store/useDrive'
 
-export default function Sidebar(props: { onUpload: () => void; onNewFolder: () => void; onLogout: () => void }) {
-  const { onUpload, onNewFolder, onLogout } = props
+export default function Sidebar(props: {
+  onUpload: () => void
+  onNewFolder: () => void
+  onLogout: () => void
+  /** Only in the Android app. */
+  onCameraBackup?: () => void
+}) {
+  const { onUpload, onNewFolder, onLogout, onCameraBackup } = props
   const drive = useDrive((s) => s.drive)
   const { pathname } = useLocation()
   const stats = driveStats(drive)
@@ -32,6 +38,14 @@ export default function Sidebar(props: { onUpload: () => void; onNewFolder: () =
         <Link to="/recent" icon={Clock} label="Recent" />
         <Link to="/starred" icon={Star} label="Starred" />
         <Link to="/trash" icon={Trash2} label="Trash" />
+        {onCameraBackup && (
+          <button
+            className="btn w-full justify-start text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
+            onClick={onCameraBackup}
+          >
+            <Camera className="h-4 w-4" /> Camera backup
+          </button>
+        )}
       </nav>
 
       <div className="mt-auto space-y-3">

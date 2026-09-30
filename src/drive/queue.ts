@@ -34,15 +34,16 @@ export function subscribeTransfers(fn: Listener): () => void {
   return () => listeners.delete(fn)
 }
 
-// Progress fires very often; batch UI updates to one per animation frame
+// Progress fires very often; batch updates. A timer (not requestAnimationFrame) so listeners
+// like the Android notification still update while the app is in the background.
 function emit() {
   if (emitScheduled) return
   emitScheduled = true
-  requestAnimationFrame(() => {
+  setTimeout(() => {
     emitScheduled = false
     const snapshot = transfers.map((t) => ({ ...t }))
     for (const fn of listeners) fn(snapshot)
-  })
+  }, 100)
 }
 
 export function enqueue(

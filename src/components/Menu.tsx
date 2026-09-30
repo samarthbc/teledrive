@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useBackHandler } from '../native/backButton'
 
 export interface MenuEntry {
   label: string
@@ -14,6 +15,7 @@ export default function Menu(props: { x: number; y: number; entries: MenuEntry[]
   const { x, y, entries, onClose } = props
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: x, top: y })
+  useBackHandler(true, onClose)
 
   // Keep the menu inside the viewport
   useLayoutEffect(() => {

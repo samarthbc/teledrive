@@ -20,18 +20,34 @@ const BIG_FILE_THRESHOLD = 10 * 1024 * 1024
 const PARALLEL_PARTS = 4
 const SAVE_INTERVAL = 2000
 
+/** Anything that can be read in slices: a browser Blob/File, or a file on the phone. */
+export interface ByteSource {
+  readonly size: number
+  slice(start?: number, end?: number): ByteSource
+  arrayBuffer(): Promise<ArrayBuffer>
+}
+
+/** A file to upload. Browser `File` objects fit this as-is. */
+export interface UploadSource extends ByteSource {
+  readonly name: string
+  readonly type: string
+  readonly lastModified: number
+  /** Custom thumbnail (e.g. made by Android); otherwise one is generated in the browser. */
+  thumbnail?(): Promise<Blob | null>
+}
+
 export class EmptyFileError extends Error {
   constructor() {
     super("Empty files can't be stored on Telegram")
   }
 }
 
-export function uploadKey(file: File, parentId: string): string {
+export function uploadKey(file: UploadSource, parentId: string): string {
   return `${parentId}|${file.name}|${file.size}|${file.lastModified}`
 }
 
 /** An unfinished upload of this file into this folder, if there is one. */
-export function findResumable(file: File, parentId: string): Promise<UploadState | undefined> {
+export function findResumable(file: UploadSource, parentId: string): Promise<UploadState | undefined> {
   return db.uploads.get(uploadKey(file, parentId))
 }
 
@@ -42,7 +58,7 @@ export function findResumable(file: File, parentId: string): Promise<UploadState
  * Progress is saved as it goes: if the upload fails (or the page is closed), uploading the same
  * file into the same folder again continues where it stopped. Canceling discards everything.
  */
-export async function uploadFile(file: File, name: string, parentId: string, ctl: TransferControl): Promise<void> {
+export async function uploadFile(file: UploadSource, name: string, parentId: string, ctl: TransferControl): Promise<void> {
   if (file.size === 0) throw new EmptyFileError()
   const key = uploadKey(file, parentId)
   const state: UploadState = (await db.uploads.get(key)) ?? { key, id: nanoid(10), name, chunks: {}, updated: 0 }
@@ -79,7 +95,7 @@ export async function uploadFile(file: File, name: string, parentId: string, ctl
       }
       const fileName = total === 1 ? state.name : `${state.name}.part${pt}`
       const isMain = pt === 1
-      const thumb = isMain ? await makeThumbnail(file, mime) : null
+      const thumb = isMain ? await thumbnailFor(file, mime) : null
 
       const msgs = await sendWithRepair(ctl, blob, fileName, cs, save, async (inputFile) => {
         const thumbFile = thumb ? await uploadSmall(thumb, 'thumb.jpg') : undefined
@@ -105,6 +121,11 @@ export async function uploadFile(file: File, name: string, parentId: string, ctl
   }
 }
 
+async function thumbnailFor(file: UploadSource, mime: string): Promise<Blob | null> {
+  if (file.thumbnail) return file.thumbnail().catch(() => null)
+  return file instanceof Blob ? makeThumbnail(file, mime) : null
+}
+
 /** Delete an unfinished upload's saved progress and any chunks it already sent. */
 export async function discard(state: UploadState): Promise<void> {
   const sent = Object.values(state.chunks).flatMap((c) => (c.msgId ? [c.msgId] : []))
@@ -120,7 +141,7 @@ export async function discard(state: UploadState): Promise<void> {
  * a resumed upload's parts have expired, upload the chunk again from scratch (once).
  */
 async function sendWithRepair(
-  ctl: TransferControl, blob: Blob, name: string, cs: ChunkState, save: () => Promise<void>,
+  ctl: TransferControl, blob: ByteSource, name: string, cs: ChunkState, save: () => Promise<void>,
   send: (file: Api.TypeInputFile) => Promise<Api.Message[]>,
 ): Promise<Api.Message[]> {
   for (let attempt = 1; ; attempt++) {
@@ -141,7 +162,7 @@ async function sendWithRepair(
 }
 
 async function uploadParts(
-  blob: Blob, name: string, cs: ChunkState, ctl: TransferControl, save: () => Promise<void>,
+  blob: ByteSource, name: string, cs: ChunkState, ctl: TransferControl, save: () => Promise<void>,
   credited: { bytes: number },
 ): Promise<Api.TypeInputFile> {
   const client = await getClient()

@@ -4,7 +4,10 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import DrivePage from './pages/Drive'
 import LoginPage from './pages/Login'
 import SetupPage from './pages/Setup'
+import { initCameraBackup } from './native/backup'
 import { useDrive } from './store/useDrive'
+
+let backupStarted = false
 
 export default function App() {
   const phase = useDrive((s) => s.phase)
@@ -14,6 +17,12 @@ export default function App() {
   useEffect(() => {
     void boot()
   }, [boot])
+
+  useEffect(() => {
+    if (phase !== 'ready' || backupStarted) return
+    backupStarted = true
+    initCameraBackup()
+  }, [phase])
 
   if (phase === 'setup') return <SetupPage />
   if (phase === 'login') return <LoginPage />

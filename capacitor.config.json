@@ -1,0 +1,9 @@
+{
+  "appId": "com.samarthbc.teledrive",
+  "appName": "TeleDrive",
+  "webDir": "dist",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "auto",
+    "resolveServiceWorkerRequests": true
+  }
+}

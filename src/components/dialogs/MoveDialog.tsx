@@ -10,9 +10,13 @@ export default function MoveDialog(props: {
   items: Item[]
   onMove: (targetId: string) => Promise<void>
   onClose: () => void
+  /** Overrides for using this as a general folder picker (e.g. "Save to TeleDrive"). */
+  title?: string
+  confirmLabel?: string
+  initialFolder?: string
 }) {
   const { drive, items, onMove, onClose } = props
-  const [current, setCurrent] = useState(items[0]?.parent ?? ROOT)
+  const [current, setCurrent] = useState(items[0]?.parent ?? props.initialFolder ?? ROOT)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,7 +24,7 @@ export default function MoveDialog(props: {
   const folders = listFolder(drive, current)
     .filter((i) => i.kind === 'folder')
     .sort((a, b) => a.name.localeCompare(b.name))
-  const alreadyThere = items.every((i) => i.parent === current)
+  const alreadyThere = items.length > 0 && items.every((i) => i.parent === current)
 
   const submit = async () => {
     setBusy(true)
@@ -33,7 +37,7 @@ export default function MoveDialog(props: {
     }
   }
 
-  const title = items.length === 1 ? `Move “${items[0].name}”` : `Move ${items.length} items`
+  const title = props.title ?? (items.length === 1 ? `Move “${items[0].name}”` : `Move ${items.length} items`)
   return (
     <Dialog
       title={title}
@@ -46,7 +50,7 @@ export default function MoveDialog(props: {
           </button>
           <button className="btn-primary" disabled={busy || alreadyThere || blocked(current)} onClick={submit}>
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            Move here
+            {props.confirmLabel ?? 'Move here'}
           </button>
         </>
       }

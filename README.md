@@ -1,8 +1,8 @@
 # TeleDrive
 
-A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, and (soon) a mobile app. There's **no backend server**; the app runs on your device and talks to Telegram directly.
+A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, and an **Android app**. There's **no backend server**; the app runs on your device and talks to Telegram directly.
 
-> Status: **Phase 2 (previews, search, trash)**. See the [roadmap](#roadmap).
+> Status: **Phase 3 (Android app)**. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -21,6 +21,14 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Multi-select: checkboxes, Ctrl/Cmd-click, Shift-click, Ctrl+A, long-press on phones; bulk download/move/star/trash
 - Interrupted uploads resume: retry, or pick the same file again, even after closing the page
 - Works at phone width; follows your system's dark/light mode
+
+**Android app** (same code, wrapped with Capacitor):
+
+- "Share → TeleDrive" from any app (Gallery, Files, WhatsApp…), then pick a folder
+- Camera backup: new photos/videos go to a *Camera Backup* folder (Wi-Fi only option)
+- Downloads are saved to **Downloads/TeleDrive**; "Open with…" hands files to other apps (PDFs, documents)
+- Transfers keep running in the background, with progress in a notification
+- Back button closes previews/dialogs, then goes up a folder
 
 ## How it works
 
@@ -71,6 +79,23 @@ npm test         # unit tests
 npm run build    # production build in dist/
 ```
 
+## Android app
+
+Requirements: Android Studio (includes the right Java). The app runs on Android 10 or newer.
+
+```bash
+npm run android        # build the web app, copy it into android/, open Android Studio
+```
+
+In Android Studio, connect your phone (USB debugging on) and press **Run ▶**. Or use
+**Build → Build App Bundle(s) / APK(s) → Build APK(s)** and copy
+`android/app/build/outputs/apk/debug/app-debug.apk` to your phone.
+
+After changing the web code, run `npm run android:sync` and press Run again.
+
+Building from a terminal instead: point `JAVA_HOME` at Android Studio's Java, then
+`cd android && ./gradlew assembleDebug`.
+
 ## Project structure
 
 ```
@@ -81,8 +106,10 @@ src/
 ├── db/         IndexedDB (Dexie): session, cache, settings
 ├── store/      app state (Zustand)
 ├── pages/      Setup, Login, Drive
-└── components/ file views, preview, dialogs, menus, transfer panel
+├── components/ file views, preview, dialogs, menus, transfer panel
+└── native/     Android bridge: downloads, share-to-app, camera backup, notification, back button
 public/sw.js    service worker for video/audio streaming
+android/        Android project (Capacitor); native code in app/src/main/java/com/samarthbc/teledrive/
 ```
 
 ## Privacy and safety
@@ -99,10 +126,10 @@ public/sw.js    service worker for video/audio streaming
 |---|---|---|
 | 0 | Project setup | ✅ |
 | 1 | Login, storage channel, upload/download, chunking, folders, rename/move/delete, sync | ✅ |
-| 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ✅ Built, needs testing |
-| 3 | Android/iOS app (Capacitor), share-to-app, camera backup | ⏳ |
+| 2 | Thumbnails, previews, video streaming, search, trash, multi-select, resume uploads | ✅ |
+| 3 | Android app (Capacitor), share-to-app, camera backup, background transfers | ✅ Built, needs testing on a phone |
 | 4 | End-to-end encryption, duplicate detection, ZIP download, deploy | ⏳ |
 
 ## Tech stack
 
-React · TypeScript · Vite · Tailwind CSS · [GramJS](https://github.com/gram-js/gramjs) · Dexie · Zustand · Vitest
+React · TypeScript · Vite · Tailwind CSS · [GramJS](https://github.com/gram-js/gramjs) · Dexie · Zustand · Vitest · Capacitor (Android)
