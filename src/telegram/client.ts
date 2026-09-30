@@ -28,6 +28,14 @@ function checkSessionLost(err: unknown) {
   if (SESSION_LOST_CODES.includes(code)) for (const fn of lostListeners) fn(code)
 }
 
+// GramJS calls alert() when a reply arrives for a request it no longer waits for (e.g. a part
+// that was re-sent after a reconnect). It's harmless and already handled, but the popup blocks the page.
+const nativeAlert = window.alert.bind(window)
+window.alert = (message?: unknown) => {
+  if (String(message).startsWith('Missing MTProto Entity')) return console.warn(message)
+  nativeAlert(message)
+}
+
 // GramJS reports some connection-level errors only as unhandled rejections
 window.addEventListener('unhandledrejection', (e) => checkSessionLost(e.reason))
 
