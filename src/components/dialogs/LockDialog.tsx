@@ -8,6 +8,7 @@ import { MIN_PASSWORD } from '../../pages/Password'
 import { useDrive } from '../../store/useDrive'
 import { toast } from '../../store/useToast'
 import Dialog from '../Dialog'
+import { Choice, ErrorText, Note, PasswordField } from '../ui'
 
 export type LockAction = 'lock' | 'unlock' | 'remove' | 'change'
 
@@ -78,10 +79,17 @@ export default function LockDialog(props: {
     (!needsNew || (next.length >= MIN_PASSWORD && next === repeat))
 
   return (
-    <Dialog title={titles[action]} onClose={onClose} wide={action === 'lock'}>
-      <form onSubmit={run} className="space-y-3 pb-4 text-sm">
+    <Dialog
+      title={titles[action]}
+      icon={action === 'unlock' || action === 'remove' ? LockOpen : action === 'change' ? KeyRound : Lock}
+      alert
+      subtitle={action === 'lock' ? "Only this password opens it. It can't be recovered." : undefined}
+      onClose={onClose}
+      wide={action === 'lock'}
+    >
+      <form onSubmit={run} className="space-y-4 text-sm">
         {action === 'lock' && (
-          <p className="text-slate-600 dark:text-slate-400">
+          <p className="leading-relaxed text-muted">
             {item.kind === 'folder'
               ? 'The folder and everything in it will need this password. Its name and contents are hidden until it is unlocked.'
               : 'The file will need this password to open. Its name and preview are hidden until it is unlocked.'}{' '}
@@ -89,88 +97,90 @@ export default function LockDialog(props: {
           </p>
         )}
         {action === 'remove' && (
-          <p className="text-slate-600 dark:text-slate-400">
+          <p className="leading-relaxed text-muted">
             “{item.name}” will open without its own password again (it stays encrypted with your TeleDrive password).
           </p>
         )}
 
         {needsAccount && (
-          <Field label="Your TeleDrive password (to confirm it's you)" value={account} onChange={setAccount} autoFocus autoComplete="current-password" />
+          <PasswordField
+            label="TeleDrive password"
+            kind="account"
+            hint="To confirm it's you"
+            value={account}
+            onChange={setAccount}
+            autoFocus
+            autoComplete="current-password"
+          />
         )}
         {(action === 'unlock' || action === 'change') && (
-          <Field
+          <PasswordField
             label={action === 'unlock' ? `${what === 'folder' ? 'Folder' : 'File'} password` : `Current ${what} password`}
-            value={current} onChange={setCurrent} autoFocus={!needsAccount} autoComplete="off"
+            value={current}
+            onChange={setCurrent}
+            autoFocus={!needsAccount}
+            autoComplete="off"
+            error={!!error && action === 'unlock'}
           />
         )}
         {needsNew && (
           <>
-            <Field label={`New ${what} password (at least ${MIN_PASSWORD} characters)`} value={next} onChange={setNext} autoComplete="new-password" />
-            <Field label="Repeat it" value={repeat} onChange={setRepeat} autoComplete="new-password" />
-            {repeat.length > 0 && repeat !== next && <p className="text-red-600">The passwords don't match</p>}
+            <PasswordField
+              label={`New ${what} password`}
+              hint={`At least ${MIN_PASSWORD} characters`}
+              value={next}
+              onChange={setNext}
+              autoComplete="new-password"
+            />
+            <PasswordField
+              label="Repeat it"
+              value={repeat}
+              onChange={setRepeat}
+              autoComplete="new-password"
+              error={repeat.length > 0 && repeat !== next}
+            />
+            {repeat.length > 0 && repeat !== next && <ErrorText>The passwords don't match</ErrorText>}
           </>
         )}
 
         {action === 'lock' && (
           <>
-            <fieldset className="space-y-2">
-              <Choice checked={!reencrypt} onChange={() => setReencrypt(false)} label="Lock now" hint="Instant." />
+            <fieldset className="space-y-3 pt-1">
+              <legend className="field-label">How to lock</legend>
+              <Choice name="lock-how" checked={!reencrypt} onChange={() => setReencrypt(false)} label="Lock now" hint="Instant." />
               <Choice
+                name="lock-how"
                 checked={reencrypt}
                 onChange={() => setReencrypt(true)}
                 label="Lock and re-encrypt"
                 hint="Most secure: uploads the files again with new keys, so older copies Telegram may keep can't be opened with your TeleDrive password alone. Takes as long as uploading them."
               />
             </fieldset>
-            <p className="rounded-lg bg-amber-50 p-3 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+            <Note>
               If you forget this password, the {what} can't be opened. There's no way to recover it.
-            </p>
+            </Note>
           </>
         )}
 
-        {error && <p className="text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2">
+        {error && <ErrorText>{error}</ErrorText>}
+        <div className="flex justify-end gap-3 pt-2">
           <button type="button" className="btn-ghost" onClick={onClose}>
             Cancel
           </button>
           <button className="btn-primary" disabled={busy || !valid}>
             {busy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="animate-spin" />
             ) : action === 'unlock' || action === 'remove' ? (
-              <LockOpen className="h-4 w-4" />
+              <LockOpen />
             ) : action === 'lock' ? (
-              <Lock className="h-4 w-4" />
+              <Lock />
             ) : (
-              <KeyRound className="h-4 w-4" />
+              <KeyRound />
             )}
-            {{ lock: 'Lock', unlock: 'Unlock', remove: 'Remove lock', change: 'Change password' }[action]}
+            {{ lock: `Lock ${what}`, unlock: 'Unlock', remove: 'Remove lock', change: 'Change password' }[action]}
           </button>
         </div>
       </form>
     </Dialog>
-  )
-}
-
-function Field(props: { label: string; value: string; onChange: (v: string) => void; autoFocus?: boolean; autoComplete: string }) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-slate-600 dark:text-slate-400">{props.label}</span>
-      <input
-        className="input" type="password" autoFocus={props.autoFocus} autoComplete={props.autoComplete}
-        value={props.value} onChange={(e) => props.onChange(e.target.value)}
-      />
-    </label>
-  )
-}
-
-function Choice(props: { label: string; hint: string; checked: boolean; onChange: () => void }) {
-  return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-      <input type="radio" className="mt-1 accent-brand" checked={props.checked} onChange={props.onChange} />
-      <span>
-        <span className="block font-medium">{props.label}</span>
-        <span className="block text-xs text-slate-500">{props.hint}</span>
-      </span>
-    </label>
   )
 }

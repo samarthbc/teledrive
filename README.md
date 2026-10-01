@@ -29,7 +29,8 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - **Send to Telegram**: send a (decrypted) copy of a file to any chat or contact
 - **Multiple drives** (e.g. Personal, Work), each its own private channel, with a switcher
 - Installable as an app from the browser (PWA)
-- Works at phone width; follows your system's dark/light mode
+- **Soft Swiss design** ([DESIGN.md](DESIGN.md)): light and dark themes with a System / Light / Dark switch;
+  works at phone width with bottom tabs, a + button and slide-up action sheets
 
 **Android app** (same code, wrapped with Capacitor):
 
@@ -117,8 +118,10 @@ src/
 │               thumbnails, file ops (trash/star), transfer queue
 ├── db/         IndexedDB (Dexie): session, cache, settings
 ├── store/      app state (Zustand)
-├── pages/      Setup, Login, Drive
-├── components/ file views, preview, dialogs, menus, transfer panel
+├── pages/      Setup, Login, TeleDrive password, Drive
+├── components/ file views, preview, dialogs, menus, transfer panel, shared form controls (ui.tsx)
+├── lib/        formatting, theme switch, PWA install
+├── dev/        sample files for design work (`?mock`, development only, never shipped)
 └── native/     Android bridge: downloads, share-to-app, camera backup, notification, back button
 public/sw.js    service worker for video/audio streaming
 android/        Android project (Capacitor); native code in app/src/main/java/com/samarthbc/teledrive/
@@ -144,7 +147,7 @@ android/        Android project (Capacitor); native code in app/src/main/java/co
 | 4 | End-to-end encryption, duplicate detection, folder upload, ZIP download, send to Telegram, multiple drives, PWA | ✅ Being tested |
 | 5 | Camera backup upgrades: backup while the app is closed, more folders | ✅ Being tested |
 | 6 | Security: TeleDrive password (every file encrypted), locked files and folders with their own passwords | ✅ Being tested |
-| 7 | UI updates: dark/light theme switch | ⏳ Later |
+| 7 | UI redesign (Soft Swiss): light/dark themes and switch, every screen restyled | ✅ Being tested |
 | 8 | Deploy the website | ⏳ Later |
 
 ## Tech stack

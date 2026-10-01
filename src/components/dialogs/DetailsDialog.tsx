@@ -45,20 +45,22 @@ export default function DetailsDialog(props: { drive: Drive; item: Item; onDownl
       footer={
         item.kind === 'file' && item.complete && !item.locked ? (
           <button className="btn-primary" onClick={onDownload}>
-            <Download className="h-4 w-4" /> Download
+            <Download /> Download
           </button>
         ) : undefined
       }
     >
-      <div className="mb-4 flex items-center gap-3">
-        <Icon className={`h-10 w-10 shrink-0 ${color}`} strokeWidth={1.5} />
-        <p className="font-medium break-all">{item.name}</p>
+      <div className="mb-5 flex items-center gap-3.5 border-b-2 border-ink pb-4">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-surface raised-sm">
+          <Icon className={`size-6 ${color}`} />
+        </span>
+        <p className="text-[15px] font-extrabold break-all">{item.name}</p>
       </div>
-      <dl className="space-y-2 pb-2 text-sm">
+      <dl className="space-y-2.5 pb-2 text-sm">
         {rows.map(([k, v]) => (
-          <div key={k} className="grid grid-cols-[6.5rem_1fr] gap-2">
-            <dt className="text-slate-500">{k}</dt>
-            <dd className="break-words">{v}</dd>
+          <div key={k} className="grid grid-cols-[6.5rem_1fr] gap-3">
+            <dt className="text-muted">{k}</dt>
+            <dd className={`break-words ${k === 'Protection' && item.lock ? 'font-bold text-brand-ink' : 'font-semibold'}`}>{v}</dd>
           </div>
         ))}
       </dl>

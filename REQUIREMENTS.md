@@ -152,7 +152,9 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Sending normal files to Telegram chats still works (a decrypted copy is uploaded)
 
 ### 4.7 UI updates
-- [ ] Dark and light theme with a manual switch (today it only follows the system)
+- [x] Dark and light theme with a manual switch (System / Light / Dark, saved on the device)
+- [x] New design across the website and app: Soft Swiss (see DESIGN.md)
+- [x] Phone layout: bottom tabs, + button, slide-up action sheets
 
 ### 4.8 Later: put the website online
 - [ ] Deploy the website (Cloudflare Pages or GitHub Pages)

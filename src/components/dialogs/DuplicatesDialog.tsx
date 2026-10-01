@@ -25,6 +25,7 @@ export default function DuplicatesDialog(props: {
   return (
     <Dialog
       title={one ? 'Already in your drive' : `${duplicates.length} files are already in your drive`}
+      icon={Copy}
       onClose={onClose}
       wide
       footer={
@@ -41,18 +42,18 @@ export default function DuplicatesDialog(props: {
       <ul className="space-y-2 pb-2 text-sm">
         {duplicates.slice(0, SHOWN).map((d, i) => (
           <li key={i} className="flex gap-2">
-            <Copy className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+            <Copy className="mt-0.5 size-4 shrink-0 text-muted" />
             <span className="min-w-0">
-              <span className="font-medium break-all">{d.name}</span>
-              <span className="block text-slate-500">
+              <span className="font-bold break-all">{d.name}</span>
+              <span className="block text-muted">
                 {d.existing.name === d.name ? 'Already in' : `Same as “${d.existing.name}” in`} {d.location}
               </span>
             </span>
           </li>
         ))}
-        {duplicates.length > SHOWN && <li className="text-slate-500">and {duplicates.length - SHOWN} more</li>}
+        {duplicates.length > SHOWN && <li className="text-muted">and {duplicates.length - SHOWN} more</li>}
       </ul>
-      {!allDupes && <p className="pb-2 text-sm text-slate-500">The other {total - duplicates.length} will be uploaded either way.</p>}
+      {!allDupes && <p className="pb-2 text-sm text-muted">The other {total - duplicates.length} will be uploaded either way.</p>}
     </Dialog>
   )
 }

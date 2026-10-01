@@ -50,9 +50,9 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
       else onMenu(item, e.clientX, e.clientY)
     },
   })
-  const moreButton = (item: Item, className: string) => (
+  const moreButton = (item: Item, className = '') => (
     <button
-      className={`icon-btn ${className}`}
+      className={`icon-btn-flat ${className}`}
       aria-label="More actions"
       onClick={(e) => {
         e.stopPropagation()
@@ -60,7 +60,7 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
         onMenu(item, r.left, r.bottom + 4)
       }}
     >
-      <MoreVertical className="h-4 w-4" />
+      <MoreVertical />
     </button>
   )
   const checkbox = (item: Item, className = '') => (
@@ -72,26 +72,17 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
         e.stopPropagation()
         onToggle(item)
       }}
-      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition ${
-        selected.has(item.id)
-          ? 'border-brand bg-brand text-white'
-          : 'border-slate-300 bg-white/90 text-transparent dark:border-slate-600 dark:bg-slate-900/90'
+      className={`size-6 shrink-0 items-center justify-center rounded-[5px] transition ${
+        selected.has(item.id) ? 'bg-brand text-white raised-xs' : 'bg-surface text-transparent pressed-xs'
       } ${className}`}
     >
-      <Check className="h-3.5 w-3.5" strokeWidth={3} />
+      <Check className="size-4" strokeWidth={3} />
     </button>
   )
 
   if (view === 'list')
     return (
-      <div className="card overflow-hidden select-none">
-        <div className="hidden grid-cols-[1.25rem_1fr_7rem_6rem_2.25rem] items-center gap-4 border-b border-slate-200 px-4 py-2 text-xs font-medium text-slate-500 sm:grid dark:border-slate-800">
-          <span />
-          <span>Name</span>
-          <span>Modified</span>
-          <span className="text-right">Size</span>
-          <span />
-        </div>
+      <div className="panel flex flex-col gap-1 p-1.5 select-none sm:p-2">
         {items.map((item) => {
           const sub = subtitle?.(item)
           const isSel = selected.has(item.id)
@@ -99,35 +90,27 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
             <div
               key={item.id}
               {...handlers(item)}
-              className={`group grid cursor-pointer grid-cols-[1.25rem_1fr_2.25rem] items-center gap-3 border-b border-slate-100 px-4 py-1.5 last:border-0 sm:grid-cols-[1.25rem_1fr_7rem_6rem_2.25rem] sm:gap-4 dark:border-slate-800/60 ${
-                isSel ? 'bg-brand/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+              className={`group flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 sm:gap-3.5 sm:px-3 sm:py-2.5 ${
+                isSel ? 'pressed' : 'hover:bg-ink/[0.03]'
               }`}
             >
-              {checkbox(item, selecting || isSel ? '' : 'sm:opacity-0 sm:group-hover:opacity-100')}
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md">
-                  <Thumb item={item} iconClass="h-6 w-6" />
-                </div>
-                <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 truncate text-sm">
-                    <span className="truncate">{item.name}</span>
-                    <Badges item={item} />
-                  </p>
-                  <p className="truncate text-xs text-slate-500">
-                    {sub ?? (
-                      <span className="sm:hidden">
-                        {formatDate(item.ts)}
-                        {item.kind === 'file' && ` · ${formatBytes(item.size)}`}
-                      </span>
-                    )}
-                  </p>
-                </div>
+              {/* The checkbox takes the icon's place on hover and while selecting */}
+              <div className="relative size-11 shrink-0 overflow-hidden rounded-md bg-surface raised-sm">
+                <Thumb item={item} iconClass="size-5.5" />
+                {checkbox(item, `absolute inset-0 m-auto ${selecting || isSel ? 'flex' : 'hidden group-hover:flex focus-visible:flex'}`)}
               </div>
-              <span className="hidden text-sm text-slate-500 sm:block">{formatDate(item.ts)}</span>
-              <span className="hidden text-right text-sm text-slate-500 sm:block">
-                {item.kind === 'file' ? formatBytes(item.size) : '—'}
-              </span>
-              {moreButton(item, 'h-8 w-8')}
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-[15px] font-bold">
+                  <span className="truncate">{item.name}</span>
+                  <Badges item={item} />
+                </p>
+                <p className="mt-0.5 truncate text-[13px] text-muted">
+                  {sub ?? details(item)}
+                  <span className="sm:hidden"> · {formatDate(item.ts)}</span>
+                </p>
+              </div>
+              <span className="hidden shrink-0 text-xs text-muted sm:block">{formatDate(item.ts)}</span>
+              {moreButton(item)}
             </div>
           )
         })}
@@ -135,7 +118,7 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
     )
 
   return (
-    <div className="grid grid-cols-2 gap-3 select-none sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 select-none sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] sm:gap-4.5">
       {items.map((item) => {
         const sub = subtitle?.(item)
         const isSel = selected.has(item.id)
@@ -143,25 +126,21 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
           <div
             key={item.id}
             {...handlers(item)}
-            className={`group card relative cursor-pointer p-2 transition ${
-              isSel ? 'border-brand ring-2 ring-brand/40' : 'hover:border-brand/50 hover:shadow-md'
-            }`}
+            className={`group card relative cursor-pointer p-2 ${isSel ? 'outline-2 outline-offset-3 outline-brand' : ''}`}
           >
-            <div className="aspect-[4/3] overflow-hidden rounded-lg bg-slate-50 dark:bg-slate-800/50">
-              <Thumb item={item} iconClass="h-12 w-12" />
+            <div className="aspect-[4/3] overflow-hidden rounded-md pressed">
+              <Thumb item={item} iconClass="size-8.5" />
             </div>
-            {checkbox(item, `absolute top-3.5 left-3.5 ${selecting || isSel ? '' : 'opacity-0 group-hover:opacity-100'}`)}
+            {checkbox(item, `absolute top-3.5 left-3.5 flex ${selecting || isSel ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`)}
             <div className="mt-2 flex items-center gap-1 pl-1">
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1 text-sm font-medium" title={item.name}>
+                <p className="flex items-center gap-1.5 text-sm font-bold" title={item.name}>
                   <span className="truncate">{item.name}</span>
-                  <Badges item={item} />
+                  <Badges item={item} short />
                 </p>
-                <p className="truncate text-xs text-slate-500">
-                  {sub ?? (item.kind === 'file' ? formatBytes(item.size) : formatDate(item.ts))}
-                </p>
+                <p className="truncate text-xs text-muted">{sub ?? details(item)}</p>
               </div>
-              {moreButton(item, '-mr-1 h-8 w-8')}
+              {moreButton(item, '-mr-1')}
             </div>
           </div>
         )
@@ -170,18 +149,34 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
   )
 }
 
-function Badges({ item }: { item: Item }) {
+/** Size for files; for locked items, why there's nothing to show. */
+function details(item: Item): string {
+  if (item.lock && item.locked) return item.kind === 'folder' ? 'Protected with its own password' : 'Locked'
+  return item.kind === 'file' ? formatBytes(item.size) : 'Folder'
+}
+
+const LABEL = 'shrink-0 text-[11px] font-extrabold tracking-[0.08em] text-brand-ink'
+
+function Badges({ item, short }: { item: Item; short?: boolean }) {
   return (
     <>
-      {item.x.fav && <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="Starred" />}
-      {item.lock && (
-        <span title={item.locked ? 'Locked: needs its password' : 'Unlocked for now (locks again after a few idle minutes)'}>
-          {item.locked ? <Lock className="h-3.5 w-3.5 shrink-0 text-slate-500" /> : <LockOpen className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
-        </span>
-      )}
+      {item.x.fav && <Star className="size-3.5 shrink-0 text-brand-ink" strokeWidth={2.2} aria-label="Starred" />}
+      {item.lock &&
+        (short ? (
+          <span title={item.locked ? 'Locked' : 'Unlocked for now'} className="shrink-0 text-brand-ink">
+            {item.locked ? <Lock className="size-3.5" strokeWidth={2.2} /> : <LockOpen className="size-3.5" strokeWidth={2.2} />}
+          </span>
+        ) : (
+          <span
+            className={LABEL}
+            title={item.locked ? 'Locked: needs its password' : 'Unlocked for now (locks again after a few idle minutes)'}
+          >
+            {item.locked ? 'LOCKED' : 'OPEN'}
+          </span>
+        ))}
       {item.kind === 'file' && !item.complete && (
-        <span title="Some parts of this file are missing">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        <span title="Some parts of this file are missing" className="shrink-0 text-brand-ink">
+          <AlertTriangle className="size-3.5" strokeWidth={2.2} />
         </span>
       )}
     </>

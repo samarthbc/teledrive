@@ -6,6 +6,7 @@ import {
 } from '../../native/backup'
 import { useDrive } from '../../store/useDrive'
 import Dialog from '../Dialog'
+import { Choice as UiChoice, Toggle as Switch } from '../ui'
 
 const time = (ms: number) => new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
@@ -42,7 +43,7 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
       <div className="space-y-4 pb-4 text-sm">
         <div className="flex items-start gap-3">
           <Camera className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
-          <p className="text-slate-600 dark:text-slate-400">
+          <p className="text-muted">
             New photos and videos are uploaded to the <b>Camera Backup</b> folder. Other folders you pick (Screenshots,
             WhatsApp Images…) go into their own subfolder there.
           </p>
@@ -50,11 +51,11 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
 
         {settings.enabled ? (
           <>
-            <div className="rounded-xl bg-slate-100 p-3 dark:bg-slate-800/60">
+            <div className="rounded-md p-3.5 pressed">
               <p className="flex items-center gap-2 font-medium">
                 {running && <Loader2 className="h-4 w-4 animate-spin" />} {status}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 {backedUp} item{backedUp === 1 ? '' : 's'} backed up
                 {lastCheck && ` · checked ${new Date(lastCheck).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
               </p>
@@ -74,7 +75,7 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
             />
             {settings.background && <BackgroundInfo encrypted={encrypted} />}
             <div className="flex justify-end gap-2">
-              <button className="btn-ghost text-red-600 dark:text-red-400" onClick={() => void updateBackupSettings({ enabled: false })}>
+              <button className="btn-ghost font-semibold text-brand-ink" onClick={() => void updateBackupSettings({ enabled: false })}>
                 Turn off
               </button>
               <button className="btn-primary" disabled={running} onClick={() => void runBackup()}>
@@ -94,8 +95,8 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
               checked={settings.wifiOnly}
               onChange={(wifiOnly) => void updateBackupSettings({ wifiOnly })}
             />
-            <p className="text-xs text-slate-500">You can add more folders and turn on backup while the app is closed after turning this on.</p>
-            {error && <p className="text-red-600">{error}</p>}
+            <p className="text-xs text-muted">You can add more folders and turn on backup while the app is closed after turning this on.</p>
+            {error && <p className="font-semibold text-brand-ink">{error}</p>}
             <div className="flex justify-end">
               <button className="btn-primary" disabled={busy} onClick={enable}>
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -129,10 +130,10 @@ function FolderList() {
     )
   }, [])
 
-  if (error) return <p className="text-red-600">{error}</p>
+  if (error) return <p className="font-semibold text-brand-ink">{error}</p>
   if (!folders)
     return (
-      <p className="flex items-center gap-2 text-slate-500">
+      <p className="flex items-center gap-2 text-muted">
         <Loader2 className="h-4 w-4 animate-spin" /> Looking for folders…
       </p>
     )
@@ -140,14 +141,14 @@ function FolderList() {
   return (
     <div>
       <p className="mb-1 font-medium">Folders</p>
-      <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
+      <ul className="max-h-64 divide-y-2 divide-line overflow-y-auto rounded-md px-1 pressed">
         {folders.map((f) => (
           <li key={f.path} className="px-3 py-2">
             <label className="flex cursor-pointer items-center gap-3">
               <FolderThumb uri={f.sampleUri} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{f.path === CAMERA_PATH ? 'Camera' : folderLabel(f.path)}</span>
-                <span className="block truncate text-xs text-slate-500">
+                <span className="block truncate text-xs text-muted">
                   {f.count} item{f.count === 1 ? '' : 's'} · {f.path}
                 </span>
               </span>
@@ -163,7 +164,7 @@ function FolderList() {
             </label>
             {asking?.path === f.path && (
               <div className="mt-2 flex flex-wrap items-center gap-2 pl-12">
-                <span className="text-xs text-slate-500">Back up:</span>
+                <span className="text-xs text-muted">Back up:</span>
                 <button
                   className="btn-ghost py-1 text-xs"
                   onClick={() => {
@@ -182,7 +183,7 @@ function FolderList() {
                 >
                   All {f.count} items
                 </button>
-                <button className="btn-ghost py-1 text-xs text-slate-500" onClick={() => setAsking(null)}>
+                <button className="btn-ghost py-1 text-xs text-muted" onClick={() => setAsking(null)}>
                   Cancel
                 </button>
               </div>
@@ -190,7 +191,7 @@ function FolderList() {
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-muted">
         WhatsApp's "Sent" folders are hidden from other apps, so only received media can be backed up.
       </p>
     </div>
@@ -207,8 +208,8 @@ function FolderThumb({ uri }: { uri: string }) {
     }
   }, [uri])
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
-      {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <Folder className="h-4 w-4 text-slate-400" />}
+    <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface raised-xs">
+      {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <Folder className="size-4 text-muted" />}
     </span>
   )
 }
@@ -230,14 +231,14 @@ function BackgroundInfo({ encrypted }: { encrypted: boolean }) {
   }, [])
 
   return (
-    <div className="space-y-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+    <div className="space-y-2 rounded-md p-3.5 text-xs leading-relaxed pressed">
       <p>
         On Xiaomi, Redmi, POCO and some other phones, background work is blocked unless you allow it: in the app settings turn on
         <b> Autostart</b> and set <b>Battery saver</b> to <b>No restrictions</b>.
       </p>
       {encrypted && <p>This drive is encrypted: background backup only works if "Remember on this device" was ticked when unlocking.</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-amber-800/80 dark:text-amber-200/70">
+        <span className="text-muted">
           {last?.lastRun ? `Last background run: ${time(last.lastRun)}${last.status ? ` (${last.status})` : ''}` : 'Not run in the background yet'}
         </span>
         <button className="btn-ghost py-1 text-xs" onClick={() => void Native.openAppSettings()}>
@@ -250,24 +251,16 @@ function BackgroundInfo({ encrypted }: { encrypted: boolean }) {
 
 function Toggle(props: { label: string; hint: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3">
       <span>
-        <span className="block font-medium">{props.label}</span>
-        <span className="block text-xs text-slate-500">{props.hint}</span>
+        <span className="block font-bold">{props.label}</span>
+        <span className="block text-xs text-muted">{props.hint}</span>
       </span>
-      <input type="checkbox" className="h-5 w-5 accent-brand" checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} />
-    </label>
+      <Switch label={props.label} checked={props.checked} onChange={props.onChange} />
+    </div>
   )
 }
 
 function Choice(props: { label: string; hint: string; checked: boolean; onChange: () => void }) {
-  return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-      <input type="radio" className="mt-1 accent-brand" checked={props.checked} onChange={props.onChange} />
-      <span>
-        <span className="block font-medium">{props.label}</span>
-        <span className="block text-xs text-slate-500">{props.hint}</span>
-      </span>
-    </label>
-  )
+  return <UiChoice name="backup-choice" {...props} />
 }

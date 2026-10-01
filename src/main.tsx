@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
+import './lib/theme'
 import { initBackButton } from './native/backButton'
 import { initKeepAlive } from './native/keepAlive'
 import { initShareReceiver } from './native/share'
@@ -22,11 +23,14 @@ if (localStorage.getItem('td-debug') === '1') {
   )
 }
 
-createRoot(document.getElementById('root')!).render(
+// Development only: sample files without Telegram (see src/dev/mock.ts)
+const ready = import.meta.env.DEV && new URLSearchParams(location.search).has('mock') ? import('./dev/mock') : Promise.resolve()
+
+void ready.then(() => createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Hash routing works on static hosts (GitHub Pages) and inside the mobile app */}
     <HashRouter>
       <App />
     </HashRouter>
   </StrictMode>,
-)
+))

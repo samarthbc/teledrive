@@ -19,6 +19,7 @@
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.6.9",
     "@capacitor/network": "^7.0.4",
+    "@fontsource-variable/archivo": "^5.3.0",
     "big-integer": "^1.6.52",
     "client-zip": "^2.5.1",
     "dexie": "^4.4.6",

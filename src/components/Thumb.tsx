@@ -36,10 +36,10 @@ export default function Thumb({ item, iconClass }: { item: Item; iconClass: stri
       {url ? (
         <img src={url} alt="" draggable={false} className="h-full w-full object-cover" />
       ) : (
-        <Icon className={`${iconClass} ${color}`} strokeWidth={1.25} />
+        <Icon className={`${iconClass} ${color}`} strokeWidth={1.6} />
       )}
       {url && category(item) === 'video' && (
-        <span className="absolute flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white">
+        <span className="absolute flex size-8 items-center justify-center rounded-full bg-black/55 text-white">
           <Play className="h-4 w-4 fill-current" />
         </span>
       )}

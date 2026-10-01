@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { saveKeys, validateKeys } from '../config'
 import { useDrive } from '../store/useDrive'
 import AuthLayout from './AuthLayout'
+import { ErrorText } from '../components/ui'
 
 /** Only shown when the app was built without API keys in .env. */
 export default function SetupPage() {
@@ -22,10 +23,10 @@ export default function SetupPage() {
   return (
     <AuthLayout icon={KeyRound} title="Connect your Telegram API" subtitle="One-time setup. Keys stay on this device.">
       <form onSubmit={submit} className="space-y-4">
-        <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-400">
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-muted marker:font-bold marker:text-brand-ink">
           <li>
             Open{' '}
-            <a href="https://my.telegram.org" target="_blank" rel="noreferrer" className="text-brand underline">
+            <a href="https://my.telegram.org" target="_blank" rel="noreferrer" className="font-bold text-ink underline decoration-brand decoration-2 underline-offset-2">
               my.telegram.org
             </a>{' '}
             and log in
@@ -33,10 +34,10 @@ export default function SetupPage() {
           <li>Go to “API development tools” and create an app</li>
           <li>Copy the api_id and api_hash below</li>
         </ol>
-        <input className="input" inputMode="numeric" placeholder="api_id" value={apiId} onChange={(e) => setApiId(e.target.value)} />
-        <input className="input font-mono" placeholder="api_hash" value={apiHash} onChange={(e) => setApiHash(e.target.value)} />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="btn-primary w-full py-2.5">Continue</button>
+        <input className="input" inputMode="numeric" placeholder="api_id" aria-label="api_id" value={apiId} onChange={(e) => setApiId(e.target.value)} />
+        <input className="input font-mono" placeholder="api_hash" aria-label="api_hash" value={apiHash} onChange={(e) => setApiHash(e.target.value)} />
+        {error && <ErrorText>{error}</ErrorText>}
+        <button className="btn-primary w-full">Continue</button>
       </form>
     </AuthLayout>
   )

@@ -495,9 +495,29 @@ Locked file:  upload → encrypt (file key, protected by the TeleDrive password 
 
 The full visual spec (tokens, components, screens, and the step-by-step plan) is in [DESIGN.md](DESIGN.md), with screenshots in [`design/`](design/).
 
-### 7.1 Dark/light theme
-- Dark mode already follows the system (Tailwind `dark:` classes).
-- Add a manual switch: System / Light / Dark, saved on the device.
+### 7.1 Design system ✅
+- Colour tokens as CSS variables for light (`:root`) and dark (`[data-theme=dark]`), exposed to Tailwind with
+  `@theme inline` (`bg-surface`, `text-ink`, `text-muted`, `bg-brand`, `text-brand-ink`, …) in `src/index.css`.
+- Soft depth utilities `raised-*` / `pressed-*`, and the shared `btn-*`, `icon-btn`, `input`, `chip`, `panel`, `card`.
+- Archivo is bundled (`@fontsource-variable/archivo`), so it works offline in the app and makes no third-party requests.
+- Shared form controls in `components/ui.tsx`: password field with show/hide, choice cards, checkbox, switch, note, error.
+
+### 7.2 Theme switch ✅
+- System / Light / Dark, saved on the device (`localStorage` key `teledrive.theme`), in `lib/theme.ts`.
+- A tiny script in `index.html` applies it before the first paint (no flash); `theme-color` follows it.
+- The top bar's theme button cycles System → Light → Dark.
+
+### 7.3 Screens ✅
+- **Desktop:** sidebar panel (drive switcher, **New** menu, counts, storage card), top bar (search, List/Grid,
+  sort, refresh, theme), big page title with breadcrumb, filters, file list/grid, transfers in a right-hand column.
+- **Phone:** bottom tabs (Drive, Recent, Starred, Trash or Camera backup in the app), a + button, item actions in a
+  slide-up sheet, dialogs as bottom sheets.
+- Every dialog, the menus, pop-up messages, empty states, sign-in screens (Swiss wordmark), and the app icons.
+- The media viewer stays dark in both themes.
+
+### 7.4 Checking the design on a computer
+- `npm run dev`, then open `http://localhost:5173/?mock` for sample files without Telegram (`?mock=password`,
+  `?mock=password&create`, `?mock=login`, `&transfers` for the transfers panel). Development only.
 
 **Phase 7 done when:** every item under REQUIREMENTS §4.7 is checked.
 

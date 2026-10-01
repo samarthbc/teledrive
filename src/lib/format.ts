@@ -1,5 +1,5 @@
 import {
-  File, FileArchive, FileAudio, FileCode, FileImage, FileSpreadsheet, FileText, FileVideo, Folder,
+  File, FileArchive, FileAudio, FileCode, FileImage, FileSpreadsheet, FileText, FileVideo, Folder, Lock, Presentation,
   type LucideIcon,
 } from 'lucide-react'
 import type { Item } from '../drive/tree'
@@ -51,26 +51,30 @@ export function category(item: Item): FileCategory | 'folder' {
   return EXT[ext] ?? 'other'
 }
 
+/** The item's icon. Ink like the text around it (Soft Swiss is monochrome); locked items are red. */
 export function fileIcon(item: Item): { Icon: LucideIcon; color: string } {
+  if (item.lock && item.locked) return { Icon: Lock, color: 'text-brand-ink' }
   const ext = item.name.split('.').pop()?.toLowerCase() ?? ''
+  const ink = (Icon: LucideIcon) => ({ Icon, color: 'text-ink' })
   switch (category(item)) {
     case 'folder':
-      return { Icon: Folder, color: 'text-amber-500' }
+      return ink(Folder)
     case 'image':
-      return { Icon: FileImage, color: 'text-emerald-500' }
+      return ink(FileImage)
     case 'video':
-      return { Icon: FileVideo, color: 'text-rose-500' }
+      return ink(FileVideo)
     case 'audio':
-      return { Icon: FileAudio, color: 'text-violet-500' }
+      return ink(FileAudio)
     case 'archive':
-      return { Icon: FileArchive, color: 'text-orange-500' }
+      return ink(FileArchive)
     case 'code':
-      return { Icon: FileCode, color: 'text-cyan-600' }
+      return ink(FileCode)
     case 'document':
-      if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) return { Icon: FileSpreadsheet, color: 'text-green-600' }
-      return { Icon: FileText, color: ext === 'pdf' ? 'text-red-500' : 'text-sky-600' }
+      if (['xls', 'xlsx', 'csv', 'ods'].includes(ext)) return ink(FileSpreadsheet)
+      if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) return ink(Presentation)
+      return ink(FileText)
     default:
-      return { Icon: File, color: 'text-slate-400' }
+      return ink(File)
   }
 }
 

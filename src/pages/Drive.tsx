@@ -1,7 +1,7 @@
 import {
-  ArchiveRestore, ArrowDownAZ, ArrowUpAZ, ChevronRight, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen,
-  FolderPlus, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Trash2,
-  TriangleAlert, X, ExternalLink, KeyRound, Lock, LockOpen, RefreshCcwDot, Send,
+  ArchiveRestore, ArrowDownAZ, ArrowUpAZ, Camera, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen, FolderPlus,
+  FolderUp, HardDrive, Info, LayoutGrid, List, Menu as MenuIcon, Moon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Sun,
+  SunMoon, Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, RefreshCcwDot, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -10,7 +10,8 @@ import DetailsDialog from '../components/dialogs/DetailsDialog'
 import MoveDialog from '../components/dialogs/MoveDialog'
 import PromptDialog from '../components/dialogs/PromptDialog'
 import FileView, { sortItems } from '../components/FileView'
-import Menu, { type MenuEntry } from '../components/Menu'
+import Menu, { type MenuEntry, type MenuHeader } from '../components/Menu'
+import Thumb from '../components/Thumb'
 import Preview from '../components/Preview'
 import Sidebar from '../components/Sidebar'
 import Toasts from '../components/Toasts'
@@ -39,7 +40,8 @@ import { sha256 } from '../drive/hash'
 import { createFolders, treeFromDrop, treeFromInput, type PickedTree } from '../drive/folderUpload'
 import { closeAllLocks, holdOpen } from '../drive/keyring'
 import { DriveFileUpload } from '../drive/stream'
-import { FILTERS, formatDate, type FilterKey } from '../lib/format'
+import { FILTERS, formatBytes, formatDate, type FilterKey } from '../lib/format'
+import { cycleTheme, THEME_LABELS, useTheme } from '../lib/theme'
 import { useDrive, useRootName, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
 
@@ -82,9 +84,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout } = useDrive()
   const anyUnlocked = useMemo(() => [...drive.items.values()].some((i) => i.lock && !i.locked), [drive])
   const rootName = useRootName()
+  const themeMode = useTheme((t) => t.mode)
 
   const [modal, setModal] = useState<Modal | null>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[] } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[]; header?: MenuHeader } | null>(null)
   const [preview, setPreview] = useState<{ files: FileItem[]; index: number } | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [anchor, setAnchor] = useState<string | null>(null)
@@ -442,11 +445,23 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     ]
   }
 
+  /** The item's name above its actions in the phone's bottom sheet. */
+  const itemHeader = (item: Item): MenuHeader => ({
+    title: item.name,
+    subtitle: item.kind === 'file' && !item.locked ? `${formatBytes(item.size)} · ${formatDate(item.ts)}` : formatDate(item.ts),
+    icon: (
+      <div className="size-10 shrink-0 overflow-hidden rounded-md bg-surface raised-sm">
+        <Thumb item={item} iconClass="size-5" />
+      </div>
+    ),
+  })
+
   const sortMenu = (e: React.MouseEvent) => {
     const r = e.currentTarget.getBoundingClientRect()
     setMenu({
       x: r.left,
       y: r.bottom + 4,
+      header: { title: 'Sort by' },
       entries: [
         ...(Object.keys(SORT_LABELS) as SortKey[]).map((key) => ({
           label: `${SORT_LABELS[key]}${sort.key === key ? ' ✓' : ''}`,
@@ -535,8 +550,24 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ? (i: Item) => `Deleted ${formatDate(i.x.tr ?? 0)} · from ${locationOf(drive, i, rootName)}`
         : (i: Item) => locationOf(drive, i, rootName)
 
+  const fabEntries: MenuEntry[] = [
+    { label: 'Upload files', icon: Upload, onClick: () => fileInput.current?.click() },
+    ...(isAndroid ? [] : [{ label: 'Upload folder', icon: FolderUp, onClick: () => folderInput.current?.click() }]),
+    { label: 'New folder', icon: FolderPlus, onClick: newFolder },
+  ]
+  const ThemeIcon = { system: SunMoon, light: Sun, dark: Moon }[themeMode]
+  const title = mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : TITLES[mode]
+  const count =
+    mode === 'search'
+      ? query || filter
+        ? items.length === 500
+          ? 'first 500 results'
+          : `${items.length} result${items.length === 1 ? '' : 's'}`
+        : ''
+      : `${items.length} item${items.length === 1 ? '' : 's'}`
+
   return (
-    <div className="flex h-full" {...dropHandlers}>
+    <div className="flex h-full md:gap-4.5 md:p-4.5" {...dropHandlers}>
       <input
         ref={fileInput}
         type="file"
@@ -558,12 +589,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         }}
       />
 
-      <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white md:block dark:border-slate-800 dark:bg-slate-900">
-        {sidebar}
-      </aside>
+      <aside className="panel hidden w-64 shrink-0 md:block">{sidebar}</aside>
       {drawer && (
-        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setDrawer(false)}>
-          <aside className="h-full w-72 bg-white dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-40 bg-scrim md:hidden" onClick={() => setDrawer(false)}>
+          <aside className="h-full w-72 rounded-r-md bg-surface raised-xl" onClick={(e) => e.stopPropagation()}>
             {/* Close after the tapped button has handled the click (not in the capture phase, which runs first) */}
             <div onClick={() => setDrawer(false)} className="h-full">
               {sidebar}
@@ -573,7 +602,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-14 flex-wrap items-center gap-2 border-b border-slate-200 bg-white/80 px-3 py-2 backdrop-blur sm:px-5 dark:border-slate-800 dark:bg-slate-900/80">
+        <header className="flex min-h-11 items-center gap-2.5 px-4 pt-4 md:gap-3 md:px-0 md:pt-0">
           {selection.length ? (
             <SelectionBar
               count={selection.length}
@@ -591,36 +620,17 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           ) : (
             <>
               <button className="icon-btn md:hidden" onClick={() => setDrawer(true)} aria-label="Menu">
-                <MenuIcon className="h-5 w-5" />
+                <MenuIcon />
               </button>
-              <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto text-sm whitespace-nowrap">
-                {mode === 'folder' ? (
-                  <>
-                    <button className="rounded-md px-2 py-1 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => openFolder(ROOT)}>
-                      {rootName}
-                    </button>
-                    {crumbs.map((f) => (
-                      <span key={f.id} className="flex items-center gap-1">
-                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
-                        <button className="rounded-md px-2 py-1 font-medium hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => openFolder(f.id)}>
-                          {f.name}
-                        </button>
-                      </span>
-                    ))}
-                  </>
-                ) : (
-                  <h1 className="px-2 text-base font-semibold">{TITLES[mode]}</h1>
-                )}
-              </nav>
-              <div className="relative order-last w-full sm:order-none sm:w-64 lg:w-80">
-                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <div className={`relative min-w-0 flex-1 ${mode === 'search' ? '' : 'hidden md:block'}`}>
+                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted" />
                 <input
                   ref={searchInput}
                   type="text"
                   role="searchbox"
                   enterKeyHint="search"
-                  placeholder="Search your drive"
-                  className="input py-2 pr-9 pl-9"
+                  placeholder="Search in TeleDrive"
+                  className="input pr-10 pl-10.5"
                   value={searchText}
                   onChange={(e) => {
                     setSearchText(e.target.value)
@@ -630,42 +640,97 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                 />
                 {mode === 'search' && (searchText || filter) && (
                   <button
-                    className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
+                    className="absolute top-1/2 right-1.5 -translate-y-1/2 icon-btn-flat"
                     onClick={exitSearch}
                     aria-label="Clear search"
                   >
-                    <X className="h-4 w-4" />
+                    <X />
                   </button>
                 )}
               </div>
+              {mode !== 'search' && <div className="flex-1 md:hidden" />}
+              {mode !== 'search' && (
+                <button className="icon-btn md:hidden" onClick={() => setSearch('')} aria-label="Search">
+                  <Search />
+                </button>
+              )}
               {syncError && (
-                <span title={syncError}>
-                  <TriangleAlert className="h-5 w-5 text-amber-500" />
+                <span title={syncError} className="text-brand-ink">
+                  <TriangleAlert className="size-5" />
                 </span>
               )}
-              <button className="icon-btn" onClick={() => void refresh()} aria-label="Refresh" title="Refresh">
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              <div className="hidden h-11 shrink-0 gap-1 rounded-md p-1 pressed md:flex" role="group" aria-label="View">
+                {(['list', 'grid'] as const).map((v) => {
+                  const Icon = v === 'list' ? List : LayoutGrid
+                  return (
+                    <button
+                      key={v}
+                      aria-pressed={view === v}
+                      onClick={() => setView(v)}
+                      className={`flex items-center gap-1.5 rounded-md px-3 text-[13px] transition-[box-shadow,color] duration-120 [&_svg]:size-4 ${
+                        view === v ? 'bg-surface font-extrabold text-brand-ink raised-sm' : 'font-semibold text-muted hover:text-ink'
+                      }`}
+                    >
+                      <Icon /> {v === 'list' ? 'List' : 'Grid'}
+                    </button>
+                  )
+                })}
+              </div>
+              <button
+                className="icon-btn md:hidden"
+                onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
+                aria-label={view === 'grid' ? 'List view' : 'Grid view'}
+              >
+                {view === 'grid' ? <List /> : <LayoutGrid />}
               </button>
               {mode !== 'recent' && mode !== 'trash' && (
                 <button className="icon-btn" onClick={sortMenu} aria-label="Sort" title={`Sort by ${SORT_LABELS[sort.key]}`}>
-                  {sort.dir === 'asc' ? <ArrowDownAZ className="h-4 w-4" /> : <ArrowUpAZ className="h-4 w-4" />}
+                  {sort.dir === 'asc' ? <ArrowDownAZ /> : <ArrowUpAZ />}
                 </button>
               )}
-              <button
-                className="icon-btn"
-                onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
-                aria-label={view === 'grid' ? 'List view' : 'Grid view'}
-                title={view === 'grid' ? 'List view' : 'Grid view'}
-              >
-                {view === 'grid' ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+              <button className="icon-btn hidden md:inline-flex" onClick={() => void refresh()} aria-label="Refresh" title="Refresh">
+                <RefreshCw className={syncing ? 'animate-spin' : ''} />
+              </button>
+              <button className="icon-btn" onClick={cycleTheme} aria-label={THEME_LABELS[themeMode]} title={THEME_LABELS[themeMode]}>
+                <ThemeIcon />
               </button>
             </>
           )}
         </header>
 
-        <div className="flex-1 overflow-y-auto p-3 pb-28 sm:p-5" onClick={(e) => e.target === e.currentTarget && clearSelection()}>
+        {/* Scrolls under the header; the negative margins leave room for the panels' shadows */}
+        <div
+          className="flex-1 overflow-y-auto px-4 pt-5 pb-44 md:-mx-4.5 md:-mb-4.5 md:px-4.5 md:pt-6 md:pb-8"
+          onClick={(e) => e.target === e.currentTarget && clearSelection()}
+        >
+          <div className="mb-4 md:mb-5">
+            {mode === 'folder' && crumbs.length > 0 && (
+              <nav className="mb-2 flex min-w-0 items-center gap-1.5 overflow-x-auto text-[15px] font-bold whitespace-nowrap" aria-label="Folders">
+                {[{ id: ROOT, name: rootName }, ...crumbs.slice(0, -1)].map((f) => (
+                  <span key={f.id} className="flex items-center gap-1.5">
+                    <button className="rounded-md text-muted hover:text-ink" onClick={() => openFolder(f.id)}>
+                      {f.name}
+                    </button>
+                    <span className="text-brand-ink">/</span>
+                  </span>
+                ))}
+              </nav>
+            )}
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+              <h1 className="h-display min-w-0 truncate">{title}</h1>
+              {count && <span className="pb-0.5 text-sm text-muted">{count}</span>}
+              {mode === 'trash' && items.length > 0 && (
+                <button className="btn-danger-solid ml-auto" onClick={() => setModal({ type: 'emptyTrash' })}>
+                  <Trash2 /> Empty trash
+                </button>
+              )}
+            </div>
+            {mode === 'trash' && items.length > 0 && (
+              <p className="mt-2 text-sm text-muted">Items in the trash are deleted forever after {TRASH_DAYS} days.</p>
+            )}
+          </div>
           {(mode === 'folder' || mode === 'search') && (
-            <div className="-mx-3 mb-4 flex gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0">
+            <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
               <button className={mode === 'search' && filter ? 'chip' : 'chip-active'} onClick={() => setFilter(null)}>
                 All
               </button>
@@ -676,59 +741,58 @@ export default function DrivePage({ mode }: { mode: Mode }) {
               ))}
             </div>
           )}
-          {mode === 'trash' && items.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
-              <span>Items in the trash are deleted forever after {TRASH_DAYS} days.</span>
-              <button className="btn-ghost py-1 text-red-600 dark:text-red-400" onClick={() => setModal({ type: 'emptyTrash' })}>
-                Empty trash
-              </button>
-            </div>
-          )}
-          {mode === 'search' && (query || filter) && (
-            <p className="mb-3 text-sm text-slate-500">
-              {items.length === 500 ? 'Showing the first 500 results' : `${items.length} result${items.length === 1 ? '' : 's'}`}
-            </p>
-          )}
 
-          {items.length ? (
-            <FileView
-              items={items}
-              view={view}
-              selected={selected}
-              onClick={onItemClick}
-              onToggle={toggle}
-              onMenu={(item, x, y) => setMenu({ x, y, entries: itemMenu(item) })}
-              subtitle={subtitle}
-            />
-          ) : (
-            <EmptyState
-              mode={mode}
-              filtered={!!filter}
-              searched={!!query}
-              isRoot={current === ROOT}
-              onUpload={() => fileInput.current?.click()}
-              onNewFolder={newFolder}
-            />
-          )}
+          <div className="flex items-start gap-4.5">
+            <div className="min-w-0 flex-1">
+              {items.length ? (
+                <FileView
+                  items={items}
+                  view={view}
+                  selected={selected}
+                  onClick={onItemClick}
+                  onToggle={toggle}
+                  onMenu={(item, x, y) => setMenu({ x, y, entries: itemMenu(item), header: itemHeader(item) })}
+                  subtitle={subtitle}
+                />
+              ) : (
+                <EmptyState
+                  mode={mode}
+                  filtered={!!filter}
+                  searched={!!query}
+                  isRoot={current === ROOT}
+                  onUpload={() => fileInput.current?.click()}
+                  onNewFolder={newFolder}
+                />
+              )}
+            </div>
+            <TransferPanel className="sticky top-0 hidden w-72 shrink-0 lg:block" />
+          </div>
         </div>
       </main>
 
-      {/* Mobile upload button */}
-      {!selection.length && (
-        <button
-          className="fixed right-5 bottom-5 z-20 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/40 md:hidden"
-          onClick={() => fileInput.current?.click()}
-          aria-label="Upload"
-        >
-          <Plus className="h-6 w-6" />
-        </button>
-      )}
+      {/* Phone: + button and transfers above the tabs; tablet: transfers in the corner */}
+      <div className="pointer-events-none fixed inset-x-3 bottom-[96px] z-30 flex flex-col items-end gap-3 md:inset-x-auto md:right-4.5 md:bottom-4.5 md:w-80 lg:hidden">
+        {!selection.length && (
+          <button
+            className="pointer-events-auto mr-3 flex size-15 items-center justify-center rounded-[10px] bg-brand text-white raised-md active:pressed md:hidden"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect()
+              setMenu({ x: r.right - 224, y: r.top - 8, entries: fabEntries, header: { title: 'New' } })
+            }}
+            aria-label="New"
+          >
+            <Plus className="size-6.5" strokeWidth={2.4} />
+          </button>
+        )}
+        <TransferPanel className="pointer-events-auto w-full" />
+      </div>
+      <BottomNav onBackup={isAndroid ? () => setModal({ type: 'backup' }) : undefined} />
 
       {dragging && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-brand/10 p-6 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-brand bg-white/90 px-12 py-10 dark:bg-slate-900/90">
-            <CloudUpload className="h-12 w-12 text-brand" />
-            <p className="font-medium">Drop to upload to {mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : rootName}</p>
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6">
+          <div className="flex flex-col items-center gap-3 rounded-md bg-surface px-12 py-10 outline-2 outline-offset-4 outline-brand outline-dashed raised-xl">
+            <CloudUpload className="size-12 text-brand-ink" strokeWidth={1.6} />
+            <p className="font-bold">Drop to upload to {mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : rootName}</p>
           </div>
         </div>
       )}
@@ -745,7 +809,6 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         />
       )}
       {menu && <Menu {...menu} onClose={closeMenu} />}
-      <TransferPanel />
       <Toasts />
 
       {modal?.type === 'newFolder' && (
@@ -923,34 +986,39 @@ function SelectionBar(props: {
   return (
     <>
       <button className="icon-btn" onClick={p.onClear} aria-label="Clear selection">
-        <X className="h-5 w-5" />
+        <X />
       </button>
-      <span className="flex-1 text-sm font-medium">{p.count} selected</span>
+      <span className="min-w-0 flex-1 truncate text-[15px] font-extrabold">{p.count} selected</span>
       {p.trashMode ? (
         <>
-          <button className="btn-ghost" onClick={p.onRestore}>
-            <ArchiveRestore className="h-4 w-4" /> <span className="hidden sm:inline">Restore</span>
+          <button className="btn-secondary px-3.5 sm:px-4.5" onClick={p.onRestore} aria-label="Restore">
+            <ArchiveRestore /> <span className="hidden sm:inline">Restore</span>
           </button>
-          <button className="btn-ghost text-red-600 dark:text-red-400" onClick={p.onDeleteForever}>
-            <Trash2 className="h-4 w-4" /> <span className="hidden sm:inline">Delete forever</span>
+          <button className="btn-danger-solid px-3.5 sm:px-4.5" onClick={p.onDeleteForever} aria-label="Delete forever">
+            <Trash2 /> <span className="hidden sm:inline">Delete forever</span>
           </button>
         </>
       ) : (
         <>
           <button className="icon-btn" onClick={p.onDownload} aria-label="Download" title="Download">
-            <Download className="h-4 w-4" />
+            <Download />
           </button>
-          <button className="icon-btn" onClick={p.onSend} aria-label="Send to Telegram" title="Send to Telegram">
-            <Send className="h-4 w-4" />
+          <button className="icon-btn hidden sm:inline-flex" onClick={p.onSend} aria-label="Send to Telegram" title="Send to Telegram">
+            <Send />
           </button>
           <button className="icon-btn" onClick={p.onMove} aria-label="Move" title="Move">
-            <FolderInput className="h-4 w-4" />
+            <FolderInput />
           </button>
-          <button className="icon-btn" onClick={p.onStar} aria-label={p.allStarred ? 'Unstar' : 'Star'} title={p.allStarred ? 'Remove from Starred' : 'Add to Starred'}>
-            {p.allStarred ? <StarOff className="h-4 w-4" /> : <Star className="h-4 w-4" />}
+          <button
+            className="icon-btn"
+            onClick={p.onStar}
+            aria-label={p.allStarred ? 'Unstar' : 'Star'}
+            title={p.allStarred ? 'Remove from Starred' : 'Add to Starred'}
+          >
+            {p.allStarred ? <StarOff /> : <Star />}
           </button>
-          <button className="icon-btn text-red-600 dark:text-red-400" onClick={p.onTrash} aria-label="Move to trash" title="Move to trash">
-            <Trash2 className="h-4 w-4" />
+          <button className="icon-btn text-brand-ink" onClick={p.onTrash} aria-label="Move to trash" title="Move to trash">
+            <Trash2 />
           </button>
         </>
       )}
@@ -968,7 +1036,7 @@ function EmptyState(props: {
 }) {
   const { mode, filtered, searched, isRoot, onUpload, onNewFolder } = props
   const content: Record<Mode, { icon: typeof Search; title: string; text: string }> = {
-    folder: { icon: CloudUpload, title: isRoot ? 'Your drive is empty' : 'This folder is empty', text: 'Drop files here or use the Upload button' },
+    folder: { icon: CloudUpload, title: isRoot ? 'Your drive is empty' : 'Nothing here yet', text: 'Drop files or folders here, or use Upload.' },
     search: searched || filtered
       ? { icon: Search, title: 'No results', text: 'Try a different name or filter.' }
       : { icon: Search, title: 'Search your drive', text: 'Type a file or folder name, or pick a filter.' },
@@ -978,21 +1046,54 @@ function EmptyState(props: {
   }
   const { icon: Icon, title, text } = content[mode]
   return (
-    <div className="flex h-full min-h-72 flex-col items-center justify-center gap-3 text-center text-slate-500">
-      <Icon className="h-14 w-14 text-slate-300 dark:text-slate-700" strokeWidth={1.25} />
-      <p className="font-medium text-slate-700 dark:text-slate-300">{title}</p>
-      <p className="text-sm">{text}</p>
+    <div className="flex min-h-80 flex-col items-center justify-center gap-3.5 rounded-md px-7 py-11 text-center pressed-lg">
+      <div className="flex size-18 items-center justify-center rounded-md bg-surface text-muted raised-md">
+        <Icon className="size-8" strokeWidth={1.6} />
+      </div>
+      <p className="text-[22px] font-black tracking-[-0.02em]">{title}</p>
+      <p className="max-w-80 text-sm text-muted">{text}</p>
       {mode === 'folder' && (
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex flex-wrap justify-center gap-3">
           <button className="btn-primary" onClick={onUpload}>
-            Upload files
+            <Upload /> Upload files
           </button>
-          <button className="btn-ghost" onClick={onNewFolder}>
-            <FolderPlus className="h-4 w-4" /> New folder
+          <button className="btn-secondary" onClick={onNewFolder}>
+            <FolderPlus /> New folder
           </button>
         </div>
       )}
     </div>
+  )
+}
+
+/** Phone tabs. The fourth is Camera backup in the app, Trash on the website. */
+function BottomNav({ onBackup }: { onBackup?: () => void }) {
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const tabs = [
+    { label: 'Drive', icon: HardDrive, on: pathname === '/' || pathname.startsWith('/folder/'), go: () => navigate('/') },
+    { label: 'Recent', icon: Clock, on: pathname === '/recent', go: () => navigate('/recent') },
+    { label: 'Starred', icon: Star, on: pathname === '/starred', go: () => navigate('/starred') },
+    onBackup
+      ? { label: 'Backup', icon: Camera, on: false, go: onBackup }
+      : { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
+  ]
+  return (
+    <nav className="fixed inset-x-3 bottom-3 z-20 flex h-18 items-center justify-around rounded-md bg-surface raised-md md:hidden">
+      {tabs.map((t) => (
+        <button
+          key={t.label}
+          onClick={t.go}
+          aria-current={t.on ? 'page' : undefined}
+          className={`flex min-w-16 flex-col items-center gap-1 text-[11px] ${t.on ? 'font-extrabold text-brand-ink' : 'font-semibold text-muted'}`}
+        >
+          <span className={`flex h-8 w-14 items-center justify-center rounded-md ${t.on ? 'pressed-xs' : ''}`}>
+            <t.icon className="size-5" strokeWidth={t.on ? 2 : 1.8} />
+          </span>
+          {t.label}
+        </button>
+      ))}
+    </nav>
   )
 }
 

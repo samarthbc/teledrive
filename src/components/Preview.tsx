@@ -254,7 +254,7 @@ function TextPreview({ file }: { file: FileItem }) {
   if (text === null) return <Loading label="Loading…" />
   return (
     <div className="h-full w-full max-w-5xl overflow-auto p-2 sm:p-4">
-      <pre className="min-h-full rounded-lg bg-slate-900 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-slate-100 sm:text-sm">
+      <pre className="min-h-full rounded-md bg-neutral-900 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-neutral-100 sm:text-sm">
         {text}
         {file.size > TEXT_PREVIEW_BYTES && '\n\n… (showing the first 1 MB)'}
       </pre>
@@ -272,15 +272,16 @@ function Loading({ label }: { label: string }) {
 }
 
 function Big({ file }: { file: FileItem }) {
-  const { Icon, color } = fileIcon(file)
-  return <Icon className={`h-20 w-20 ${color}`} strokeWidth={1} />
+  // The viewer is always dark, so the icon is light whatever the theme
+  const { Icon } = fileIcon(file)
+  return <Icon className="h-20 w-20 text-white/70" strokeWidth={1} />
 }
 
 function Unavailable(props: { file: FileItem; message: string; onDownload?: () => void; onOpenWith?: () => void }) {
   const { file, message, onDownload, onOpenWith } = props
   return (
     <div className="flex max-w-sm flex-col items-center gap-4 p-6 text-center">
-      {message.includes('incomplete') ? <TriangleAlert className="h-12 w-12 text-amber-400" /> : <Big file={file} />}
+      {message.includes('incomplete') ? <TriangleAlert className="h-12 w-12 text-[#ff5a63]" /> : <Big file={file} />}
       <p className="text-sm text-white/70">{message}</p>
       {onOpenWith && (
         <button className="btn-primary" onClick={onOpenWith}>

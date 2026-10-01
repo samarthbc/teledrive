@@ -61,6 +61,7 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
   return (
     <Dialog
       title={`Send ${what}`}
+      icon={Send}
       onClose={onClose}
       wide
       footer={
@@ -69,7 +70,7 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
             Cancel
           </button>
           <button className="btn-primary" disabled={!chosen} onClick={send}>
-            <Send className="h-4 w-4" />
+            <Send />
             Send{chosen ? ` to ${chosen.title}` : ''}
           </button>
         </>
@@ -77,37 +78,38 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
     >
       <div className="space-y-3 pb-2 text-sm">
         <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input className="input pl-9" autoFocus placeholder="Search chats or @username" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <Search className="pointer-events-none absolute top-1/2 left-3.5 size-[17px] -translate-y-1/2 text-muted" />
+          <input className="input pl-10.5" aria-label="Search chats" autoFocus placeholder="Search chats or @username" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+        <ul className="max-h-72 space-y-1 overflow-y-auto rounded-md p-1.5 pressed">
           {!chats && !error && (
             <li className="flex justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+              <Loader2 className="size-5 animate-spin text-muted" />
             </li>
           )}
-          {chats && !shown.length && <li className="py-6 text-center text-slate-500">No chats found</li>}
+          {chats && !shown.length && <li className="py-6 text-center text-muted">No chats found</li>}
           {shown.map((c) => (
             <li key={c.key}>
               <button
-                className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left ${chosen?.key === c.key ? 'bg-brand/10' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                className={`flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left ${chosen?.key === c.key ? 'bg-surface raised-sm' : 'hover:pressed-xs'}`}
+                aria-pressed={chosen?.key === c.key}
                 onClick={() => setChosen(c)}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/15 font-medium text-brand-dark dark:text-brand">
-                  {c.key === 'self' ? <Bookmark className="h-4 w-4" /> : initials(c.title)}
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface text-[13px] font-extrabold raised-xs">
+                  {c.key === 'self' ? <Bookmark className="size-4" /> : initials(c.title)}
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate font-medium">{c.title}</span>
-                  <span className="block truncate text-xs text-slate-500">{c.subtitle}</span>
+                  <span className={`block truncate font-bold ${chosen?.key === c.key ? 'text-brand-ink' : ''}`}>{c.title}</span>
+                  <span className="block truncate text-xs text-muted">{c.subtitle}</span>
                 </span>
               </button>
             </li>
           ))}
         </ul>
         {chosen && (
-          <input className="input" placeholder="Add a message (optional)" value={message} onChange={(e) => setMessage(e.target.value)} />
+          <input className="input" aria-label="Message" placeholder="Add a message (optional)" value={message} onChange={(e) => setMessage(e.target.value)} />
         )}
-        {error && <p className="text-red-600">{error}</p>}
+        {error && <p className="font-semibold text-brand-ink">{error}</p>}
       </div>
     </Dialog>
   )

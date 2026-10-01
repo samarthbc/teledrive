@@ -125,7 +125,7 @@ Main red buttons keep a `raised` shadow, so they sit on the surface like everyth
 
 ## 5. Typography
 
-**Archivo**, from Google Fonts, weights 400–900, with `system-ui, sans-serif` as the fallback. Load it in `index.html` with `display=swap`. Never use Inter or Roboto.
+**Archivo** (variable, 400–900), bundled with the app via `@fontsource-variable/archivo` so it works offline and makes no third-party requests, with `system-ui, sans-serif` as the fallback. Never use Inter or Roboto.
 
 | Style | Size / weight | Tracking | Use |
 |---|---|---|---|

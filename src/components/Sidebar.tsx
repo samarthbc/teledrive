@@ -1,13 +1,15 @@
 import {
-  Camera, Check, ChevronDown, Clock, Download, FolderPlus, Plus, FolderUp, HardDrive, Lock, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
+  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LogOut, Plus, Send, ShieldCheck, Star,
+  Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { driveName } from '../telegram/channel'
 import { installApp, useInstall } from '../lib/install'
-import { driveStats } from '../drive/tree'
+import { driveStats, starredItems, trashedItems } from '../drive/tree'
 import { formatBytes } from '../lib/format'
 import { useDrive, useRootName } from '../store/useDrive'
+import Menu, { type MenuEntry } from './Menu'
 
 export default function Sidebar(props: {
   onUpload: () => void
@@ -26,18 +28,26 @@ export default function Sidebar(props: {
   const drives = useDrive((s) => s.drives)
   const currentDrive = useDrive((s) => s.currentDrive)
   const [picking, setPicking] = useState(false)
+  const [newMenu, setNewMenu] = useState<{ x: number; y: number } | null>(null)
   const current = drives.find((d) => d.id === currentDrive)
   const rootName = useRootName()
   const canInstall = useInstall((s) => !!s.event)
   const drive = useDrive((s) => s.drive)
   const { pathname } = useLocation()
   const stats = driveStats(drive)
+  const counts = useMemo(() => ({ starred: starredItems(drive).length, trash: trashedItems(drive).length }), [drive])
   const inDrive = pathname === '/' || pathname.startsWith('/folder/')
 
+  const newEntries: MenuEntry[] = [
+    { label: 'Upload files', icon: Upload, onClick: onUpload },
+    ...(onUploadFolder ? [{ label: 'Upload folder', icon: FolderUp, onClick: onUploadFolder }] : []),
+    { label: 'New folder', icon: FolderPlus, onClick: onNewFolder },
+  ]
+
   return (
-    <div className="flex h-full flex-col gap-1 p-4">
+    <div className="flex h-full flex-col gap-1 overflow-y-auto px-3.5 py-5">
       <button
-        className="mb-1 flex items-center gap-2.5 rounded-xl px-2 py-1 text-left hover:bg-slate-200/70 dark:hover:bg-slate-800"
+        className="mb-4 flex items-center gap-3 rounded-md px-1.5 py-1 text-left active:pressed"
         // Doesn't close the phone drawer: it only opens the list
         onClick={(e) => {
           e.stopPropagation()
@@ -45,116 +55,103 @@ export default function Sidebar(props: {
         }}
         aria-expanded={picking}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
-          <Send className="h-5 w-5" />
-        </div>
-        <span className="min-w-0 flex-1">
-          <span className="block text-lg leading-tight font-semibold">TeleDrive</span>
-          <span className="block truncate text-xs text-slate-500">{current ? driveName(current) : ' '}</span>
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-brand text-white raised-sm">
+          <Send className="size-5" strokeWidth={2.2} />
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${picking ? 'rotate-180' : ''}`} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-lg leading-tight font-black tracking-tight">TeleDrive</span>
+          <span className="block truncate text-xs text-muted">{current ? driveName(current) : ' '}</span>
+        </span>
+        <ChevronDown className={`size-4 shrink-0 text-muted transition-transform ${picking ? 'rotate-180' : ''}`} />
       </button>
       {picking && (
-        <div className="mb-2 space-y-0.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
+        <div className="mb-4 space-y-1 rounded-md p-1.5 pressed">
           {drives.map((d) => (
             <button
               key={d.id}
-              className="btn w-full justify-start py-1.5 text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-700"
+              className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold active:pressed"
               onClick={() => {
                 setPicking(false)
                 onSwitchDrive(d.id)
               }}
             >
-              <HardDrive className="h-4 w-4" />
+              <HardDrive className="size-4 shrink-0 text-muted" />
               <span className="truncate">{driveName(d)}</span>
-              {d.id === currentDrive && <Check className="ml-auto h-4 w-4 text-brand" />}
+              {d.id === currentDrive && <Check className="ml-auto size-4 shrink-0 text-brand-ink" strokeWidth={2.5} />}
             </button>
           ))}
           <button
-            className="btn w-full justify-start py-1.5 text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-700"
+            className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted active:pressed"
             onClick={() => {
               setPicking(false)
               onNewDrive()
             }}
           >
-            <Plus className="h-4 w-4" /> New drive
+            <Plus className="size-4" /> New drive
           </button>
         </div>
       )}
-      <div className="mb-4" />
 
-      <button className="btn-primary mb-1 justify-start py-2.5" onClick={onUpload}>
-        <Upload className="h-4 w-4" /> Upload files
-      </button>
-      {onUploadFolder && (
-        <button className="btn-ghost mb-1 justify-start py-2.5" onClick={onUploadFolder}>
-          <FolderUp className="h-4 w-4" /> Upload folder
-        </button>
-      )}
-      <button className="btn-ghost mb-4 justify-start py-2.5" onClick={onNewFolder}>
-        <FolderPlus className="h-4 w-4" /> New folder
-      </button>
-
-      <nav className="space-y-0.5">
-        <Link to="/" icon={HardDrive} label={rootName} active={inDrive} />
-        <Link to="/recent" icon={Clock} label="Recent" />
-        <Link to="/starred" icon={Star} label="Starred" />
-        <Link to="/trash" icon={Trash2} label="Trash" />
-        {onCameraBackup && (
-          <button
-            className="btn w-full justify-start text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
-            onClick={onCameraBackup}
-          >
-            <Camera className="h-4 w-4" /> Camera backup
-          </button>
-        )}
-        {onLockAll && (
-          <button
-            className="btn w-full justify-start text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
-            onClick={onLockAll}
-          >
-            <Lock className="h-4 w-4" /> Lock all
-            <span className="ml-auto text-xs text-slate-400">unlocked items</span>
-          </button>
-        )}
-      </nav>
-
-      <div className="mt-auto space-y-3">
-        <div className="rounded-xl bg-slate-100 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
-          <p className="font-medium text-slate-900 dark:text-slate-100">{formatBytes(stats.bytes)} used</p>
-          <p>
-            {stats.files} file{stats.files === 1 ? '' : 's'} · {stats.folders} folder{stats.folders === 1 ? '' : 's'}
-          </p>
-          <p className="mt-1 flex items-center gap-1 text-slate-400">
-            <ShieldCheck className="h-3.5 w-3.5" /> Encrypted · unlimited on Telegram
-          </p>
-        </div>
-        {canInstall && (
-          <button className="btn-ghost w-full justify-start" onClick={() => void installApp()}>
-            <Download className="h-4 w-4" /> Install app
-          </button>
-        )}
-        <button className="btn-ghost w-full justify-start" onClick={onLogout}>
-          <LogOut className="h-4 w-4" /> Log out
+      <div className="mb-4 px-1">
+        <button
+          className="btn-primary"
+          onClick={(e) => {
+            // Not closing the phone drawer: the menu opens over it
+            e.stopPropagation()
+            const r = e.currentTarget.getBoundingClientRect()
+            setNewMenu({ x: r.left, y: r.bottom + 8 })
+          }}
+          aria-haspopup="menu"
+        >
+          <Plus strokeWidth={2.4} /> New
         </button>
       </div>
+
+      <nav className="space-y-1">
+        <Link to="/" icon={HardDrive} label={rootName} active={inDrive} />
+        <Link to="/recent" icon={Clock} label="Recent" />
+        <Link to="/starred" icon={Star} label="Starred" count={counts.starred} />
+        {onCameraBackup && <Item icon={Camera} label="Camera backup" onClick={onCameraBackup} />}
+        <Link to="/trash" icon={Trash2} label="Trash" count={counts.trash} />
+        {onLockAll && <Item icon={Lock} label="Lock all" onClick={onLockAll} hint="Unlocked items" />}
+      </nav>
+
+      <div className="mt-auto space-y-2 pt-6">
+        <div className="rounded-md p-3.5 pressed">
+          <p className="flex items-center gap-2 text-[13px] font-extrabold">
+            <ShieldCheck className="size-4 text-brand-ink" strokeWidth={2} /> Encrypted
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {formatBytes(stats.bytes)} used · {stats.files} file{stats.files === 1 ? '' : 's'} · no limit
+          </p>
+        </div>
+        {canInstall && <Item icon={Download} label="Install app" onClick={() => void installApp()} />}
+        <Item icon={LogOut} label="Log out" onClick={onLogout} />
+      </div>
+
+      {newMenu && <Menu {...newMenu} entries={newEntries} onClose={() => setNewMenu(null)} />}
     </div>
   )
 }
 
-function Link({ to, icon: Icon, label, active }: { to: string; icon: LucideIcon; label: string; active?: boolean }) {
+const ITEM = 'flex h-10.5 w-full items-center gap-3 rounded-md px-3.5 text-sm transition-[box-shadow,color] duration-120 [&_svg]:size-[19px] [&_svg]:shrink-0'
+const IDLE = 'font-semibold text-muted hover:text-ink active:pressed'
+const ACTIVE = 'font-extrabold text-brand-ink pressed'
+
+function Link({ to, icon: Icon, label, active, count }: { to: string; icon: LucideIcon; label: string; active?: boolean; count?: number }) {
   return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `btn w-full justify-start ${
-          (active ?? isActive)
-            ? 'bg-brand/10 text-brand-dark dark:text-brand'
-            : 'text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800'
-        }`
-      }
-    >
-      <Icon className="h-4 w-4" /> {label}
+    <NavLink to={to} className={({ isActive }) => `${ITEM} ${(active ?? isActive) ? ACTIVE : IDLE}`}>
+      <Icon /> <span className="truncate">{label}</span>
+      {!!count && <span className="ml-auto text-xs font-semibold text-muted">{count}</span>}
     </NavLink>
+  )
+}
+
+function Item({ icon: Icon, label, onClick, hint }: { icon: LucideIcon; label: string; onClick: () => void; hint?: string }) {
+  return (
+    <button className={`${ITEM} ${IDLE}`} onClick={onClick}>
+      <Icon /> <span className="truncate">{label}</span>
+      {hint && <span className="ml-auto text-xs font-medium">{hint}</span>}
+    </button>
   )
 }

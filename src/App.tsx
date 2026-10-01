@@ -39,9 +39,9 @@ export default function App() {
   if (phase === 'otherTab')
     return (
       <Centered>
-        <MonitorSmartphone className="h-10 w-10 text-brand" />
-        <p className="font-medium">TeleDrive is open in another tab</p>
-        <p className="max-w-sm text-center text-sm text-slate-600 dark:text-slate-400">
+        <MonitorSmartphone className="size-10 text-brand-ink" />
+        <p className="text-xl font-black tracking-[-0.02em]">TeleDrive is open in another tab</p>
+        <p className="max-w-sm text-center text-sm text-muted">
           Using it in two tabs at once can make Telegram end your session, so only one tab can be active.
         </p>
         <button className="btn-primary" onClick={() => void boot(true)}>
@@ -52,8 +52,8 @@ export default function App() {
   if (phase === 'error')
     return (
       <Centered>
-        <TriangleAlert className="h-10 w-10 text-amber-500" />
-        <p className="max-w-sm text-center text-sm text-slate-600 dark:text-slate-400">{error}</p>
+        <TriangleAlert className="size-10 text-brand-ink" />
+        <p className="max-w-sm text-center text-sm text-muted">{error}</p>
         <button className="btn-primary" onClick={() => void boot()}>
           Try again
         </button>
@@ -62,8 +62,8 @@ export default function App() {
   if (phase !== 'ready')
     return (
       <Centered>
-        <Loader2 className="h-8 w-8 animate-spin text-brand" />
-        <p className="text-sm text-slate-500">{phase === 'loading' ? 'Loading your drive…' : 'Connecting to Telegram…'}</p>
+        <Loader2 className="size-8 animate-spin text-brand-ink" />
+        <p className="text-sm text-muted">{phase === 'loading' ? 'Loading your drive…' : 'Connecting to Telegram…'}</p>
       </Centered>
     )
 

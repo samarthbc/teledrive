@@ -40,7 +40,7 @@ export default function ZipPreview({ bytes, onError }: { bytes: ArrayBuffer; onE
       <ul className="divide-y divide-white/10 rounded-lg bg-white/5 text-sm">
         {entries.slice(0, MAX_ENTRIES).map((e) => (
           <li key={e.name} className="flex items-center gap-3 px-3 py-2">
-            {e.dir ? <Folder className="h-4 w-4 shrink-0 text-amber-400" /> : <File className="h-4 w-4 shrink-0 text-white/50" />}
+            {e.dir ? <Folder className="h-4 w-4 shrink-0 text-white/80" /> : <File className="h-4 w-4 shrink-0 text-white/50" />}
             <span className="min-w-0 flex-1 truncate">{e.name}</span>
             {!e.dir && <span className="shrink-0 text-white/50">{formatBytes(e.size)}</span>}
           </li>

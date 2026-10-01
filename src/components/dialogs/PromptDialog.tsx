@@ -1,6 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import Dialog from '../Dialog'
+import { ErrorText } from '../ui'
 
 /** Asks for a name (new folder, rename). Selects the name without its extension. */
 export default function PromptDialog(props: {
@@ -30,9 +31,10 @@ export default function PromptDialog(props: {
 
   return (
     <Dialog title={title} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3 pb-4">
+      <form onSubmit={submit} className="space-y-4">
         <input
-          className="input"
+          className={`input ${error ? 'input-error' : ''}`}
+          aria-label={title}
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -41,13 +43,13 @@ export default function PromptDialog(props: {
             e.target.setSelectionRange(0, dot > 0 ? dot : initial.length)
           }}
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2">
+        {error && <ErrorText>{error}</ErrorText>}
+        <div className="flex justify-end gap-3 pt-2">
           <button type="button" className="btn-ghost" onClick={onClose}>
             Cancel
           </button>
           <button className="btn-primary" disabled={busy || !value.trim()}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            {busy && <Loader2 className="animate-spin" />}
             {confirmLabel}
           </button>
         </div>

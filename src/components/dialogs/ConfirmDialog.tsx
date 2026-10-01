@@ -1,19 +1,21 @@
-import { Loader2 } from 'lucide-react'
+import { Loader2, Trash2, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { verifyPassword } from '../../drive/vault'
 import Dialog from '../Dialog'
+import { ErrorText, PasswordField } from '../ui'
 
 export default function ConfirmDialog(props: {
   title: string
   message: React.ReactNode
   confirmLabel: string
   danger?: boolean
+  icon?: LucideIcon
   onConfirm: () => Promise<void>
   onClose: () => void
   /** Ask for the TeleDrive password first (e.g. deleting locked items); the text says why. */
   requirePassword?: string
 }) {
-  const { title, message, confirmLabel, danger, onConfirm, onClose, requirePassword } = props
+  const { title, message, confirmLabel, danger, icon, onConfirm, onClose, requirePassword } = props
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [password, setPassword] = useState('')
@@ -34,38 +36,51 @@ export default function ConfirmDialog(props: {
   return (
     <Dialog
       title={title}
+      icon={icon ?? (danger ? Trash2 : undefined)}
+      alert={danger}
       onClose={onClose}
       footer={
         <>
           <button className="btn-ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className={danger ? 'btn-danger' : 'btn-primary'} disabled={busy || (!!requirePassword && !password)} onClick={confirm}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+          <button
+            className={danger ? 'btn-danger-solid' : 'btn-primary'}
+            disabled={busy || (!!requirePassword && !password)}
+            onClick={confirm}
+          >
+            {busy && <Loader2 className="animate-spin" />}
             {confirmLabel}
           </button>
         </>
       }
     >
-      <div className="text-sm text-slate-600 dark:text-slate-400">{message}</div>
+      <div className="text-sm leading-relaxed text-muted">{message}</div>
       {requirePassword && (
         <form
-          className="mt-3 space-y-1 text-sm"
+          className="mt-4"
           onSubmit={(e) => {
             e.preventDefault()
             if (password) void confirm()
           }}
         >
-          <label className="block text-slate-600 dark:text-slate-400" htmlFor="confirm-password">
-            {requirePassword}
-          </label>
-          <input
-            id="confirm-password" className="input" type="password" autoFocus autoComplete="current-password"
-            placeholder="TeleDrive password" value={password} onChange={(e) => setPassword(e.target.value)}
+          <PasswordField
+            label="TeleDrive password"
+            kind="account"
+            hint={requirePassword}
+            autoFocus
+            autoComplete="current-password"
+            value={password}
+            onChange={setPassword}
+            error={!!error}
           />
         </form>
       )}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && (
+        <div className="mt-3">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      )}
     </Dialog>
   )
 }

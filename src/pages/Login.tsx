@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { checkPassword, describeError, sendCode, signIn } from '../telegram/auth'
 import { useDrive } from '../store/useDrive'
 import AuthLayout from './AuthLayout'
+import { ErrorText, Note, PasswordField } from '../components/ui'
 
 type Step = 'phone' | 'code' | 'password'
 
@@ -51,53 +52,60 @@ export default function LoginPage() {
   }
 
   const subtitles: Record<Step, string> = {
-    phone: 'Log in with your Telegram account',
+    phone: 'Your files are stored in a private channel in your own Telegram account.',
     code: viaApp ? `We sent a code to your Telegram app (${phone})` : `We sent a code by SMS to ${phone}`,
     password: 'Your account has two-step verification. Enter your password.',
   }
 
   return (
-    <AuthLayout icon={Send} title="TeleDrive" subtitle={subtitles[step]}>
+    <AuthLayout icon={Send} title={step === 'phone' ? 'Log in with Telegram' : step === 'code' ? 'Enter the code' : 'Two-step verification'} subtitle={subtitles[step]}>
       <form onSubmit={submit} className="space-y-4">
         {notice && step === 'phone' && (
-          <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">{notice}</p>
+          <Note>{notice}</Note>
         )}
         {step === 'phone' && (
-          <input
-            className="input" type="tel" autoComplete="tel" autoFocus placeholder="+91 98765 43210"
-            value={phone} onChange={(e) => setPhone(e.target.value)}
-          />
+          <div>
+            <label className="field-label" htmlFor="login-phone">
+              Phone number
+            </label>
+            <input
+              id="login-phone" className="input" type="tel" autoComplete="tel" autoFocus placeholder="+91 98765 43210"
+              value={phone} onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
         )}
         {step === 'code' && (
-          <input
-            className="input text-center font-mono text-lg tracking-[0.4em]" inputMode="numeric"
-            autoComplete="one-time-code" autoFocus placeholder="•••••" maxLength={6}
-            value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-          />
+          <div>
+            <label className="field-label" htmlFor="login-code">
+              Login code
+            </label>
+            <input
+              id="login-code" className="input h-14 text-center font-mono text-xl tracking-[0.4em]" inputMode="numeric"
+              autoComplete="one-time-code" autoFocus placeholder="•••••" maxLength={6}
+              value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            />
+          </div>
         )}
         {step === 'password' && (
-          <input
-            className="input" type="password" autoComplete="current-password" autoFocus placeholder="Password"
-            value={password} onChange={(e) => setPassword(e.target.value)}
+          <PasswordField
+            label="Telegram two-step password" kind="account" autoComplete="current-password" autoFocus
+            value={password} onChange={setPassword} error={!!error}
           />
         )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <ErrorText>{error}</ErrorText>}
 
-        <button className="btn-primary w-full py-2.5" disabled={busy || (step === 'phone' ? phone.length < 6 : step === 'code' ? code.length < 5 : !password)}>
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+        <button className="btn-primary w-full" disabled={busy || (step === 'phone' ? phone.length < 6 : step === 'code' ? code.length < 5 : !password)}>
+          {busy && <Loader2 className="animate-spin" />}
           {step === 'phone' ? 'Send code' : 'Log in'}
         </button>
 
         {step !== 'phone' && (
           <button type="button" className="btn-ghost w-full" onClick={() => { setStep('phone'); setCode(''); setPassword(''); setError(null) }}>
-            <ArrowLeft className="h-4 w-4" /> Use a different number
+            <ArrowLeft /> Use a different number
           </button>
         )}
       </form>
-      <p className="mt-6 text-center text-xs text-slate-400">
-        Your files are stored in a private channel in your own Telegram account.
-      </p>
     </AuthLayout>
   )
 }

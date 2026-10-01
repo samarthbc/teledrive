@@ -1,13 +1,51 @@
 @import 'tailwindcss';
+/* Bundled, so it works offline in the app and makes no third-party requests */
+@import '@fontsource-variable/archivo';
 
-@theme {
-  --color-brand: #2aabee;
-  --color-brand-dark: #1d8fcf;
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
+/* Soft Swiss: one surface, soft raised/pressed depth, Swiss type. See DESIGN.md. */
+
+/* `dark:` follows the theme set on <html> (System / Light / Dark, see lib/theme.ts) */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 :root {
-  color-scheme: light dark;
+  --surface: #e6e6e3;
+  --shadow-dark: #c4c4c0;
+  --shadow-light: #ffffff;
+  --line: #cfcfcb;
+  --text: #111111;
+  --muted: #4a4a4a;
+  --red: #d0021b;
+  --red-strong: #b00117;
+  --red-text: #b80218;
+  --scrim: rgba(17, 17, 17, 0.28);
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  --surface: #1f2023;
+  --shadow-dark: #141517;
+  --shadow-light: #2b2c30;
+  --line: #34353a;
+  --text: #f2f2f2;
+  --muted: #a8a8a8;
+  --red: #e5222f;
+  --red-strong: #c81925;
+  --red-text: #ff5a63;
+  --scrim: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  /* Red fills (main button, checkbox, progress, focus) */
+  --color-brand: var(--red);
+  --color-brand-dark: var(--red-strong);
+  /* Red text and icons on the surface */
+  --color-brand-ink: var(--red-text);
+  --color-scrim: var(--scrim);
+  --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 html,
@@ -17,42 +55,137 @@ body,
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  @apply bg-surface text-ink antialiased;
   -webkit-tap-highlight-color: transparent;
 }
 
-@utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition
-    disabled:cursor-not-allowed disabled:opacity-50;
+:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
 }
-@utility btn-primary {
-  @apply btn bg-brand text-white hover:bg-brand-dark;
+
+/* ---- Depth: raised = can be pressed, pressed = holds a value or "you are here" ---- */
+@utility raised-xs {
+  box-shadow: 2px 2px 4px var(--shadow-dark), -2px -2px 4px var(--shadow-light);
 }
-@utility btn-ghost {
-  @apply btn text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800;
+@utility raised-sm {
+  box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
 }
-@utility btn-danger {
-  @apply btn bg-red-600 text-white hover:bg-red-700;
+@utility raised {
+  box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
 }
-@utility icon-btn {
-  @apply inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-200/70
-    dark:text-slate-300 dark:hover:bg-slate-800;
+@utility raised-md {
+  box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
 }
-@utility input {
-  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition
-    focus:border-brand focus:ring-2 focus:ring-brand/25 dark:border-slate-700 dark:bg-slate-900;
+@utility raised-lg {
+  box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+}
+@utility raised-xl {
+  box-shadow: 12px 12px 24px var(--shadow-dark), -12px -12px 24px var(--shadow-light);
+}
+@utility pressed-xs {
+  box-shadow: inset 2px 2px 4px var(--shadow-dark), inset -2px -2px 4px var(--shadow-light);
+}
+@utility pressed {
+  box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+}
+@utility pressed-lg {
+  box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+}
+
+/* ---- Surfaces ---- */
+@utility panel {
+  @apply rounded-md bg-surface raised-lg;
 }
 @utility card {
-  @apply rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  @apply rounded-md bg-surface raised-md;
 }
-@utility preview-btn {
-  @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white/80 transition
-    hover:bg-white/10 hover:text-white disabled:opacity-30;
+@utility well {
+  @apply rounded-md bg-surface pressed;
 }
+
+/* ---- Buttons ---- */
+@utility btn {
+  @apply inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md px-4.5 text-sm font-bold whitespace-nowrap
+    transition-[box-shadow,color,background-color] duration-120 ease-out disabled:cursor-not-allowed disabled:opacity-45
+    [&_svg]:size-[17px] [&_svg]:shrink-0;
+}
+@utility btn-primary {
+  @apply btn bg-brand text-white raised hover:bg-brand-dark active:pressed active:bg-surface active:text-brand-ink
+    disabled:active:bg-brand disabled:active:text-white disabled:active:raised;
+}
+@utility btn-secondary {
+  @apply btn bg-surface text-ink raised active:pressed disabled:active:raised;
+}
+@utility btn-ghost {
+  @apply btn bg-transparent text-ink hover:bg-ink/5 active:pressed;
+}
+@utility btn-danger {
+  @apply btn bg-surface text-brand-ink raised active:pressed disabled:active:raised;
+}
+@utility btn-danger-solid {
+  @apply btn bg-brand text-white raised hover:bg-brand-dark active:pressed active:bg-surface active:text-brand-ink;
+}
+@utility icon-btn {
+  @apply inline-flex size-11 shrink-0 items-center justify-center rounded-md bg-surface text-ink raised
+    transition-[box-shadow,color] duration-120 ease-out active:pressed disabled:cursor-not-allowed disabled:opacity-45
+    [&_svg]:size-[19px];
+}
+/* An icon button that is switched on (e.g. the current view) */
+@utility icon-btn-on {
+  @apply icon-btn text-brand-ink pressed;
+}
+/* Small borderless icon button for dense places (rows, cards, panel headers) */
+@utility icon-btn-flat {
+  @apply inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted transition-[box-shadow,color]
+    duration-120 hover:text-ink active:pressed [&_svg]:size-[18px];
+}
+
+/* ---- Inputs ---- */
+@utility input {
+  @apply h-11.5 w-full rounded-md bg-surface px-3.5 text-sm text-ink pressed outline-none placeholder:text-muted
+    focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand;
+}
+@utility input-error {
+  @apply outline-2 outline-offset-2 outline-brand;
+}
+@utility field-label {
+  @apply mb-2 block text-[13px] font-bold;
+}
+
+/* ---- Filters ---- */
 @utility chip {
-  @apply inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-300 px-3 py-1 text-sm transition
-    hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800;
+  @apply inline-flex h-9.5 shrink-0 items-center gap-1.5 rounded-md bg-surface px-3.75 text-[13px] font-semibold text-ink raised-sm
+    transition-[box-shadow,color] duration-120 active:pressed [&_svg]:size-3.5;
 }
 @utility chip-active {
-  @apply chip border-brand bg-brand/10 text-brand-dark hover:bg-brand/15 dark:text-brand;
+  @apply chip font-extrabold text-brand-ink pressed;
+}
+
+/* ---- Swiss details ---- */
+@utility h-display {
+  @apply text-[40px] leading-none font-black tracking-[-0.04em] md:text-[46px];
+}
+@utility label-swiss {
+  @apply border-t-2 border-ink pt-2.5 text-xs font-extrabold tracking-[0.12em] uppercase;
+}
+
+/* ---- Progress ---- */
+@utility track {
+  @apply h-2 overflow-hidden rounded-md bg-surface pressed-xs;
+}
+
+/* The media viewer stays dark in both themes */
+@utility preview-btn {
+  @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 transition
+    hover:bg-white/10 hover:text-white disabled:opacity-30;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+  }
 }
