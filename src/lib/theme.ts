@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { isAndroid, Native } from '../native/android'
+import { desktop } from '../native/desktop'
 
 // Light / Dark / System (follows the device). The early script in index.html applies the saved
 // choice before the first paint; this keeps it in sync afterwards. See DESIGN.md §2.
@@ -44,6 +45,7 @@ export function setThemeMode(mode: ThemeMode) {
   const theme = resolve(mode)
   useTheme.setState({ mode, theme })
   apply(theme)
+  desktop?.setTheme(mode)
 }
 
 /** The theme button: System → Light → Dark → System. */
@@ -55,6 +57,8 @@ export function cycleTheme() {
 export const THEME_LABELS: Record<ThemeMode, string> = { system: 'System theme', light: 'Light theme', dark: 'Dark theme' }
 
 apply(useTheme.getState().theme)
+// The desktop app's title bar follows the choice too
+desktop?.setTheme(useTheme.getState().mode)
 media.addEventListener('change', () => {
   if (useTheme.getState().mode !== 'system') return
   const theme = resolve('system')

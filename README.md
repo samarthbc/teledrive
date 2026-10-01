@@ -1,8 +1,8 @@
 # TeleDrive
 
-A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, and an **Android app**. There's **no backend server**; the app runs on your device and talks to Telegram directly.
+A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, an **Android app** and a **Windows app**. There's **no backend server**; the app runs on your device and talks to Telegram directly.
 
-> Status: **Phase 6 (security)**. See the [roadmap](#roadmap).
+> Status: **Phase 8 (Windows app)**. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -31,6 +31,9 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Installable as an app from the browser (PWA)
 - **Soft Swiss design** ([DESIGN.md](DESIGN.md)): light and dark themes with a System / Light / Dark switch;
   works at phone width with bottom tabs, a + button and slide-up action sheets
+
+**Windows app** (same code, wrapped with Electron): installs like any program, opens from the Start menu,
+no server to run.
 
 **Android app** (same code, wrapped with Capacitor):
 
@@ -109,6 +112,19 @@ After changing the web code, run `npm run android:sync` and press Run again.
 Building from a terminal instead: point `JAVA_HOME` at Android Studio's Java, then
 `cd android && ./gradlew assembleDebug`.
 
+## Windows app
+
+```bash
+npm run desktop:build    # builds the installer into %LOCALAPPDATA%\TeleDrive-build
+```
+
+Run `TeleDrive-Setup-<version>.exe` from that folder. It installs for your user only (no admin), adds
+TeleDrive to the Start menu and desktop, and keeps you logged in between launches. It isn't signed, so
+Windows may say "Unknown publisher" the first time: **More info → Run anyway**. After code changes, build
+and run the installer again. `npm run desktop` opens the app without installing it.
+
+The installer contains the API keys from your `.env`, so keep it to yourself.
+
 ## Project structure
 
 ```
@@ -122,9 +138,10 @@ src/
 ├── components/ file views, preview, dialogs, menus, transfer panel, shared form controls (ui.tsx)
 ├── lib/        formatting, theme switch, PWA install
 ├── dev/        sample files for design work (`?mock`, development only, never shipped)
-└── native/     Android bridge: downloads, share-to-app, camera backup, notification, back button
+└── native/     Android bridge (downloads, share-to-app, camera backup, notification, back button); desktop bridge
 public/sw.js    service worker for video/audio streaming
 android/        Android project (Capacitor); native code in app/src/main/java/com/samarthbc/teledrive/
+electron/       Windows app (Electron): window, app:// file serving, preload
 ```
 
 ## Privacy and safety
@@ -148,8 +165,9 @@ android/        Android project (Capacitor); native code in app/src/main/java/co
 | 5 | Camera backup upgrades: backup while the app is closed, more folders | ✅ Being tested |
 | 6 | Security: TeleDrive password (every file encrypted), locked files and folders with their own passwords | ✅ Being tested |
 | 7 | UI redesign (Soft Swiss): light/dark themes and switch, every screen restyled | ✅ Being tested |
-| 8 | Deploy the website | ⏳ Later |
+| 8 | Windows desktop app (Electron): installer, no server needed | ✅ Being tested |
+| 9 | Deploy the website | ⏳ Later |
 
 ## Tech stack
 
-React · TypeScript · Vite · Tailwind CSS · [GramJS](https://github.com/gram-js/gramjs) · Dexie · Zustand · Vitest · Capacitor (Android)
+React · TypeScript · Vite · Tailwind CSS · [GramJS](https://github.com/gram-js/gramjs) · Dexie · Zustand · Vitest · Capacitor (Android) · Electron (Windows)

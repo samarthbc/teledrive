@@ -66,6 +66,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | Telegram | GramJS |
 | Local storage | IndexedDB |
 | Mobile | Capacitor 7 (wraps the web app into a native Android app; Android 10+) |
+| Desktop | Electron (wraps the web app into a Windows app with an installer) |
 | Website hosting | Static hosting: GitHub Pages / Cloudflare Pages / Vercel (free, no server code) |
 
 ### Configuration
@@ -156,7 +157,13 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] New design across the website and app: Soft Swiss (see DESIGN.md)
 - [x] Phone layout: bottom tabs, + button, slide-up action sheets
 
-### 4.8 Later: put the website online
+### 4.8 Windows desktop app
+- [x] Installable Windows app that works without running a local server or putting the website online
+- [x] Stays logged in between launches; one window; remembers its size and position
+- [x] Downloads, uploads, previews and video streaming work as in the browser
+- [x] Title bar follows the app's theme
+
+### 4.9 Later: put the website online
 - [ ] Deploy the website (Cloudflare Pages or GitHub Pages)
 
 ---
@@ -189,3 +196,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **3** | Mobile app via Capacitor, share-to-app, camera backup |
 | **4** | Encryption, duplicate detection, ZIP download, polish |
 | **5** | Camera backup upgrades: background backup, more folders (later) |
+| **6** | Security: TeleDrive password, locked files and folders |
+| **7** | UI redesign |
+| **8** | Windows desktop app (Electron) |
+| **9** | Deploy the website (later) |

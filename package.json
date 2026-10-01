@@ -1,8 +1,12 @@
 {
   "name": "teledrive",
+  "productName": "TeleDrive",
   "private": true,
   "version": "0.1.0",
+  "description": "Personal cloud drive on Telegram",
+  "author": "samarthbc",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "npm run build:frame && tsc -b && vite build",
@@ -12,7 +16,9 @@
     "android": "npm run build && cap sync android && cap open android",
     "android:sync": "npm run build && cap sync android",
     "build:frame": "vite build --config vite.frame.config.ts",
-    "predev": "npm run build:frame"
+    "predev": "npm run build:frame",
+    "desktop": "npm run build && electron .",
+    "desktop:build": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",
@@ -46,10 +52,41 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "buffer": "^5.7.1",
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
     "vite-plugin-node-polyfills": "^0.28.0",
     "vitest": "^4.1.11"
+  },
+  "build": {
+    "appId": "com.samarthbc.teledrive",
+    "productName": "TeleDrive",
+    "nodeGypRebuild": false,
+    "directories": {
+      "output": "${env.LOCALAPPDATA}/TeleDrive-build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "electron/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TeleDrive",
+      "artifactName": "TeleDrive-Setup-${version}.exe"
+    },
+    "npmRebuild": false
   }
 }
