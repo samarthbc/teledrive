@@ -493,6 +493,8 @@ Locked file:  upload → encrypt (file key, protected by the TeleDrive password 
 
 ## Phase 7: UI Updates
 
+The full visual spec (tokens, components, screens, and the step-by-step plan) is in [DESIGN.md](DESIGN.md), with screenshots in [`design/`](design/).
+
 ### 7.1 Dark/light theme
 - Dark mode already follows the system (Tailwind `dark:` classes).
 - Add a manual switch: System / Light / Dark, saved on the device.

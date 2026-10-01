@@ -56,7 +56,7 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - Video/audio streaming: a service worker (`public/sw.js`) turns the player's byte-range requests into
   Telegram downloads of just those bytes, so you can seek without downloading the whole file.
 
-Full details: [REQUIREMENTS.md](REQUIREMENTS.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md)
+Full details: [REQUIREMENTS.md](REQUIREMENTS.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md) · [DESIGN.md](DESIGN.md)
 
 ## Getting started
 
