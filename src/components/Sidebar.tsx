@@ -1,13 +1,14 @@
 import {
-  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LogOut, Plus, Star,
+  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Plus, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { driveName } from '../telegram/channel'
 import { installApp, useInstall } from '../lib/install'
-import { driveStats, starredItems, trashedItems, type Drive } from '../drive/tree'
+import { collectTree, driveStats, isHidden, starredItems, trashedItems, type Drive } from '../drive/tree'
 import { category, formatBytes } from '../lib/format'
+import { useBackup } from '../native/backup'
 import { useDrive, useRootName } from '../store/useDrive'
 import Logo from './Logo'
 import Menu, { type MenuEntry } from './Menu'
@@ -111,11 +112,10 @@ export default function Sidebar(props: {
         <Link to="/starred" icon={Star} label="Starred" count={counts.starred} />
         {onCameraBackup && <Item icon={Camera} label="Camera backup" onClick={onCameraBackup} />}
         <Link to="/trash" icon={Trash2} label="Trash" count={counts.trash} />
-        {onLockAll && <Item icon={Lock} label="Lock all" onClick={onLockAll} hint="Unlocked items" />}
       </nav>
 
       <div className="mt-auto space-y-2 pt-6">
-        <StorageCard drive={drive} />
+        <StorageCard drive={drive} onCameraBackup={onCameraBackup} onLockAll={onLockAll} />
         {canInstall && <Item icon={Download} label="Install app" onClick={() => void installApp()} />}
         <Item icon={LogOut} label="Log out" onClick={onLogout} />
       </div>
@@ -156,15 +156,29 @@ const KINDS = [
 type Kind = (typeof KINDS)[number]['key']
 const KIND_OF: Partial<Record<string, Kind>> = { image: 'photos', video: 'videos', document: 'documents' }
 
-/** Space used, how many files, and what takes the space. */
-function StorageCard({ drive }: { drive: Drive }) {
-  const { stats, byKind } = useMemo(() => {
+/** Space used, how many files, and what takes the space; then trash, camera backup and locked items. */
+function StorageCard(props: { drive: Drive; onCameraBackup?: () => void; onLockAll?: () => void }) {
+  const { drive, onCameraBackup, onLockAll } = props
+  const navigate = useNavigate()
+  const backup = useBackup()
+  const { stats, byKind, trash, locks } = useMemo(() => {
     const byKind: Record<Kind, number> = { photos: 0, videos: 0, documents: 0, other: 0 }
-    for (const i of drive.items.values())
-      if (i.kind === 'file' && !i.concealed) byKind[KIND_OF[category(i)] ?? 'other'] += i.size
-    return { stats: driveStats(drive), byKind }
+    const locks = { locked: 0, open: 0 }
+    for (const i of drive.items.values()) {
+      if (i.concealed) continue
+      if (i.kind === 'file') byKind[KIND_OF[category(i)] ?? 'other'] += i.size
+      if (i.lock && !isHidden(drive, i)) locks[i.locked ? 'locked' : 'open']++
+    }
+    // Everything in the trash, including what's inside trashed folders
+    const trashed = trashedItems(drive)
+    const bytes = trashed.reduce(
+      (n, t) => n + collectTree(drive, t.id).reduce((m, i) => m + (i.kind === 'file' && !i.concealed ? i.size : 0), 0),
+      0,
+    )
+    return { stats: driveStats(drive), byKind, trash: { items: trashed.length, bytes }, locks }
   }, [drive])
   const used = KINDS.filter((k) => byKind[k.key] > 0)
+  const backupProblem = /^(Error|Needs|Paused|Some)/.test(backup.status)
 
   return (
     <div className="rounded-md p-3.5 pressed">
@@ -193,6 +207,64 @@ function StorageCard({ drive }: { drive: Drive }) {
           </ul>
         </>
       )}
+
+      <div className="mt-3 border-t-2 border-line pt-1.5">
+        <Stat
+          icon={Trash2}
+          label="Trash"
+          value={trash.items ? `${trash.items} item${trash.items === 1 ? '' : 's'} · ${formatBytes(trash.bytes)}` : 'Empty'}
+          onClick={() => navigate('/trash')}
+        />
+        {onCameraBackup && (
+          <Stat
+            icon={Camera}
+            label="Backup"
+            value={backup.settings.enabled ? shortStatus(backup.status) : 'Off'}
+            title={backup.settings.enabled ? backup.status : undefined}
+            alert={backupProblem}
+            onClick={onCameraBackup}
+          />
+        )}
+        <Stat
+          icon={locks.open ? LockOpen : Lock}
+          label="Locked"
+          value={locks.open ? `${locks.open} open · Lock all` : locks.locked ? `${locks.locked} item${locks.locked === 1 ? '' : 's'}` : 'None'}
+          alert={locks.open > 0}
+          onClick={locks.open ? onLockAll : undefined}
+        />
+      </div>
     </div>
+  )
+}
+
+/** Camera backup's status, short enough for the card (the full text is the tooltip). */
+function shortStatus(status: string): string {
+  if (status.startsWith('Needs permission')) return 'Needs permission'
+  if (status.startsWith('Paused')) return 'Paused'
+  if (status.includes('TeleDrive password')) return 'Needs password'
+  if (status.startsWith('Error')) return 'Error'
+  if (status.startsWith('Some items failed')) return 'Some failed'
+  return status.replace('Waiting for ', 'Waiting: ')
+}
+
+/** One line under the storage bar; a button when it leads somewhere. */
+function Stat(props: { icon: LucideIcon; label: string; value: string; title?: string; alert?: boolean; onClick?: () => void }) {
+  const { icon: Icon, label, value, title = value, alert, onClick } = props
+  const body = (
+    <>
+      <Icon className={`size-3.5 shrink-0 ${alert ? 'text-brand-ink' : 'text-muted'}`} strokeWidth={2} />
+      <span className="font-semibold">{label}</span>
+      <span className={`ml-auto min-w-0 truncate ${alert ? 'font-bold text-brand-ink' : 'text-muted'}`} title={title}>
+        {value}
+      </span>
+    </>
+  )
+  const cls = 'flex h-8 w-full items-center gap-2 rounded-md px-1 text-left text-xs'
+  return onClick ? (
+    <button className={`${cls} transition-[box-shadow] duration-120 hover:bg-surface hover:raised-xs`} onClick={onClick}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls}>{body}</div>
   )
 }

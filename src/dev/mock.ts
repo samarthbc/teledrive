@@ -4,6 +4,7 @@
 import type { Meta } from '../drive/meta'
 import type { Transfer } from '../drive/queue'
 import { buildDrive, type MessageRecord } from '../drive/tree'
+import { useBackup } from '../native/backup'
 import { useDrive, type Phase } from '../store/useDrive'
 
 const DAY = 86_400
@@ -27,6 +28,8 @@ const files: [string, string, string, number, string, number, Record<string, unk
   ['notes', 'root', 'notes.txt', 4_000, 'text/plain', 8],
   ['secret', 'root', '', 52_000, 'application/pdf', 4, { l: lock, x: { enc: 1 }, e: 'sealed' }],
   ['itr', 'docs', 'ITR acknowledgement.pdf', 240_000, 'application/pdf', 10],
+  ['old', 'root', 'Old backup.zip', 210_000_000, 'application/zip', 20, { x: { tr: now - 2 * DAY } }],
+  ['draft', 'root', 'Draft notes.txt', 3_000, 'text/plain', 12, { x: { tr: now - 5 * DAY } }],
   ...Array.from({ length: 9 }, (_, i) => [`cam${i}`, 'photos', `IMG_20${41 + i}.jpg`, 2_900_000 + i * 50_000, 'image/jpeg', 0.3 + i] as const),
 ] as never
 
@@ -66,3 +69,5 @@ useDrive.setState({
   refresh: async () => {},
   submitPassword: async () => {},
 })
+// `&app` shows the Android-only parts (camera backup); see DrivePage
+useBackup.setState({ settings: { enabled: true, wifiOnly: true, since: 0 }, status: param.get('backup') ?? 'Up to date' })

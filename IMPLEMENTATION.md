@@ -517,7 +517,7 @@ The full visual spec (tokens, components, screens, and the step-by-step plan) is
 
 ### 7.4 Checking the design on a computer
 - `npm run dev`, then open `http://localhost:5173/?mock` for sample files without Telegram (`?mock=password`,
-  `?mock=password&create`, `?mock=login`, `&transfers` for the transfers panel). Development only.
+  `?mock=password&create`, `?mock=login`, `&transfers` for the transfers panel, `&app` for the Android-only parts such as camera backup, `&backup=<status>`). Development only.
 
 **Phase 7 done when:** every item under REQUIREMENTS §4.7 is checked.
 

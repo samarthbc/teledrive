@@ -73,6 +73,9 @@ const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', rec
 
 const act = (p: Promise<unknown>) => p.catch(toastError)
 
+/** The app's own features (camera backup). In development, `?mock&app` shows them in the browser too. */
+const appUi = isAndroid || (import.meta.env.DEV && new URLSearchParams(location.search).has('app'))
+
 /** The folder being browsed before a search started, so leaving the search goes back there. */
 let lastFolderPath = '/'
 
@@ -539,7 +542,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         void act(useDrive.getState().switchDrive(id))
       }}
       onNewDrive={() => setModal({ type: 'newDrive' })}
-      onCameraBackup={isAndroid ? () => setModal({ type: 'backup' }) : undefined}
+      onCameraBackup={appUi ? () => setModal({ type: 'backup' }) : undefined}
     />
   )
 
@@ -786,7 +789,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         )}
         <TransferPanel className="pointer-events-auto w-full" />
       </div>
-      <BottomNav onBackup={isAndroid ? () => setModal({ type: 'backup' }) : undefined} />
+      <BottomNav onBackup={appUi ? () => setModal({ type: 'backup' }) : undefined} />
 
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6">

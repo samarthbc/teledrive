@@ -164,7 +164,7 @@ Swiss details:
   - logo + "TeleDrive" + drive name with a chevron (drive switcher);
   - red **New** button;
   - nav items: My Drive, Recent, Starred, Camera backup (app only), Trash, with counts on the right in `--muted`;
-  - a storage card at the bottom (`pressed`): space used in large type, files · folders, and a bar of what takes the space (Photos ink, Videos red, Docs muted, Other faint) with sizes underneath.
+  - a storage card at the bottom (`pressed`): space used in large type, files · folders, and a bar of what takes the space (Photos ink, Videos red, Docs muted, Other faint) with sizes underneath. Below a rule: **Trash** (items · size, opens Trash), **Backup** (app only: status, red when it needs attention, opens Camera backup) and **Locked** (how many; red “N open · Lock all” while some are unlocked).
 - **Top bar:** search (pressed, fills the width), List/Grid segmented control, theme icon button, avatar.
 - **Header:** H1 + item count, or a breadcrumb inside folders. Filter chips go underneath.
 - **Content:** the file list or grid in one `raised-lg` panel. The right column (290 px) shows Transfers when active.
