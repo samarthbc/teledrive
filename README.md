@@ -142,8 +142,9 @@ android/        Android project (Capacitor); native code in app/src/main/java/co
 | 3 | Android app (Capacitor), share-to-app, camera backup, background transfers | ✅ Tested on a Redmi (Android 14) |
 | 4 | End-to-end encryption, duplicate detection, folder upload, ZIP download, send to Telegram, multiple drives, PWA | ✅ Being tested |
 | 5 | Camera backup upgrades: backup while the app is closed, more folders | ✅ Being tested |
-| 6 | UI updates: dark/light theme switch | ⏳ Later |
-| 7 | Deploy the website | ⏳ Later |
+| 6 | Security: TeleDrive password (every file encrypted), locked files and folders with their own passwords | ⏳ Next |
+| 7 | UI updates: dark/light theme switch | ⏳ Later |
+| 8 | Deploy the website | ⏳ Later |
 
 ## Tech stack
 

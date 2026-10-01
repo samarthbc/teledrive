@@ -411,17 +411,85 @@ Notes: WhatsApp *Sent* folders contain a `.nomedia` file, so Android doesn't ind
 
 ---
 
-## Phase 6: UI Updates
+## Phase 6: Security (TeleDrive password, locked files and folders)
 
-### 6.1 Dark/light theme
-- Dark mode already follows the system (Tailwind `dark:` classes).
-- Add a manual switch: System / Light / Dark, saved on the device.
+Replaces Phase 4's optional per-drive encryption. Every file is encrypted before it reaches Telegram;
+individual files and folders can additionally be locked with their own password.
+
+In the app, the two kinds of password are called **TeleDrive password** and **file/folder password**.
+(Internally: main key and local key.)
+
+### 6.1 Flows
+```
+Normal file:  upload → encrypt (file key, protected by the TeleDrive password) → Telegram → app fetches → decrypt → view
+Locked file:  upload → encrypt (file key, protected by the TeleDrive password + the file/folder password) → Telegram → …
+```
+
+### 6.2 TeleDrive password (main key)
+- **When:** right after Telegram's login (phone → code → Telegram 2-step password). First time ever: create it
+  (with a warning: it can't be recovered or changed). On every new device: enter it; a wrong one gets no further.
+- **Telegram never gets it.** A random 256-bit master key is generated once. It is stored on Telegram only
+  wrapped (AES-GCM) with a key derived from the password (PBKDF2-SHA256, 600k iterations, random salt).
+  That wrapped copy doubles as the **check value**: unwrapping succeeds only with the right password. It is not
+  a plain hash, which could be guessed billions of times per second; every guess costs a full PBKDF2.
+- **One password for the account:** every drive's pinned config message holds the same wrapped master key.
+- **On the device:** after entering it once, the keys are kept in IndexedDB as non-extractable `CryptoKey`s,
+  so the app doesn't ask again (needed for camera backup while the app is closed). Logging out removes them.
+- **Can't be changed** (no option in the app). Internally the master key stays wrapped, so a change would be
+  possible later without re-uploading.
+- **Lost password = every file in every drive is lost.**
+
+### 6.3 Every file encrypted
+- Each file gets its own **random file key** (256-bit). Content is encrypted with it in blocks whose
+  ciphertext is exactly 1 MB (as in Phase 4), so streaming, seeking and previews keep working.
+- The file key is stored in the caption **wrapped** by the key of its protection level:
+  - normal → the master key (via HKDF);
+  - inside a locked folder → that folder's lock key;
+  - locked file → its own lock key.
+- Names, types and hashes are sealed in the caption with the same key; thumbnails are encrypted with the file key.
+- Telegram sees only `<id>.bin` documents of a generic type, with no thumbnail.
+
+### 6.4 Locked files and folders (local key)
+- **Lock key:** each locked item gets a random lock key, wrapped so that opening it needs
+  the master key **and** its file/folder password (PBKDF2, own salt), **and**, if it is inside a locked folder,
+  that folder's lock key. The wrapped lock key is that item's check value.
+- **Locked folder:** hides its contents (names, thumbnails, number of items). Unlocking it shows what's inside.
+  Normal files inside then open directly; a locked file inside still needs its own password.
+  Nested locks need each password, from the outside in.
+- **Locking, removing a lock, or changing an item's password requires the TeleDrive password** (proves it's
+  really the owner), then the new file/folder password (entered twice).
+- **Instant:** locking/unlocking or moving into/out of a locked folder only re-wraps small keys in captions;
+  nothing is re-uploaded. Caveat: Telegram may keep the old caption, so for items locked *after* upload an
+  optional **Re-encrypt** re-uploads them with a fresh file key.
+- **Unlocked state** lives in memory only: it ends when the item is locked again, the app closes, or after
+  5 minutes of inactivity. Never remembered on the device.
+- **While locked:** shown as "Locked file/folder" with a lock; can be moved or trashed; can't be opened,
+  previewed or downloaded. Locked items (and anything inside locked folders) **can't be sent** to Telegram chats,
+  and can't be a camera backup destination.
+
+### 6.5 Sending files to Telegram chats
+- Normal files are decrypted on the device and uploaded as a normal copy into the chat (slower than
+  Phase 4's instant re-send, uses data). Locked items are refused.
+
+### 6.6 Removed
+- Phase 4's optional per-drive password encryption and its "Encryption" settings (the drive will be emptied,
+  so there's nothing to migrate).
 
 **Phase 6 done when:** every item under REQUIREMENTS §4.6 is checked.
 
 ---
 
-## Phase 7: Deploy the Website (later)
+## Phase 7: UI Updates
+
+### 7.1 Dark/light theme
+- Dark mode already follows the system (Tailwind `dark:` classes).
+- Add a manual switch: System / Light / Dark, saved on the device.
+
+**Phase 7 done when:** every item under REQUIREMENTS §4.7 is checked.
+
+---
+
+## Phase 8: Deploy the Website (later)
 - `npm run build` → deploy `dist/` to Cloudflare Pages or GitHub Pages.
 - Decide then: build **with** keys (personal) or **without** (users enter their own on the Setup page).
 

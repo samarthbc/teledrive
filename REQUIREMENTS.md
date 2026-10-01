@@ -140,10 +140,20 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Automatic backup while the app is closed (Android runs it in the background when new photos appear)
 - [x] Back up more folders (Screenshots, WhatsApp Images, …), each into its own subfolder
 
-### 4.6 UI updates
+### 4.6 Security
+- [ ] **TeleDrive password**, created at first login and entered on each new device (after Telegram's own login);
+      checked against a check value stored on Telegram; remembered on the device; can't be changed or recovered
+- [ ] Every file encrypted before it reaches Telegram (contents, names, thumbnails); Telegram never gets the password
+- [ ] **Locked files and folders**, each with its own file/folder password; a locked folder hides its contents;
+      nested locks need each password
+- [ ] Locking, removing a lock or changing an item's password requires the TeleDrive password
+- [ ] Locked items relock after 5 minutes idle or when the app closes; they can't be sent to chats
+- [ ] Sending normal files to Telegram chats still works (a decrypted copy is uploaded)
+
+### 4.7 UI updates
 - [ ] Dark and light theme with a manual switch (today it only follows the system)
 
-### 4.7 Later: put the website online
+### 4.8 Later: put the website online
 - [ ] Deploy the website (Cloudflare Pages or GitHub Pages)
 
 ---
