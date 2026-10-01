@@ -23,7 +23,7 @@ import {
 } from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import {
-  breadcrumbs, childLevel, collectTree, messageIds, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
+  breadcrumbs, childLevel, collectTree, containsLocked, messageIds, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
   type FileItem, type Item,
 } from '../drive/tree'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
@@ -51,6 +51,7 @@ type Modal =
   | { type: 'move'; items: Item[] }
   | { type: 'deleteForever'; items: Item[] }
   | { type: 'emptyTrash' }
+  | { type: 'trashLocked'; items: Item[] }
   | { type: 'details'; item: Item }
   | { type: 'logout' }
   | { type: 'backup' }
@@ -284,7 +285,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     })
   }
 
+  /** Locked items (or folders with locked items inside) need the TeleDrive password to be deleted. */
   const moveToTrash = async (list: Item[]) => {
+    if (containsLocked(useDrive.getState().drive, list)) return setModal({ type: 'trashLocked', items: list })
+    await trashNow(list)
+  }
+
+  const trashNow = async (list: Item[]) => {
     await trash(list)
     clearSelection()
     const what = list.length === 1 ? `“${list[0].name}”` : `${list.length} items`
@@ -777,11 +784,29 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           danger
           confirmLabel="Delete forever"
           message={<DeleteMessage items={modal.items} />}
+          requirePassword={
+            containsLocked(drive, modal.items) ? 'Locked items are included. Enter your TeleDrive password to delete them.' : undefined
+          }
           onConfirm={async () => {
             await remove(useDrive.getState().drive, modal.items)
             clearSelection()
             toast('Deleted forever')
           }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'trashLocked' && (
+        <ConfirmDialog
+          title="Move to trash?"
+          danger
+          confirmLabel="Move to trash"
+          message={
+            modal.items.length === 1 && modal.items[0].lock
+              ? `“${modal.items[0].name}” is locked. Items in the trash are deleted forever after ${TRASH_DAYS} days.`
+              : `This includes locked items. Items in the trash are deleted forever after ${TRASH_DAYS} days.`
+          }
+          requirePassword="Enter your TeleDrive password to confirm it's you."
+          onConfirm={() => trashNow(modal.items)}
           onClose={() => setModal(null)}
         />
       )}
@@ -791,6 +816,11 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           danger
           confirmLabel="Empty trash"
           message="Everything in the trash will be deleted from Telegram. This can't be undone."
+          requirePassword={
+            containsLocked(drive, trashedItems(drive))
+              ? 'The trash has locked items. Enter your TeleDrive password to delete them.'
+              : undefined
+          }
           onConfirm={async () => {
             const n = await emptyTrash(useDrive.getState().drive)
             toast(`Deleted ${n} item${n === 1 ? '' : 's'} forever`)

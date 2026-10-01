@@ -147,6 +147,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] **Locked files and folders**, each with its own file/folder password; a locked folder hides its contents;
       nested locks need each password
 - [x] Locking, removing a lock or changing an item's password requires the TeleDrive password
+- [x] Deleting locked items (trash, delete forever, empty trash; also when inside a folder) requires the TeleDrive password
 - [x] Locked items relock after 5 minutes idle or when the app closes; they can't be sent to chats
 - [x] Sending normal files to Telegram chats still works (a decrypted copy is uploaded)
 

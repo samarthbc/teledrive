@@ -458,6 +458,9 @@ Locked file:  upload → encrypt (file key, protected by the TeleDrive password 
   Nested locks need each password, from the outside in.
 - **Locking, removing a lock, or changing an item's password requires the TeleDrive password** (proves it's
   really the owner), then the new file/folder password (entered twice).
+- **Deleting needs the TeleDrive password too:** moving a locked item (or a folder with a locked item
+  anywhere inside) to the trash, deleting it forever, or emptying a trash that holds one. The trash's
+  30-day auto-delete doesn't ask (those items were confirmed when trashed). `containsLocked()` in `tree.ts`.
 - **Instant:** locking/unlocking or moving into/out of a locked folder only re-wraps small keys in captions;
   nothing is re-uploaded. Caveat: Telegram may keep the old caption, so for items locked *after* upload an
   optional **Re-encrypt** re-uploads them with a fresh file key.

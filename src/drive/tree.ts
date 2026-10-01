@@ -431,3 +431,8 @@ export function zipEntries(drive: Drive, items: Item[]): { entries: ZipEntry[]; 
   for (const item of items) walk(item, '')
   return { entries, skipped, bytes }
 }
+
+/** True if any of these items, or anything inside them, has its own lock (deleting them needs the TeleDrive password). */
+export function containsLocked(drive: Drive, items: Item[]): boolean {
+  return items.some((i) => collectTree(drive, i.id).some((x) => !!x.lock))
+}
