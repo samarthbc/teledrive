@@ -18,7 +18,7 @@
   --red-strong: #b00117;
   --red-text: #b80218;
   --scrim: rgba(17, 17, 17, 0.28);
-  --float-shadow: 0 24px 60px rgba(17, 17, 17, 0.22), 0 4px 12px rgba(17, 17, 17, 0.1);
+  --float-shadow: 0 0 0 1px rgba(17, 17, 17, 0.08), 0 0 64px rgba(17, 17, 17, 0.55), 0 20px 44px rgba(17, 17, 17, 0.3);
   color-scheme: light;
 }
 :root[data-theme='dark'] {
@@ -32,7 +32,7 @@
   --red-strong: #c81925;
   --red-text: #ff5a63;
   --scrim: rgba(0, 0, 0, 0.5);
-  --float-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --float-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 20px rgba(255, 255, 255, 0.1), 0 0 64px rgba(255, 255, 255, 0.22);
   color-scheme: dark;
 }
 
@@ -95,8 +95,8 @@ body {
   box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
 }
 
-/* Things floating above the page (dialogs, menus, drawers): a plain drop shadow. The soft
-   highlight of raised-* would show as a white glow over the darkened page. */
+/* Things floating above the page (dialogs, menus, drawers): a glow all round, dark in the light
+   theme and light in the dark theme, instead of raised-*'s two-sided soft shadow. */
 @utility lift {
   box-shadow: var(--float-shadow);
 }

@@ -106,7 +106,7 @@ Every depth is the same formula at a different distance `d`:
 | `raised-md` | 5–6 | Grid cards, toasts, bottom nav, + button |
 | `raised-lg` | 8 | Panels: sidebar, file list, transfers card |
 | `raised-xl` | 10–12 | The sign-in card (on the page) |
-| `lift` | — | **Anything floating above the page** (dialogs, menus, the phone drawer): a plain dark drop shadow, no white highlight, which would glow over the darkened page |
+| `lift` | — | **Anything floating above the page** (dialogs, menus, the phone drawer): a glow all round — dark in the light theme, light in the dark theme — plus a 1 px edge. Not the two-sided soft shadow, whose white side looks wrong over the darkened page |
 | `pressed-xs` | 2 | Progress tracks, selected menu item, sheet handle |
 | `pressed` | 3–4 | Inputs, search, active nav / chip, selected row, storage card |
 | `pressed-lg` | 5 | Empty-state well, locked / folder thumbnails |
