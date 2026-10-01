@@ -534,7 +534,7 @@ website online. Same web build, wrapped with Electron (as Phase 3 wraps it for A
 | Decision | Reason |
 |---|---|
 | **Electron** (not Tauri or the PWA) | Tauri needs the Rust toolchain; the PWA still loads from a server. Electron is Chromium, so GramJS, IndexedDB, the streaming service worker and the save/folder pickers work unchanged |
-| Files served through an **`app://teledrive`** scheme, not `file://` or a local HTTP server | A fixed, secure origin: the login session and drive cache stay between launches, the service worker can register, and no port is opened |
+| The app answers **`https://teledrive.invalid`** itself (Electron intercepts that one host), not `file://`, a custom scheme or a local HTTP server | A fixed, secure origin: the login session and drive cache stay between launches, the service worker can register, and no port is opened. `.invalid` is reserved and never exists online. It must be http(s): on a custom `app://` scheme Chromium took the streaming worker's first 2 MB reply for the whole video, so videos over 2 MB wouldn't play (tried first, fixed) |
 | **electron-builder**, one-click **NSIS installer**, per user | No admin rights; Start menu and desktop shortcuts; uninstall from Windows Settings |
 | `npmRebuild: false`, `node_modules` not packed | The web build is already bundled in `dist/`; packing dependencies would only add native modules that need Visual Studio |
 | Installer written to `%LOCALAPPDATA%\TeleDrive-build` | Building inside the project fails on Windows when VS Code's file watcher holds the staging folder (`EPERM … rename win-unpacked.tmp`) |
@@ -561,8 +561,10 @@ code, run `npm run desktop:build` again and re-run the installer (your login and
 The app keeps its data in `%APPDATA%\TeleDrive`; uninstalling the app doesn't delete it.
 
 ### Checked on this PC
-The packaged app loads from `app://teledrive`, the streaming service worker controls the page,
+The packaged app loads from `https://teledrive.invalid`, the streaming service worker controls the page,
 `showSaveFilePicker` / `showDirectoryPicker` are available, and GramJS connects to Telegram (DC 4).
+Streaming checked with a 9 MB MP4 answered in 2 MB pieces through the worker: it opens and seeks.
+Codecs: H.264, HEVC, VP9 and AAC are supported.
 
 **Phase 8 done when:** the installed app logs in, browses, uploads, downloads, previews and streams video
 like the browser version, and keeps you logged in after a restart.

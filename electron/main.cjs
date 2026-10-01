@@ -1,13 +1,17 @@
-// TeleDrive desktop app (Windows): the same web build in its own window, served from the app's
-// files through an app:// scheme, so no server needs to run. See IMPLEMENTATION.md Phase 8.
+// TeleDrive desktop app (Windows): the same web build in its own window, served from the app's own
+// files, so no server needs to run. See IMPLEMENTATION.md Phase 8.
 
-const { app, BrowserWindow, Menu, ipcMain, nativeTheme, protocol, screen, shell } = require('electron')
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme, net, protocol, screen, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const SCHEME = 'app'
-const HOST = 'teledrive'
-const ORIGIN = `${SCHEME}://${HOST}`
+// The app answers https://teledrive.invalid itself; nothing goes to the network (.invalid is a
+// reserved name that never exists online). A fixed origin keeps the login session and drive cache
+// between launches. It must be http(s): Chromium only streams video in pieces (Range requests,
+// answered by public/sw.js) on http(s) addresses; on a custom app:// scheme it took the first 2 MB
+// piece for the whole file, so videos over 2 MB failed to play.
+const HOST = 'teledrive.invalid'
+const ORIGIN = `https://${HOST}`
 const DIST = path.join(__dirname, '..', 'dist')
 const STATE_FILE = path.join(app.getPath('userData'), 'window.json')
 const BACKGROUND = { light: '#e6e6e3', dark: '#1f2023' }
@@ -31,15 +35,6 @@ const TYPES = {
   '.pfb': 'application/octet-stream',
 }
 
-// A fixed, secure origin: the login session and files index (IndexedDB) stay between launches,
-// and the streaming service worker (public/sw.js) can register.
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: SCHEME,
-    privileges: { standard: true, secure: true, supportFetchAPI: true, allowServiceWorkers: true, corsEnabled: true, stream: true, codeCache: true },
-  },
-])
-
 // One window: a second launch focuses the open one (the drive allows one open copy anyway)
 if (!app.requestSingleInstanceLock()) app.quit()
 
@@ -52,7 +47,9 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
-  protocol.handle(SCHEME, serve)
+  // Every other https request goes out as usual (Telegram itself uses WebSockets, not this)
+  protocol.handle('https', (request) =>
+    new URL(request.url).host === HOST ? serve(request) : net.fetch(request, { bypassCustomProtocolHandlers: true }))
   Menu.setApplicationMenu(null)
   // The renderer reports the theme choice so the title bar matches it (System / Light / Dark)
   ipcMain.on('td-theme', (_e, mode) => {
@@ -67,7 +64,6 @@ app.on('window-all-closed', () => app.quit())
 
 async function serve(request) {
   const url = new URL(request.url)
-  if (url.host !== HOST) return new Response('Not found', { status: 404 })
   const rel = decodeURIComponent(url.pathname)
   const file = path.normalize(path.join(DIST, rel === '/' ? 'index.html' : rel))
   // Nothing outside the build folder

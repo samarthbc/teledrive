@@ -141,7 +141,7 @@ src/
 └── native/     Android bridge (downloads, share-to-app, camera backup, notification, back button); desktop bridge
 public/sw.js    service worker for video/audio streaming
 android/        Android project (Capacitor); native code in app/src/main/java/com/samarthbc/teledrive/
-electron/       Windows app (Electron): window, app:// file serving, preload
+electron/       Windows app (Electron): window, serving the app's files, preload
 ```
 
 ## Privacy and safety
