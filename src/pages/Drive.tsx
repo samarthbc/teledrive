@@ -1,7 +1,7 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, ChevronRight, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen,
   FolderPlus, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Trash2,
-  TriangleAlert, X, ExternalLink, Lock, Send,
+  TriangleAlert, X, ExternalLink, KeyRound, Lock, LockOpen, RefreshCcwDot, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -17,10 +17,13 @@ import Toasts from '../components/Toasts'
 import TransferPanel from '../components/TransferPanel'
 import { downloadFile, downloadZip, pickSaveTarget, pickSaveTargets } from '../drive/download'
 import { ROOT } from '../drive/meta'
-import { createFolder, emptyTrash, move, remove, rename, restore, setStarred, trash, TRASH_DAYS } from '../drive/ops'
+import {
+  createFolder, deleteMessages, emptyTrash, filesToReencrypt, move, relockItem, remove, rename, restore, setStarred, trash,
+  TRASH_DAYS,
+} from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import {
-  breadcrumbs, collectTree, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
+  breadcrumbs, childLevel, collectTree, messageIds, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
   type FileItem, type Item,
 } from '../drive/tree'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
@@ -28,13 +31,14 @@ import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } fr
 import { useBackHandler } from '../native/backButton'
 import { useIncomingShares } from '../native/share'
 import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
-import EncryptionDialog from '../components/dialogs/EncryptionDialog'
+import LockDialog, { type LockAction } from '../components/dialogs/LockDialog'
 import DuplicatesDialog, { type Duplicate } from '../components/dialogs/DuplicatesDialog'
 import SendDialog from '../components/dialogs/SendDialog'
 import { cantSend } from '../telegram/share'
 import { sha256 } from '../drive/hash'
 import { createFolders, treeFromDrop, treeFromInput, type PickedTree } from '../drive/folderUpload'
-import { encrypting, needsUnlock } from '../drive/vault'
+import { closeAllLocks, holdOpen } from '../drive/keyring'
+import { DriveFileUpload } from '../drive/stream'
 import { FILTERS, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, useRootName, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
@@ -50,7 +54,7 @@ type Modal =
   | { type: 'details'; item: Item }
   | { type: 'logout' }
   | { type: 'backup' }
-  | { type: 'encryption'; reason?: string; then?: () => void }
+  | { type: 'lock'; item: Item; action: LockAction; then?: (item: Item) => void }
   | { type: 'send'; files: FileItem[] }
   | { type: 'newDrive' }
   | { type: 'duplicates'; duplicates: Duplicate[]; total: number; onSkip: () => void; onUploadAll: () => void }
@@ -74,8 +78,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
-  const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout, unlocked } = useDrive()
-  const locked = !!drive.encryption && !unlocked
+  const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout } = useDrive()
+  const anyUnlocked = useMemo(() => [...drive.items.values()].some((i) => i.lock && !i.locked), [drive])
   const rootName = useRootName()
 
   const [modal, setModal] = useState<Modal | null>(null)
@@ -119,6 +123,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const selection = [...selected].flatMap((id) => byId.get(id) ?? [])
 
+  // A file that just locked again (or vanished into a locked folder) can't stay on screen
+  useEffect(() => {
+    const f = preview?.files[preview.index]
+    const now = f && drive.items.get(f.id)
+    if (f && (!now || now.locked || now.concealed)) setPreview(null)
+  }, [drive, preview])
+
   // Selection belongs to the page being viewed
   useEffect(() => {
     setSelected(new Set())
@@ -144,13 +155,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   // ---- Actions ----
 
-  /** Run `action` now, or after the user unlocks encryption (needed to add encrypted files and folders). */
-  const whenUnlocked = (reason: string, action: () => void) => {
-    if (needsUnlock(useDrive.getState().drive)) setModal({ type: 'encryption', reason, then: action })
-    else action()
-  }
-  const newFolder = () =>
-    whenUnlocked('Encryption is on for this drive. Unlock it to add folders.', () => setModal({ type: 'newFolder' }))
+  const newFolder = () => setModal({ type: 'newFolder' })
 
   const upload = async (files: UploadSource[], into?: string) => {
     const target = into ?? (mode === 'folder' ? current : ROOT)
@@ -159,26 +164,23 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   }
 
   /** Upload a picked or dropped folder: recreate its folders, then upload the files into them. */
-  const uploadTree = (tree: PickedTree, into?: string) =>
-    whenUnlocked('Encryption is on for this drive. Unlock it to upload.', () => {
-      const target = into ?? (mode === 'folder' ? current : ROOT)
-      void act(
-        (async () => {
-          if (!tree.files.length && !tree.folders.length) return
-          const n = tree.folders.length
-          if (n > 1) toast(`Creating ${n} folders…`)
-          const ids = await createFolders(() => useDrive.getState().drive, target, tree.folders)
-          await queueUploads(tree.files.map(({ file, dirs }) => ({ file, folder: dirs.length ? ids.get(dirs.join('/'))! : target })))
-          if (!tree.files.length) toast(n === 1 ? 'Folder created (it was empty)' : `${n} folders created (no files in them)`)
-        })(),
-      )
-    })
+  const uploadTree = (tree: PickedTree, into?: string) => {
+    const target = into ?? (mode === 'folder' ? current : ROOT)
+    void act(
+      (async () => {
+        if (!tree.files.length && !tree.folders.length) return
+        const n = tree.folders.length
+        if (n > 1) toast(`Creating ${n} folders…`)
+        const ids = await createFolders(() => useDrive.getState().drive, target, tree.folders)
+        await queueUploads(tree.files.map(({ file, dirs }) => ({ file, folder: dirs.length ? ids.get(dirs.join('/'))! : target })))
+        if (!tree.files.length) toast(n === 1 ? 'Folder created (it was empty)' : `${n} folders created (no files in them)`)
+      })(),
+    )
+  }
 
   /** Check for duplicates (asking what to do if there are any), then queue the uploads. */
   const queueUploads = async (jobs: UploadJob[]) => {
     const drv = useDrive.getState().drive
-    if (needsUnlock(drv))
-      return setModal({ type: 'encryption', reason: 'Encryption is on for this drive. Unlock it to upload.', then: () => void queueUploads(jobs) })
 
     // Only files with the same size as one already in the drive can be duplicates; hash just those
     const hashes = new Map<UploadJob, string>()
@@ -208,7 +210,6 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const enqueueUploads = async (jobs: UploadJob[], hashes: Map<UploadJob, string>) => {
     const drv = useDrive.getState().drive
-    const encrypt = encrypting(drv)
     const taken = new Set<string>()
     for (const job of jobs) {
       const { file, folder } = job
@@ -222,7 +223,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       taken.add(`${folder}|${name.toLowerCase()}`)
       if (resumable) toast(`Resuming upload of “${name}”`)
       const hash = hashes.get(job)
-      enqueue('upload', name, file.size, (ctl) => uploadFile(file, name, folder, ctl, { encrypt, hash }), async () => {
+      enqueue('upload', name, file.size, (ctl) => uploadFile(file, name, folder, ctl, { level: childLevel(drv, folder), hash }), async () => {
         const state = await findResumable(file, folder)
         if (state) await discard(state)
       })
@@ -230,7 +231,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   }
 
   const download = async (list: Item[]) => {
-    if (list.some((i) => i.locked)) return setModal({ type: 'encryption', reason: 'Unlock encrypted files to download them.' })
+    const locked = list.find((i) => i.locked)
+    if (locked) return list.length === 1 ? askUnlock(locked) : toastError(new Error('Unlock the locked items first'))
     if (list.some((i) => i.kind === 'folder')) return downloadAsZip(list)
     const files = list.filter((i): i is FileItem => i.kind === 'file' && i.complete)
     if (!files.length) return toastError(new Error("These files are incomplete and can't be downloaded"))
@@ -301,9 +303,44 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     toast(star ? 'Added to Starred' : 'Removed from Starred')
   }
 
+  /** Ask for a locked item's password, then do `then` with the unlocked item (by default, open it). */
+  const askUnlock = (item: Item, then: (item: Item) => void = open) =>
+    setModal({
+      type: 'lock',
+      item,
+      action: 'unlock',
+      // The tree is rebuilt with its real name right after; wait for that
+      then: (i) => void waitForItem(i.id, (x) => !x.locked).then((fresh) => fresh && then(fresh)),
+    })
+
+  /** Upload a locked item's files again with new keys, then delete the old copies. */
+  const reencrypt = async (item: Item) => {
+    const release = holdOpen()
+    const fresh = await waitForItem(item.id, (i) => !!i.lock && !i.locked)
+    if (!fresh) {
+      release()
+      return toastError(new Error('Unlock it first to re-encrypt it'))
+    }
+    const drv = useDrive.getState().drive
+    const files = filesToReencrypt(drv, fresh).filter((f): f is FileItem => f.kind === 'file' && f.complete)
+    if (!files.length) return release()
+    let left = files.length
+    toast(files.length === 1 ? `Re-encrypting “${files[0].name}”` : `Re-encrypting ${files.length} files`)
+    for (const f of files) {
+      enqueue('upload', `${f.name} (re-encrypting)`, f.size, async (ctl) => {
+        try {
+          await uploadFile(new DriveFileUpload(f), f.name, f.parent, ctl, { level: f.level, hash: f.hash, lock: f.lock, flags: f.x })
+          await deleteMessages(messageIds([f]))
+        } finally {
+          if (--left === 0) release()
+        }
+      })
+    }
+  }
+
   const open = (item: Item) => {
     if (mode === 'trash') return setModal({ type: 'details', item })
-    if (item.locked) return setModal({ type: 'encryption', reason: 'This item is encrypted. Enter your password to open it.' })
+    if (item.locked) return askUnlock(item)
     if (item.kind === 'folder') return openFolder(item.id)
     const files = items.filter((i): i is FileItem => i.kind === 'file' && !i.locked)
     setPreview({ files, index: files.findIndex((f) => f.id === item.id) })
@@ -361,7 +398,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       ]
     if (item.locked)
       return [
-        { label: 'Unlock', icon: Lock, onClick: () => setModal({ type: 'encryption' }) },
+        { label: 'Unlock', icon: LockOpen, onClick: () => askUnlock(item) },
         { label: 'Move', icon: FolderInput, onClick: () => setModal({ type: 'move', items: [item] }) },
         { label: 'Details', icon: Info, onClick: () => setModal({ type: 'details', item }) },
         { label: 'Move to trash', icon: Trash2, danger: true, onClick: () => void act(moveToTrash([item])) },
@@ -376,13 +413,23 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       ...(isAndroid && item.kind === 'file'
         ? [{ label: 'Open with…', icon: ExternalLink, onClick: () => openWith(item), disabled: !item.complete }]
         : []),
-      ...(item.kind === 'file' ? [{ label: 'Send to Telegram…', icon: Send, onClick: () => sendToTelegram([item]) }] : []),
+      ...(item.kind === 'file'
+        ? [{ label: 'Send to Telegram…', icon: Send, onClick: () => sendToTelegram([item]), disabled: !!cantSend(item) }]
+        : []),
       ...(mode !== 'folder' ? [{ label: 'Show in folder', icon: FolderInput, onClick: () => openFolder(item.parent) }] : []),
       { label: 'Rename', icon: Pencil, onClick: () => setModal({ type: 'rename', item }) },
       { label: 'Move', icon: FolderInput, onClick: () => setModal({ type: 'move', items: [item] }) },
       item.x.fav
         ? { label: 'Remove from Starred', icon: StarOff, onClick: () => void act(toggleStar([item])) }
         : { label: 'Add to Starred', icon: Star, onClick: () => void act(toggleStar([item])) },
+      ...(item.lock
+        ? [
+            { label: 'Lock now', icon: Lock, onClick: () => relockItem(item) },
+            { label: 'Change password…', icon: KeyRound, onClick: () => setModal({ type: 'lock', item, action: 'change' }) },
+            { label: 'Re-encrypt', icon: RefreshCcwDot, onClick: () => void act(reencrypt(item)) },
+            { label: 'Remove lock…', icon: LockOpen, onClick: () => setModal({ type: 'lock', item, action: 'remove' }) },
+          ]
+        : [{ label: 'Lock…', icon: Lock, onClick: () => setModal({ type: 'lock', item, action: 'lock' }) }]),
       { label: 'Details', icon: Info, onClick: () => setModal({ type: 'details', item }) },
       { label: 'Move to trash', icon: Trash2, danger: true, onClick: () => void act(moveToTrash([item])) },
     ]
@@ -462,7 +509,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       onUploadFolder={isAndroid ? undefined : () => folderInput.current?.click()}
       onNewFolder={newFolder}
       onLogout={() => setModal({ type: 'logout' })}
-      onEncryption={() => setModal({ type: 'encryption' })}
+      onLockAll={anyUnlocked ? closeAllLocks : undefined}
       onSwitchDrive={(id) => {
         if (id === useDrive.getState().currentDrive) return
         // Folder links belong to one drive, so start at the top of the other one
@@ -620,16 +667,6 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   {FILTERS[key].label}
                 </button>
               ))}
-            </div>
-          )}
-          {locked && mode !== 'trash' && (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">
-              <span className="flex items-center gap-2">
-                <Lock className="h-4 w-4 shrink-0" /> Encrypted files are locked on this device.
-              </span>
-              <button className="btn-ghost py-1 text-brand" onClick={() => setModal({ type: 'encryption' })}>
-                Unlock
-              </button>
             </div>
           )}
           {mode === 'trash' && items.length > 0 && (
@@ -802,8 +839,14 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           onClose={() => setModal(null)}
         />
       )}
-      {modal?.type === 'encryption' && (
-        <EncryptionDialog reason={modal.reason} onUnlocked={modal.then} onClose={() => setModal(null)} />
+      {modal?.type === 'lock' && (
+        <LockDialog
+          item={modal.item}
+          action={modal.action}
+          onUnlocked={modal.then}
+          onReencrypt={(item) => void act(reencrypt(item))}
+          onClose={() => setModal(null)}
+        />
       )}
       {shares.length > 0 && !modal && (
         <MoveDialog
@@ -927,10 +970,34 @@ function DeleteMessage({ items }: { items: Item[] }) {
   const drive = useDrive((s) => s.drive)
   const inside = items.reduce((n, i) => n + collectTree(drive, i.id).length - 1, 0)
   const what = items.length === 1 ? `“${items[0].name}”` : `${items.length} items`
+  // Don't reveal how much a locked folder holds
+  const hidden = items.some((i) => i.kind === 'folder' && i.locked)
   return (
     <p>
       {what}
-      {inside > 0 && ` and ${inside} item${inside > 1 ? 's' : ''} inside`} will be deleted from Telegram. This can't be undone.
+      {hidden ? ' and everything inside' : inside > 0 && ` and ${inside} item${inside > 1 ? 's' : ''} inside`} will be deleted
+      from Telegram. This can't be undone.
     </p>
   )
+}
+
+/** Wait until the rebuilt tree shows an item in the expected state (e.g. unlocked). */
+function waitForItem(id: string, ok: (item: Item) => boolean, ms = 10_000): Promise<Item | undefined> {
+  return new Promise((resolve) => {
+    let finished = false
+    const finish = (item?: Item) => {
+      if (finished) return
+      finished = true
+      clearTimeout(timer)
+      unsubscribe()
+      resolve(item)
+    }
+    const check = () => {
+      const item = useDrive.getState().drive.items.get(id)
+      if (item && ok(item)) finish(item)
+    }
+    const timer = setTimeout(() => finish(), ms)
+    const unsubscribe = useDrive.subscribe(check)
+    check()
+  })
 }

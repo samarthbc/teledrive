@@ -22,7 +22,9 @@ export default function MoveDialog(props: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const blocked = (id: string) => items.some((i) => i.kind === 'folder' && isDescendant(drive, id, i.id))
+  // Can't go into itself, or into a locked folder that isn't unlocked
+  const blocked = (id: string) =>
+    !!drive.items.get(id)?.locked || items.some((i) => i.kind === 'folder' && isDescendant(drive, id, i.id))
   const folders = listFolder(drive, current)
     .filter((i) => i.kind === 'folder')
     .sort((a, b) => a.name.localeCompare(b.name))

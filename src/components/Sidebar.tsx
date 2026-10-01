@@ -1,5 +1,5 @@
 import {
-  Camera, Check, ChevronDown, Clock, Download, FolderPlus, Plus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
+  Camera, Check, ChevronDown, Clock, Download, FolderPlus, Plus, FolderUp, HardDrive, Lock, LogOut, Send, ShieldCheck, Star, Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -15,13 +15,14 @@ export default function Sidebar(props: {
   onUploadFolder?: () => void
   onNewFolder: () => void
   onLogout: () => void
-  onEncryption: () => void
+  /** Shown while some locked items are unlocked. */
+  onLockAll?: () => void
   onSwitchDrive: (id: string) => void
   onNewDrive: () => void
   /** Only in the Android app. */
   onCameraBackup?: () => void
 }) {
-  const { onUpload, onUploadFolder, onNewFolder, onLogout, onEncryption, onSwitchDrive, onNewDrive, onCameraBackup } = props
+  const { onUpload, onUploadFolder, onNewFolder, onLogout, onLockAll, onSwitchDrive, onNewDrive, onCameraBackup } = props
   const drives = useDrive((s) => s.drives)
   const currentDrive = useDrive((s) => s.currentDrive)
   const [picking, setPicking] = useState(false)
@@ -29,8 +30,6 @@ export default function Sidebar(props: {
   const rootName = useRootName()
   const canInstall = useInstall((s) => !!s.event)
   const drive = useDrive((s) => s.drive)
-  const unlocked = useDrive((s) => s.unlocked)
-  const EncIcon = !drive.encryption ? ShieldCheck : unlocked ? LockOpen : Lock
   const { pathname } = useLocation()
   const stats = driveStats(drive)
   const inDrive = pathname === '/' || pathname.startsWith('/folder/')
@@ -109,13 +108,15 @@ export default function Sidebar(props: {
             <Camera className="h-4 w-4" /> Camera backup
           </button>
         )}
-        <button
-          className="btn w-full justify-start text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
-          onClick={onEncryption}
-        >
-          <EncIcon className="h-4 w-4" /> Encryption
-          <span className="ml-auto text-xs text-slate-400">{!drive.encryption ? 'Off' : unlocked ? 'Unlocked' : 'Locked'}</span>
-        </button>
+        {onLockAll && (
+          <button
+            className="btn w-full justify-start text-slate-700 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
+            onClick={onLockAll}
+          >
+            <Lock className="h-4 w-4" /> Lock all
+            <span className="ml-auto text-xs text-slate-400">unlocked items</span>
+          </button>
+        )}
       </nav>
 
       <div className="mt-auto space-y-3">
@@ -124,7 +125,9 @@ export default function Sidebar(props: {
           <p>
             {stats.files} file{stats.files === 1 ? '' : 's'} · {stats.folders} folder{stats.folders === 1 ? '' : 's'}
           </p>
-          <p className="mt-1 text-slate-400">Unlimited storage on Telegram</p>
+          <p className="mt-1 flex items-center gap-1 text-slate-400">
+            <ShieldCheck className="h-3.5 w-3.5" /> Encrypted · unlimited on Telegram
+          </p>
         </div>
         {canInstall && (
           <button className="btn-ghost w-full justify-start" onClick={() => void installApp()}>

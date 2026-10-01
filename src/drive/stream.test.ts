@@ -29,7 +29,7 @@ const { readRange } = await import('./stream')
 const doc = (size: number) => ({ docId: '1', accessHash: '1', fileRef: new Uint8Array(), dcId: 1, size })
 const file: FileItem = {
   kind: 'file', id: 'f', parent: 'root', name: 'v.mp4', msgId: 1, ts: 0, x: {}, mime: 'video/mp4',
-  size: PART1 + 1.5 * MB, partsTotal: 2, complete: true, locked: false,
+  size: PART1 + 1.5 * MB, partsTotal: 2, complete: true, locked: false, level: 'root', concealed: false,
   parts: [{ pt: 1, msgId: 1, doc: doc(PART1) }, { pt: 2, msgId: 2, doc: doc(1.5 * MB) }],
 }
 

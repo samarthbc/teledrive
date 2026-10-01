@@ -1,6 +1,6 @@
 // Caption metadata format. See IMPLEMENTATION.md → "Metadata design".
 
-import type { EncryptionConfig } from './crypto'
+import type { AccountConfig, LockInfo } from './crypto'
 
 export const FORMAT_VERSION = 1
 export const ROOT = 'root'
@@ -32,6 +32,8 @@ export interface FolderMeta {
   x?: Flags
   /** Encrypted Secret (base64), when x.enc is set. */
   e?: string
+  /** Set when the folder is locked with its own password. */
+  l?: LockInfo
 }
 
 export interface FileMeta {
@@ -49,8 +51,10 @@ export interface FileMeta {
   h?: string
   /** Encrypted Secret (base64), when x.enc is set. */
   e?: string
-  /** Salt of the file's encryption key (base64), when x.enc is set. */
+  /** The file's key, wrapped by its level's key (base64), when x.enc is set. */
   k?: string
+  /** Set when the file is locked with its own password. */
+  l?: LockInfo
 }
 
 export interface ChunkMeta {
@@ -65,8 +69,8 @@ export interface ConfigMeta {
   td: 1
   t: 'cfg'
   app: 'teledrive'
-  /** Set once encryption is turned on for this drive. */
-  e?: EncryptionConfig
+  /** The TeleDrive password's check value (the master key, wrapped). */
+  e?: AccountConfig
 }
 
 export type Meta = FolderMeta | FileMeta | ChunkMeta | ConfigMeta
@@ -84,8 +88,13 @@ const isInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) 
 const isPartIndex = (v: unknown): v is number => isInt(v) && (v as number) >= 1
 const isHash = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v)
 
-function isEncryptionConfig(v: unknown): v is EncryptionConfig {
-  const c = v as EncryptionConfig
+function isLock(v: unknown): v is LockInfo {
+  const l = v as LockInfo
+  return !!l && typeof l === 'object' && isStr(l.s) && isStr(l.w) && isInt(l.i) && l.i > 0
+}
+
+function isAccountConfig(v: unknown): v is AccountConfig {
+  const c = v as AccountConfig
   return !!c && typeof c === 'object' && c.v === 1 && isStr(c.id) && isStr(c.s) && isStr(c.k) && isInt(c.i) && c.i > 0
 }
 
@@ -103,11 +112,12 @@ export function decode(text: string | undefined | null): Meta | null {
   // Encrypted items carry their name in `e` instead of `n`
   const sealed = x?.enc === 1 && isStr(o.e) ? o.e : undefined
   const name = sealed ? '' : o.n
+  const lock = sealed && isLock(o.l) ? { l: o.l } : {}
 
   switch (o.t) {
     case 'd':
       if (!isStr(o.id) || !isStr(o.p) || !(sealed || isStr(name))) return null
-      return { td: 1, t: 'd', id: o.id, p: o.p, n: name as string, ts: isInt(o.ts) ? o.ts : undefined, x, ...(sealed && { e: sealed }) }
+      return { td: 1, t: 'd', id: o.id, p: o.p, n: name as string, ts: isInt(o.ts) ? o.ts : undefined, x, ...(sealed && { e: sealed }), ...lock }
     case 'f':
       if (!isStr(o.id) || !isStr(o.p) || !(sealed || isStr(name)) || !isInt(o.s) || !isPartIndex(o.of)) return null
       if (sealed && !isStr(o.k)) return null
@@ -117,12 +127,13 @@ export function decode(text: string | undefined | null): Meta | null {
         of: o.of, ts: isInt(o.ts) ? o.ts : 0, x,
         ...(isHash(o.h) && { h: o.h }),
         ...(sealed && { e: sealed, k: o.k as string }),
+        ...lock,
       }
     case 'c':
       if (!isStr(o.id) || !isInt(o.pt)) return null
       return { td: 1, t: 'c', id: o.id, pt: o.pt }
     case 'cfg':
-      return { td: 1, t: 'cfg', app: 'teledrive', ...(isEncryptionConfig(o.e) && { e: o.e }) }
+      return { td: 1, t: 'cfg', app: 'teledrive', ...(isAccountConfig(o.e) && { e: o.e }) }
     default:
       return null
   }

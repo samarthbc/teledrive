@@ -1,4 +1,5 @@
-import type { EncryptionConfig } from './crypto'
+import type { AccountConfig, LockInfo } from './crypto'
+import { ROOT_LEVEL } from './keyring'
 import { ROOT, type Flags, type Meta, type Secret } from './meta'
 
 /** Where a Telegram document lives; enough to download it without re-fetching the message. */
@@ -26,7 +27,22 @@ export interface Part {
   doc?: DocRef
 }
 
-export interface FolderItem {
+/** Encryption details shared by files and folders. */
+interface Protection {
+  /**
+   * Level whose key opens this item's caption (and file key): "root" for normal items, or the ID of the
+   * locked item it belongs to (itself, if it has its own lock).
+   */
+  level: string
+  /** Its own lock (file/folder password), if any. */
+  lock?: LockInfo
+  /** Its level is closed: the real name isn't known and it can't be opened. */
+  locked: boolean
+  /** Inside a closed locked folder: not shown anywhere. */
+  concealed: boolean
+}
+
+export interface FolderItem extends Protection {
   kind: 'folder'
   id: string
   parent: string
@@ -34,11 +50,9 @@ export interface FolderItem {
   msgId: number
   ts: number
   x: Flags
-  /** Encrypted, and the drive is locked: the real name isn't known. */
-  locked: boolean
 }
 
-export interface FileItem {
+export interface FileItem extends Protection {
   kind: 'file'
   id: string
   parent: string
@@ -53,10 +67,8 @@ export interface FileItem {
   parts: Part[]
   /** False when some chunks are missing (e.g. interrupted upload). */
   complete: boolean
-  /** Encrypted, and the drive is locked: the real name isn't known. */
-  locked: boolean
-  /** Salt of the file's encryption key, if the file is encrypted. */
-  salt?: string
+  /** The file's key, wrapped by its level's key; set if the file is encrypted. */
+  fileKey?: string
   /** SHA-256 of the content (hex), if known. */
   hash?: string
   /** Encrypted thumbnail (encrypted files only). */
@@ -67,26 +79,62 @@ export type Item = FolderItem | FileItem
 
 export interface Drive {
   items: Map<string, Item>
+  /** Visible children of each folder. */
   children: Map<string, Item[]>
+  /** All children, including the hidden contents of locked folders (for deleting and re-encrypting). */
+  allChildren: Map<string, Item[]>
   /** Chunk messages whose file no longer exists (safe to delete). */
   orphanChunks: number[]
   configMsgId?: number
-  /** Set when encryption is turned on for this drive. */
-  encryption?: EncryptionConfig
+  /** The TeleDrive password's check value. */
+  encryption?: AccountConfig
 }
 
-export const LOCKED_FILE_NAME = 'Encrypted file'
-export const LOCKED_FOLDER_NAME = 'Encrypted folder'
+export const LOCKED_FILE_NAME = 'Locked file'
+export const LOCKED_FOLDER_NAME = 'Locked folder'
 
-/**
- * Build the folder tree from channel messages. `secretOf` returns the decrypted caption fields of
- * encrypted items (undefined while the drive is locked).
- */
-export function buildDrive(records: Iterable<MessageRecord>, secretOf: (sealed: string) => Secret | undefined = () => undefined): Drive {
+/** Which keys are open, and the decrypted caption fields (see secrets.ts and keyring.ts). */
+export interface KeyView {
+  isOpen(level: string): boolean
+  secretOf(sealed: string): Secret | undefined
+}
+
+/** Plain view (tests, and drives without encryption): every level counts as open. */
+const PLAIN: KeyView = { isOpen: () => true, secretOf: () => undefined }
+
+/** The level of each item: its own ID if locked, else its parent's level ("root" at the top). */
+export function levelsOf(entries: Map<string, { parent: string; locked: boolean }>): Map<string, string> {
+  const levels = new Map<string, string>()
+  const levelOf = (id: string, seen: Set<string>): string => {
+    const known = levels.get(id)
+    if (known) return known
+    const e = entries.get(id)
+    if (!e) return ROOT_LEVEL
+    if (e.locked) return id
+    if (seen.has(id)) return ROOT_LEVEL
+    seen.add(id)
+    const level = e.parent === ROOT ? ROOT_LEVEL : levelOf(e.parent, seen)
+    levels.set(id, level)
+    return level
+  }
+  for (const id of entries.keys()) levels.set(id, levelOf(id, new Set()))
+  return levels
+}
+
+/** The level that items inside a folder get: the folder's own if it's locked, else the folder's level. */
+export function childLevel(drive: Drive, folderId: string): string {
+  if (folderId === ROOT) return ROOT_LEVEL
+  const f = drive.items.get(folderId)
+  return f ? f.level : ROOT_LEVEL
+}
+
+/** Build the folder tree from channel messages. */
+export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLAIN): Drive {
   const items = new Map<string, Item>()
+  const sealedOf = new Map<string, string>()
   const chunks = new Map<string, Part[]>()
   let configMsgId: number | undefined
-  let encryption: EncryptionConfig | undefined
+  let encryption: AccountConfig | undefined
 
   const sorted = [...records].sort((a, b) => a.msgId - b.msgId)
   for (const r of sorted) {
@@ -102,21 +150,19 @@ export function buildDrive(records: Iterable<MessageRecord>, secretOf: (sealed: 
       chunks.set(m.id, list)
     } else if (!items.has(m.id)) {
       // On duplicate IDs the oldest message wins
-      const secret = m.e ? secretOf(m.e) : undefined
-      const locked = !!m.e && !secret
+      if (m.e) sealedOf.set(m.id, m.e)
+      const protection = { level: ROOT_LEVEL, locked: false, concealed: false, ...(m.l && { lock: m.l }) }
       if (m.t === 'd') {
         items.set(m.id, {
-          kind: 'folder', id: m.id, parent: m.p, name: m.e ? (secret?.n ?? LOCKED_FOLDER_NAME) : m.n, msgId: r.msgId,
-          ts: m.ts ?? r.date, x: m.x ?? {}, locked,
+          kind: 'folder', id: m.id, parent: m.p, name: m.n, msgId: r.msgId, ts: m.ts ?? r.date, x: m.x ?? {}, ...protection,
         })
       } else {
         items.set(m.id, {
-          kind: 'file', id: m.id, parent: m.p, name: m.e ? (secret?.n ?? LOCKED_FILE_NAME) : m.n, msgId: r.msgId,
-          ts: m.ts || r.date, x: m.x ?? {}, size: m.s,
-          mime: m.e ? (secret?.m ?? 'application/octet-stream') : m.m,
-          partsTotal: m.of, parts: [{ pt: 1, msgId: r.msgId, doc: r.doc }], complete: false, locked,
-          ...(m.k && { salt: m.k }),
-          ...((m.e ? secret?.h : m.h) && { hash: m.e ? secret!.h : m.h }),
+          kind: 'file', id: m.id, parent: m.p, name: m.n, msgId: r.msgId,
+          ts: m.ts || r.date, x: m.x ?? {}, size: m.s, mime: m.m,
+          partsTotal: m.of, parts: [{ pt: 1, msgId: r.msgId, doc: r.doc }], complete: false, ...protection,
+          ...(m.k && { fileKey: m.k }),
+          ...(m.h && { hash: m.h }),
         })
       }
     }
@@ -130,26 +176,48 @@ export function buildDrive(records: Iterable<MessageRecord>, secretOf: (sealed: 
       continue
     }
     for (const c of list) {
-      if (c.pt === 0 && item.salt) item.thumbPart ??= c
+      if (c.pt === 0 && item.fileKey) item.thumbPart ??= c
       else if (c.pt > 1 && c.pt <= item.partsTotal && !item.parts.some((p) => p.pt === c.pt)) item.parts.push(c)
     }
   }
 
-  const children = new Map<string, Item[]>()
+  // Items whose parent is missing (or points into a cycle) show up at the root, so nothing gets lost
   for (const item of items.values()) {
+    if (item.parent !== ROOT && !reachesRoot(items, item.id)) item.parent = ROOT
+  }
+
+  // Levels, then what each level's key reveals
+  const levels = levelsOf(new Map([...items.values()].map((i) => [i.id, { parent: i.parent, locked: !!i.lock }])))
+  const children = new Map<string, Item[]>()
+  const allChildren = new Map<string, Item[]>()
+  for (const item of items.values()) {
+    const all = allChildren.get(item.parent) ?? []
+    all.push(item)
+    allChildren.set(item.parent, all)
+    item.level = levels.get(item.id) ?? ROOT_LEVEL
+    const parentLevel = item.parent === ROOT ? ROOT_LEVEL : (levels.get(item.parent) ?? ROOT_LEVEL)
+    const sealed = sealedOf.get(item.id)
+    const secret = sealed && keys.isOpen(item.level) ? keys.secretOf(sealed) : undefined
+    item.locked = !!sealed && !secret
+    item.concealed = !keys.isOpen(parentLevel)
+    if (sealed) {
+      item.name = secret?.n ?? (item.kind === 'folder' ? LOCKED_FOLDER_NAME : LOCKED_FILE_NAME)
+      if (item.kind === 'file') {
+        item.mime = secret?.m ?? 'application/octet-stream'
+        if (secret?.h) item.hash = secret.h
+      }
+    }
     if (item.kind === 'file') {
       item.parts.sort((a, b) => a.pt - b.pt)
       item.complete = item.parts.length === item.partsTotal
     }
-    // Items whose parent is missing (or points into a cycle) show up at the root, so nothing gets lost
-    const parent = item.parent !== ROOT && !reachesRoot(items, item.id) ? ROOT : item.parent
-    if (parent !== item.parent) item.parent = parent
-    const list = children.get(parent) ?? []
+    if (item.concealed) continue
+    const list = children.get(item.parent) ?? []
     list.push(item)
-    children.set(parent, list)
+    children.set(item.parent, list)
   }
 
-  return { items, children, orphanChunks, configMsgId, encryption }
+  return { items, children, allChildren, orphanChunks, configMsgId, encryption }
 }
 
 function reachesRoot(items: Map<string, Item>, id: string): boolean {
@@ -201,7 +269,7 @@ export function isDescendant(drive: Drive, id: string, ancestorId: string): bool
 export function collectTree(drive: Drive, id: string): Item[] {
   const out: Item[] = []
   const visit = (itemId: string) => {
-    for (const child of drive.children.get(itemId) ?? []) visit(child.id)
+    for (const child of drive.allChildren.get(itemId) ?? []) visit(child.id)
     const item = drive.items.get(itemId)
     if (item) out.push(item)
   }
@@ -237,6 +305,7 @@ export function driveStats(drive: Drive): { files: number; folders: number; byte
   let folders = 0
   let bytes = 0
   for (const i of drive.items.values()) {
+    if (i.concealed) continue
     if (i.kind === 'file') {
       files++
       bytes += i.size
@@ -250,7 +319,7 @@ export function isHidden(drive: Drive, item: Item): boolean {
   const seen = new Set<string>()
   let cur: Item | undefined = item
   while (cur && !seen.has(cur.id)) {
-    if (cur.x.tr) return true
+    if (cur.x.tr || cur.concealed) return true
     seen.add(cur.id)
     cur = drive.items.get(cur.parent)
   }
@@ -292,7 +361,7 @@ export function starredItems(drive: Drive): Item[] {
 /** Items put in the trash directly (not those that are only inside a trashed folder). */
 export function trashedItems(drive: Drive): Item[] {
   return [...drive.items.values()].filter((i) => {
-    if (!i.x.tr) return false
+    if (!i.x.tr || i.concealed) return false
     const parent = drive.items.get(i.parent)
     return !parent || !isHidden(drive, parent)
   })
@@ -319,7 +388,7 @@ export function findDuplicate(drive: Drive, size: number, name: string, hash: st
 
 /** True if some file might be a duplicate of a file with this size (worth hashing to check). */
 export function hasFileOfSize(drive: Drive, size: number): boolean {
-  for (const i of drive.items.values()) if (i.kind === 'file' && i.size === size && !i.locked && !i.x.tr) return true
+  for (const i of drive.items.values()) if (i.kind === 'file' && i.size === size && !i.locked && !i.concealed && !i.x.tr) return true
   return false
 }
 

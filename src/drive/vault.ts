@@ -1,89 +1,107 @@
 import { Api } from 'telegram'
-import { driveDb } from '../db/db'
-import { storagePeer } from '../telegram/channel'
+import { delKV, getKV, setKV } from '../db/db'
+import { storagePeer, type DriveInfo } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
-import {
-  changePassword, createEncryption, isUnlocked, setKeys, unlockKeys, type EncryptionConfig, type Keys,
-} from './crypto'
-import { encode, type ConfigMeta } from './meta'
-import { clearSecrets } from './secrets'
+import bigInt from 'big-integer'
+import { checkAccountPassword, createAccount, unlockAccount, type AccountConfig, type AccountKeys } from './crypto'
+import { accountConfig, setAccount } from './keyring'
+import { decode, encode, type ConfigMeta } from './meta'
 import { applyMessages } from './sync'
 import { randomLong } from './transfer'
 import type { Drive } from './tree'
 
-// Locking and unlocking the drive's encryption, and saving its settings in the config message.
+// The TeleDrive password: finding its check value, entering or creating it, remembering it on the device.
 
-const REMEMBER_KEY = 'vault'
+/** Account keys remembered on this device (non-extractable CryptoKeys) plus the check value they belong to. */
+const DEVICE_KEY = 'accountKeys'
+const CONFIG_KEY = 'accountConfig'
 
-/** True if new uploads, folders and names must be encrypted. */
-export function encrypting(drive: Drive): boolean {
-  return !!drive.encryption && isUnlocked()
+interface Remembered {
+  config: AccountConfig
+  keys: AccountKeys
 }
 
-/** Encryption is on for this drive, but this device doesn't have the key yet. */
-export function needsUnlock(drive: Drive): boolean {
-  return !!drive.encryption && !isUnlocked()
-}
-
-/** Use the key remembered on this device, if it belongs to this drive. */
-export async function restoreKeys(config: EncryptionConfig | undefined): Promise<boolean> {
-  if (!config || isUnlocked()) return isUnlocked()
-  const saved = await driveDb().get<Keys>(REMEMBER_KEY)
-  if (!saved || saved.id !== config.id) return false
-  setKeys(saved)
+/** Use the keys remembered on this device, if they match the account's check value. */
+export async function restoreDeviceKeys(config: AccountConfig | null): Promise<boolean> {
+  const saved = await getKV<Remembered>(DEVICE_KEY)
+  if (!saved || (config && saved.config.id !== config.id)) return false
+  setAccount(saved.keys, saved.config)
   return true
 }
 
-async function useKeys(keys: Keys, remember: boolean) {
-  setKeys(keys)
-  // The keys can't be exported: IndexedDB stores them as opaque CryptoKey objects
-  if (remember) await driveDb().set(REMEMBER_KEY, keys)
-  else await driveDb().del(REMEMBER_KEY)
+/**
+ * The TeleDrive password's check value: from the open drive, else this device, else any other drive.
+ * Null means it was never set (a new account).
+ */
+export async function findAccountConfig(drive: Drive, drives: DriveInfo[], current: string | null): Promise<AccountConfig | null> {
+  if (drive.encryption) return drive.encryption
+  const saved = await getKV<AccountConfig>(CONFIG_KEY)
+  if (saved) return saved
+  for (const d of drives) {
+    if (d.id === current) continue
+    const config = await configOfDrive(d).catch(() => null)
+    if (config) return config
+  }
+  return null
 }
 
-/** Throws WrongPasswordError if the password is wrong. */
-export async function unlock(config: EncryptionConfig, password: string, remember: boolean): Promise<void> {
-  await useKeys(await unlockKeys(config, password), remember)
-}
-
-/** Drop the key from memory (e.g. when switching drives or logging out). */
-export function forgetKeys(): void {
-  setKeys(null)
-  clearSecrets()
-}
-
-/** Forget the key on this device (encrypted files show as locked again). */
-export async function lock(): Promise<void> {
-  forgetKeys()
-  await driveDb().del(REMEMBER_KEY)
-}
-
-/** Turn on encryption for this drive. Existing files stay as they are; new ones are encrypted. */
-export async function enableEncryption(drive: Drive, password: string, remember: boolean): Promise<void> {
-  if (drive.encryption) throw new Error('Encryption is already on for this drive')
-  const { config, keys } = await createEncryption(password)
-  await writeConfig(drive, config)
-  await useKeys(keys, remember)
-}
-
-export async function changeEncryptionPassword(drive: Drive, oldPassword: string, newPassword: string): Promise<void> {
-  if (!drive.encryption) throw new Error('Encryption is not on for this drive')
-  await writeConfig(drive, await changePassword(drive.encryption, oldPassword, newPassword))
-}
-
-/** Save the encryption settings in the drive's pinned config message (created if missing). */
-async function writeConfig(drive: Drive, e: EncryptionConfig): Promise<void> {
+/** Read another drive's pinned config message. */
+async function configOfDrive(d: DriveInfo): Promise<AccountConfig | null> {
   const client = await getClient()
-  const message = encode({ td: 1, t: 'cfg', app: 'teledrive', e } satisfies ConfigMeta)
+  const channel = new Api.InputChannel({ channelId: bigInt(d.id), accessHash: bigInt(d.accessHash) })
+  const full = await client.invoke(new Api.channels.GetFullChannel({ channel }))
+  const pinned = (full.fullChat as Api.ChannelFull).pinnedMsgId
+  if (!pinned) return null
+  const res = await client.invoke(new Api.channels.GetMessages({ channel, id: [new Api.InputMessageID({ id: pinned })] }))
+  const msg = 'messages' in res ? res.messages[0] : undefined
+  const meta = msg instanceof Api.Message ? decode(msg.message) : null
+  return meta?.t === 'cfg' ? (meta.e ?? null) : null
+}
+
+/** First time: create the TeleDrive password. */
+export async function createPassword(password: string): Promise<void> {
+  const { config, keys } = await createAccount(password)
+  await remember(config, keys)
+}
+
+/** New device: enter the TeleDrive password. Throws WrongPasswordError. */
+export async function enterPassword(config: AccountConfig, password: string): Promise<void> {
+  await remember(config, await unlockAccount(config, password))
+}
+
+async function remember(config: AccountConfig, keys: AccountKeys) {
+  setAccount(keys, config)
+  await setKV(DEVICE_KEY, { config, keys } satisfies Remembered)
+  await setKV(CONFIG_KEY, config)
+}
+
+/** Forget the keys in memory (logging out also deletes the remembered ones). */
+export async function forgetAccount(): Promise<void> {
+  setAccount(null)
+  await delKV(DEVICE_KEY).catch(() => {})
+}
+
+/** Confirm it's really the owner (before locking, removing a lock, changing an item's password). */
+export async function verifyPassword(password: string): Promise<boolean> {
+  const config = accountConfig()
+  if (!config) throw new Error('Enter your TeleDrive password first')
+  return checkAccountPassword(config, password)
+}
+
+/** Make sure the drive's config message carries the check value (new drives, or drives from before). */
+export async function ensureDriveConfig(drive: Drive): Promise<void> {
+  const config = accountConfig()
+  // Never overwrite a check value that's already there (its files depend on it)
+  if (!config || drive.encryption) return
+  const client = await getClient()
+  const message = encode({ td: 1, t: 'cfg', app: 'teledrive', e: config } satisfies ConfigMeta)
   if (drive.configMsgId) {
     const res = await client.invoke(new Api.messages.EditMessage({ peer: storagePeer(), id: drive.configMsgId, message }))
     await applyMessages(messagesFromUpdates(res))
     return
   }
-  const res = await client.invoke(
-    new Api.messages.SendMessage({ peer: storagePeer(), message, randomId: randomLong(), silent: true }),
-  )
+  const res = await client.invoke(new Api.messages.SendMessage({ peer: storagePeer(), message, randomId: randomLong(), silent: true }))
   const msgs = messagesFromUpdates(res)
   await applyMessages(msgs)
   if (msgs[0]) await client.invoke(new Api.messages.UpdatePinnedMessage({ peer: storagePeer(), id: msgs[0].id, silent: true }))

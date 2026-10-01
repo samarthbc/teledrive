@@ -6,9 +6,10 @@ import { errorCode } from '../telegram/auth'
 import { storageChannel, storagePeer } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
-import { EncryptedSource, encryptThumb, fileKey, newFileSalt, seal } from './crypto'
+import { EncryptedSource, encryptThumb, newFileKey, openFileKey, seal, type LockInfo } from './crypto'
+import { requireLevelKey } from './keyring'
 import { sha256 } from './hash'
-import { encode, type ChunkMeta, type FileMeta, type Secret } from './meta'
+import { encode, type ChunkMeta, type FileMeta, type Flags, type Secret } from './meta'
 import { rememberSecret } from './secrets'
 import { applyMessages, getRecord } from './sync'
 import { makeThumbnail } from './thumbnail'
@@ -46,10 +47,14 @@ export class EmptyFileError extends Error {
 }
 
 export interface UploadOptions {
-  /** Encrypt the file (the drive has encryption on and is unlocked). */
-  encrypt: boolean
+  /** Level the file belongs to (see keyring.ts): its folder's level, or its own when re-encrypting a locked file. */
+  level: string
   /** SHA-256 of the content (hex), if already computed. */
   hash?: string
+  /** Re-encrypting a locked file: keep its lock. */
+  lock?: LockInfo
+  /** Re-encrypting: keep its flags (starred…). */
+  flags?: Flags
 }
 
 export function uploadKey(file: UploadSource, parentId: string): string {
@@ -73,9 +78,17 @@ export async function uploadFile(
 ): Promise<void> {
   if (file.size === 0) throw new EmptyFileError()
   const key = uploadKey(file, parentId)
-  // A resumed upload keeps its original choice (its first chunks were sent that way)
-  const state: UploadState = (await driveDb().uploads.get(key)) ?? {
-    key, id: nanoid(10), name, chunks: {}, updated: 0, ...(opts.encrypt && { salt: newFileSalt() }),
+  const state: UploadState = (await driveDb().uploads.get(key)) ?? { key, id: nanoid(10), name, chunks: {}, updated: 0 }
+  // A resumed upload keeps its file key (its first chunks were encrypted with it)
+  const level = state.level ?? opts.level
+  const levelKey = requireLevelKey(level)
+  let cryptoKey: CryptoKey
+  if (state.fileKey) cryptoKey = await openFileKey(levelKey, state.fileKey)
+  else {
+    const fk = await newFileKey(levelKey)
+    cryptoKey = fk.key
+    state.fileKey = fk.wrapped
+    state.level = level
   }
   if (opts.hash) state.hash ??= opts.hash
   // The hash is stored with the file, so later uploads of the same content can be spotted
@@ -84,23 +97,17 @@ export async function uploadFile(
     state.hash = await sha256(file, ctl, (done) => ctl.note(`Checking file… ${Math.floor((done / file.size) * 100)}%`))
     ctl.note()
   }
-  const cryptoKey = state.salt ? await fileKey(state.salt) : null
-  // What goes to Telegram: the file itself, or its encrypted form
-  const src: ByteSource = cryptoKey ? new EncryptedSource(file, cryptoKey) : file
+  // What goes to Telegram: the encrypted form
+  const src: ByteSource = new EncryptedSource(file, cryptoKey)
   const total = Math.ceil(src.size / CHUNK_SIZE)
   const mime = file.type || 'application/octet-stream'
   const caption = async () => {
-    const ts = Math.floor(Date.now() / 1000)
-    if (!state.salt)
-      return encode({
-        td: 1, t: 'f', id: state.id, p: parentId, n: state.name, s: file.size, m: mime, of: total, ts,
-        ...(state.hash && { h: state.hash }),
-      } satisfies FileMeta)
     const secret: Secret = { n: state.name, m: mime, ...(state.hash && { h: state.hash }) }
-    const e = await seal(secret)
-    rememberSecret(e, secret)
+    const e = await seal(levelKey, secret)
+    rememberSecret(e, level, secret)
     return encode({
-      td: 1, t: 'f', id: state.id, p: parentId, n: '', s: file.size, m: '', of: total, ts, x: { enc: 1 }, k: state.salt, e,
+      td: 1, t: 'f', id: state.id, p: parentId, n: '', s: file.size, m: '', of: total, ts: Math.floor(Date.now() / 1000),
+      x: { ...opts.flags, enc: 1 }, k: state.fileKey, e, ...(opts.lock && { l: opts.lock }),
     } satisfies FileMeta)
   }
   await caption() // validate before uploading anything
@@ -119,15 +126,15 @@ export async function uploadFile(
     await driveDb().uploads.put(state)
   }
 
-  // Encrypted files don't reveal their name to Telegram
-  const baseName = cryptoKey ? `${state.id}.bin` : state.name
+  // Telegram sees neither the name nor the type
+  const baseName = `${state.id}.bin`
 
   try {
-    // Encrypted files: the encrypted thumbnail (part 0) is sent before the main message
-    const order = [...Array.from({ length: total - 1 }, (_, i) => i + 2), ...(cryptoKey ? [0] : []), 1]
+    // The encrypted thumbnail (part 0) is sent before the main message
+    const order = [...Array.from({ length: total - 1 }, (_, i) => i + 2), 0, 1]
     for (const pt of order) {
       if (pt === 0) {
-        await sendEncryptedThumb(file, mime, cryptoKey!, state.id, (state.chunks[0] ??= {}), ctl)
+        await sendEncryptedThumb(file, mime, cryptoKey, state.id, (state.chunks[0] ??= {}), ctl)
         await save(true)
         continue
       }
@@ -139,16 +146,12 @@ export async function uploadFile(
       }
       const fileName = total === 1 ? baseName : `${baseName}.part${pt}`
       const isMain = pt === 1
-      // Encrypted files get their (encrypted) thumbnail separately
-      const thumb = isMain && !cryptoKey ? await thumbnailFor(file, mime) : null
-
-      const msgs = await sendWithRepair(ctl, blob, fileName, cs, save, async (inputFile) => {
-        const thumbFile = thumb ? await uploadSmall(thumb, 'thumb.jpg') : undefined
-        return sendDocument(
-          inputFile, thumbFile, fileName, isMain && !cryptoKey ? mime : 'application/octet-stream',
+      const msgs = await sendWithRepair(ctl, blob, fileName, cs, save, async (inputFile) =>
+        sendDocument(
+          inputFile, undefined, fileName, 'application/octet-stream',
           isMain ? await caption() : encode({ td: 1, t: 'c', id: state.id, pt } satisfies ChunkMeta), ctl,
-        )
-      })
+        ),
+      )
       cs.msgId = msgs[0].id
       delete cs.tgFileId
       delete cs.done
@@ -311,4 +314,9 @@ async function sendDocument(
   const msgs = messagesFromUpdates(res)
   if (!msgs.length) throw new Error('Upload finished but Telegram returned no message')
   return msgs
+}
+
+/** Upload bytes that aren't stored in the drive (e.g. a decrypted copy to send to a chat). */
+export function uploadBytes(src: ByteSource, name: string, ctl: TransferControl): Promise<Api.TypeInputFile> {
+  return uploadParts(src, name, {}, ctl, async () => {}, { bytes: 0 })
 }

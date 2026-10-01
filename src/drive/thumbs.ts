@@ -1,16 +1,27 @@
 import { driveDb } from '../db/db'
+import { isLevelOpen, onKeysChanged, ROOT_LEVEL } from './keyring'
 import { fetchThumbnail } from './download'
 import type { FileItem } from './tree'
 
 const MAX_PARALLEL = 3
 
 const urls = new Map<string, string>()
+/** Thumbnails of locked items: forgotten as soon as their lock closes. */
+const lockedUrls = new Map<string, string>()
+onKeysChanged(() => {
+  for (const [id, level] of lockedUrls) {
+    if (isLevelOpen(level)) continue
+    URL.revokeObjectURL(urls.get(id)!)
+    urls.delete(id)
+    lockedUrls.delete(id)
+  }
+})
 const pending = new Map<string, Promise<string | null>>()
 let active = 0
 const waiting: (() => void)[] = []
 
 export function hasThumbnail(file: FileItem): boolean {
-  if (file.salt) return !file.locked && !!file.thumbPart
+  if (file.fileKey) return !file.locked && !!file.thumbPart
   return !!file.parts[0]?.doc?.thumb
 }
 
@@ -28,15 +39,17 @@ export function thumbnailUrl(file: FileItem): Promise<string | null> {
 }
 
 async function load(file: FileItem): Promise<string | null> {
-  // Thumbnails of encrypted files are kept in memory only, never saved decrypted
-  let blob = file.salt ? undefined : (await driveDb().thumbs.get(file.id))?.blob
+  // Thumbnails of locked items (and what's inside locked folders) stay in memory only, never saved decrypted
+  const keep = file.level === ROOT_LEVEL
+  let blob = keep ? (await driveDb().thumbs.get(file.id))?.blob : undefined
   if (!blob) {
     blob = (await limited(() => fetchThumbnail(file).catch(() => null))) ?? undefined
     if (!blob) return null
-    if (!file.salt) await driveDb().thumbs.put({ id: file.id, blob })
+    if (keep) await driveDb().thumbs.put({ id: file.id, blob })
   }
   const url = URL.createObjectURL(blob)
   urls.set(file.id, url)
+  if (!keep) lockedUrls.set(file.id, file.level)
   return url
 }
 

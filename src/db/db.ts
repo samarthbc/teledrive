@@ -9,8 +9,10 @@ export interface UploadState {
   name: string
   chunks: Record<number, ChunkState>
   updated: number
-  /** Salt of the file's encryption key, if the upload is encrypted. */
-  salt?: string
+  /** The file's key, wrapped by its level's key. */
+  fileKey?: string
+  /** Level the file key belongs to. */
+  level?: string
   /** SHA-256 of the content (hex). */
   hash?: string
 }

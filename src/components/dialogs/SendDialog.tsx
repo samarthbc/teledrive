@@ -2,7 +2,8 @@ import { Bookmark, Loader2, Search, Send } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { FileItem } from '../../drive/tree'
 import { describeError } from '../../telegram/auth'
-import { listChats, searchPeople, sendFiles, type Chat } from '../../telegram/share'
+import { enqueue } from '../../drive/queue'
+import { listChats, searchPeople, sendFile, type Chat } from '../../telegram/share'
 import { toast } from '../../store/useToast'
 import Dialog from '../Dialog'
 
@@ -15,7 +16,6 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
   const [query, setQuery] = useState('')
   const [chosen, setChosen] = useState<Chat | null>(null)
   const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -45,21 +45,17 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
     return [...local, ...found.filter((c) => !keys.has(c.key))]
   }, [chats, found, query])
 
-  const parts = files.reduce((n, f) => n + f.parts.length, 0)
   const what = files.length === 1 ? `“${files[0].name}”` : `${files.length} files`
 
-  const send = async () => {
+  // Each file is decrypted and uploaded into the chat, with progress in the transfers panel
+  const send = () => {
     if (!chosen) return
-    setBusy(true)
-    setError(null)
-    try {
-      await sendFiles(chosen.peer, files, message.trim())
-      toast(`Sent ${what} to ${chosen.title}`)
-      onClose()
-    } catch (e) {
-      setError(describeError(e))
-      setBusy(false)
-    }
+    const to = chosen
+    files.forEach((f, i) =>
+      enqueue('upload', `${f.name} → ${to.title}`, f.size, (ctl) => sendFile(to.peer, f, i === 0 ? message.trim() : '', ctl)),
+    )
+    toast(`Sending ${what} to ${to.title}`)
+    onClose()
   }
 
   return (
@@ -72,8 +68,8 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
           <button className="btn-ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" disabled={!chosen || busy} onClick={() => void send()}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          <button className="btn-primary" disabled={!chosen} onClick={send}>
+            <Send className="h-4 w-4" />
             Send{chosen ? ` to ${chosen.title}` : ''}
           </button>
         </>
@@ -110,9 +106,6 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
         </ul>
         {chosen && (
           <input className="input" placeholder="Add a message (optional)" value={message} onChange={(e) => setMessage(e.target.value)} />
-        )}
-        {parts > files.length && (
-          <p className="text-xs text-slate-500">Files over 512 MB arrive as several parts (.part1, .part2, …), because that's how they're stored.</p>
         )}
         {error && <p className="text-red-600">{error}</p>}
       </div>

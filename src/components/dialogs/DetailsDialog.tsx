@@ -12,13 +12,27 @@ export default function DetailsDialog(props: { drive: Drive; item: Item; onDownl
   const location = item.parent === ROOT ? rootName : [rootName, ...breadcrumbs(drive, item.parent).map((f) => f.name)].join(' / ')
 
   const rows: [string, string][] = [['Location', location], ['Created', new Date(item.ts * 1000).toLocaleString()]]
-  if (item.x.enc) rows.push(['Encryption', item.locked ? 'Encrypted (locked on this device)' : 'End-to-end encrypted'])
+  rows.push([
+    'Protection',
+    item.lock
+      ? item.locked
+        ? `Locked with its own password`
+        : 'Locked with its own password (unlocked for now)'
+      : item.level !== 'root'
+        ? 'Inside a locked folder'
+        : item.x.enc
+          ? 'Encrypted with your TeleDrive password'
+          : 'Not encrypted (uploaded before encryption)',
+  ])
   if (item.kind === 'file') {
     rows.unshift(['Size', `${formatBytes(item.size)} (${item.size.toLocaleString()} bytes)`], ['Type', item.mime])
     rows.push(['Stored as', item.partsTotal === 1 ? '1 Telegram message' : `${item.partsTotal} Telegram messages`])
     if (!item.complete) rows.push(['Status', `Incomplete: ${item.parts.length} of ${item.partsTotal} parts found`])
+  } else if (item.locked) {
+    rows.unshift(['Contains', 'Hidden until unlocked'])
   } else {
-    const contents = collectTree(drive, item.id).filter((i) => i.id !== item.id)
+    // Contents of locked folders inside stay uncounted
+    const contents = collectTree(drive, item.id).filter((i) => i.id !== item.id && !i.concealed)
     const files = contents.filter((i) => i.kind === 'file')
     const bytes = files.reduce((n, f) => n + (f.kind === 'file' ? f.size : 0), 0)
     rows.unshift(['Contains', `${files.length} files, ${contents.length - files.length} folders (${formatBytes(bytes)})`])

@@ -5,9 +5,11 @@ import { cleanup } from '../drive/ops'
 import { hasActiveTransfers, subscribeTransfers, type Transfer } from '../drive/queue'
 import { initStreaming } from '../drive/stream'
 import { loadCache, subscribe, sync, syncIdle } from '../drive/sync'
-import { resolveSecrets, secretOf, unresolved } from '../drive/secrets'
+import { accountConfig, closeAllLocks, hasAccountKeys, onKeysChanged, setAccount } from '../drive/keyring'
+import { keyView, purgeClosedSecrets, resolveSecrets, unresolved } from '../drive/secrets'
 import { buildDrive, type Drive, type MessageRecord } from '../drive/tree'
 import * as vault from '../drive/vault'
+import type { AccountConfig } from '../drive/crypto'
 import { isAndroid } from '../native/android'
 import { describeError, errorCode, logOut } from '../telegram/auth'
 import {
@@ -16,7 +18,7 @@ import {
 import { getClient, isAuthorized, onSessionLost, resetClient, SESSION_LOST_CODES } from '../telegram/client'
 import { acquireSessionLock, onSessionTakenOver } from '../telegram/sessionLock'
 
-export type Phase = 'boot' | 'setup' | 'login' | 'loading' | 'ready' | 'error' | 'otherTab'
+export type Phase = 'boot' | 'setup' | 'login' | 'password' | 'loading' | 'ready' | 'error' | 'otherTab'
 export type ViewMode = 'grid' | 'list'
 export type SortKey = 'name' | 'date' | 'size' | 'type'
 export interface Sort {
@@ -38,19 +40,16 @@ interface State {
   /** All drives (storage channels) of this account. */
   drives: DriveInfo[]
   currentDrive: string | null
-  /** The encryption key is available on this device (only meaningful if the drive has encryption on). */
-  unlocked: boolean
+  /** On the 'password' screen: create the TeleDrive password (new account) or enter it (new device). */
+  passwordMode: 'create' | 'enter' | null
   boot: (takeOver?: boolean) => Promise<void>
   afterLogin: () => Promise<void>
   refresh: () => Promise<void>
   logout: () => Promise<void>
   setView: (v: ViewMode) => void
   setSort: (s: Sort) => void
-  /** Throws WrongPasswordError if the password is wrong. */
-  unlock: (password: string, remember: boolean) => Promise<void>
-  lock: () => Promise<void>
-  enableEncryption: (password: string, remember: boolean) => Promise<void>
-  changePassword: (oldPassword: string, newPassword: string) => Promise<void>
+  /** The TeleDrive password screen. Throws WrongPasswordError if the password is wrong. */
+  submitPassword: (password: string) => Promise<void>
   /** Throws if transfers are still running. */
   switchDrive: (id: string) => Promise<void>
   createDrive: (name: string) => Promise<void>
@@ -68,6 +67,8 @@ let timer: ReturnType<typeof setInterval> | undefined
 let booting: Promise<void> | null = null
 /** No syncing while a different drive is being opened. */
 let switching = false
+/** Waiting on the TeleDrive password screen. */
+let pendingPassword: { config: AccountConfig | null; resolve: () => void } | null = null
 
 export const useDrive = create<State>((set, get) => {
   let records: Map<number, MessageRecord> = new Map()
@@ -80,8 +81,13 @@ export const useDrive = create<State>((set, get) => {
       await resolveSecrets(todo)
       if (seq !== buildSeq) return
     }
-    set({ drive: buildDrive(records.values(), secretOf) })
+    set({ drive: buildDrive(records.values(), keyView) })
   }
+  // A key opened or closed (password entered, item unlocked or locked again)
+  onKeysChanged(() => {
+    purgeClosedSecrets()
+    void rebuild()
+  })
   subscribe((r) => {
     records = r
     void rebuild()
@@ -119,29 +125,36 @@ export const useDrive = create<State>((set, get) => {
       openStorage(d)
       await setKV(KEYS.currentDrive, d.id)
       const hasCache = await loadCache()
-      await restoreKeys()
-      if (hasCache) set({ phase: 'ready' })
+      // Remembered TeleDrive password: show the cached drive right away
+      if (!hasAccountKeys()) await vault.restoreDeviceKeys(null)
+      if (hasCache && hasAccountKeys()) set({ phase: 'ready' })
     } finally {
       switching = false
     }
     await get().refresh()
-    await restoreKeys()
+    await ensureAccount()
+    await vault.ensureDriveConfig(get().drive)
     set({ phase: 'ready' })
     // Expire old trash and leftovers of abandoned uploads (in the background)
     cleanup(get().drive).catch((e) => console.error('Cleanup failed', e))
   }
 
-  /** Use the encryption key remembered on this device, if any. */
-  const restoreKeys = async () => {
-    if (get().unlocked || !(await vault.restoreKeys(get().drive.encryption))) return
-    set({ unlocked: true })
-    await rebuild()
+  /**
+   * Make sure the TeleDrive password has been entered on this device (or created, for a new account).
+   * Waits on the password screen if needed.
+   */
+  const ensureAccount = async () => {
+    const config = await vault.findAccountConfig(get().drive, get().drives, get().currentDrive)
+    if (hasAccountKeys() && (!config || accountConfig()?.id === config.id)) return
+    if (config && (await vault.restoreDeviceKeys(config))) return
+    setAccount(null)
+    await new Promise<void>((resolve) => {
+      pendingPassword = { config, resolve }
+      set({ phase: 'password', passwordMode: config ? 'enter' : 'create' })
+    })
   }
 
-  const forgetKeys = () => {
-    vault.forgetKeys()
-    set({ unlocked: false })
-  }
+  const forgetKeys = () => setAccount(null)
 
   const startAutoSync = () => {
     clearInterval(timer)
@@ -197,7 +210,7 @@ export const useDrive = create<State>((set, get) => {
     sort: { key: 'name', dir: 'asc' },
     drives: [],
     currentDrive: null,
-    unlocked: false,
+    passwordMode: null,
 
     boot: (takeOver = false) => {
       booting ??= (async () => {
@@ -272,27 +285,15 @@ export const useDrive = create<State>((set, get) => {
       void setKV(KEYS.sort, sort)
     },
 
-    unlock: async (password, remember) => {
-      const config = get().drive.encryption
-      if (!config) throw new Error('Encryption is not on for this drive')
-      await vault.unlock(config, password, remember)
-      set({ unlocked: true })
-      await rebuild()
+    submitPassword: async (password) => {
+      const pending = pendingPassword
+      if (!pending) return
+      if (pending.config) await vault.enterPassword(pending.config, password)
+      else await vault.createPassword(password)
+      pendingPassword = null
+      set({ phase: 'loading', passwordMode: null })
+      pending.resolve()
     },
-
-    lock: async () => {
-      await vault.lock()
-      set({ unlocked: false })
-      await rebuild()
-    },
-
-    enableEncryption: async (password, remember) => {
-      await vault.enableEncryption(get().drive, password, remember)
-      set({ unlocked: true })
-      await rebuild()
-    },
-
-    changePassword: (oldPassword, newPassword) => vault.changeEncryptionPassword(get().drive, oldPassword, newPassword),
 
     switchDrive: async (id) => {
       if (id === get().currentDrive) return
@@ -300,7 +301,8 @@ export const useDrive = create<State>((set, get) => {
       if (!d) throw new Error('Drive not found')
       if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before switching drives')
       await syncIdle()
-      forgetKeys()
+      // Unlocked items belong to the drive being left
+      closeAllLocks()
       try {
         await openDrive(d)
       } catch (e) {

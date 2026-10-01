@@ -5,10 +5,11 @@
 
 import { loadKeys } from '../config'
 import { getKV, KEYS, openDriveDb } from '../db/db'
-import { resolveSecrets, secretOf, unresolved } from '../drive/secrets'
+import { onKeysChanged } from '../drive/keyring'
+import { keyView, resolveSecrets, unresolved } from '../drive/secrets'
 import { loadCache, subscribe, sync } from '../drive/sync'
 import { buildDrive, type Drive, type MessageRecord } from '../drive/tree'
-import { restoreKeys } from '../drive/vault'
+import { restoreDeviceKeys } from '../drive/vault'
 import { backupRound, loadBackupSettings, setBackupHost } from '../native/backup'
 import { isHeadless, Native } from '../native/android'
 import { openStorage, type DriveInfo } from '../telegram/channel'
@@ -40,16 +41,17 @@ async function run(): Promise<object> {
   const rebuild = async () => {
     const todo = unresolved(records.values())
     if (todo.length) await resolveSecrets(todo)
-    drive = buildDrive(records.values(), secretOf)
+    drive = buildDrive(records.values(), keyView)
   }
   subscribe((r) => {
     records = r
     void rebuild()
   })
+  onKeysChanged(() => void rebuild())
   await loadCache()
   await sync()
-  // Encrypted drive: only works if the key is remembered on this phone
-  await restoreKeys(drive.encryption)
+  // The TeleDrive password, as remembered on this phone
+  if (!(await restoreDeviceKeys(drive.encryption ?? null))) return { status: 'Open the app and enter your TeleDrive password' }
   await rebuild()
 
   setBackupHost({ ready: () => true, drive: () => drive, driveName: () => undefined })

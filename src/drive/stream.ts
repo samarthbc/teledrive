@@ -1,6 +1,8 @@
-import { decryptBlock, fileKey, PLAIN_BLOCK } from './crypto'
-import { BLOCK_SIZE, fetchBlock } from './download'
+import { decryptBlock, PLAIN_BLOCK } from './crypto'
+import { fileKeyOf, onKeysChanged } from './keyring'
+import { BLOCK_SIZE, fetchBlock, fetchThumbnail } from './download'
 import type { FileItem } from './tree'
+import type { ByteSource, UploadSource } from './upload'
 
 // Page side of streaming (see public/sw.js). The service worker forwards media Range requests here;
 // we answer with up to MAX_REPLY bytes and prefetch the next blocks so playback stays smooth.
@@ -11,6 +13,8 @@ const CACHE_BLOCKS = 48
 
 const BASE = import.meta.env.BASE_URL
 const cache = new Map<string, Promise<Uint8Array>>()
+// Decrypted blocks must not outlive a lock
+onKeysChanged(() => cache.clear())
 let getFile: (id: string) => FileItem | undefined = () => undefined
 
 export function initStreaming(lookup: (id: string) => FileItem | undefined): void {
@@ -56,7 +60,7 @@ async function onMessage(e: MessageEvent) {
 /** Bytes from `start` up to `end` (inclusive), capped at MAX_REPLY. */
 export async function readRange(file: FileItem, start: number, end?: number): Promise<Uint8Array> {
   // Encrypted files: each 1 MB block on Telegram holds slightly less than 1 MB of the file
-  const bs = file.salt ? PLAIN_BLOCK : BLOCK_SIZE
+  const bs = file.fileKey ? PLAIN_BLOCK : BLOCK_SIZE
   const last = Math.min(end ?? Infinity, start + MAX_REPLY - 1, file.size - 1)
   const firstBlock = Math.floor(start / bs)
   const lastBlock = Math.floor(last / bs)
@@ -95,8 +99,8 @@ function block(file: FileItem, index: number): Promise<Uint8Array> {
     if (offset < size) break
     offset -= size
   }
-  const p = file.salt
-    ? Promise.all([fetchBlock(part, offset), fileKey(file.salt)]).then(([bytes, k]) => decryptBlock(k, index, bytes))
+  const p = file.fileKey
+    ? Promise.all([fetchBlock(part, offset), fileKeyOf(file)]).then(([bytes, k]) => decryptBlock(k, index, bytes))
     : fetchBlock(part, offset)
   cache.set(key, p)
   p.catch(() => cache.delete(key))
@@ -106,4 +110,55 @@ function block(file: FileItem, index: number): Promise<Uint8Array> {
 
 function range(from: number, to: number): number[] {
   return to < from ? [] : Array.from({ length: to - from + 1 }, (_, i) => from + i)
+}
+
+/** A drive file's (decrypted) content, readable in slices: for re-encrypting it or sending a copy. */
+export class DriveFileSource implements ByteSource {
+  constructor(
+    private file: FileItem,
+    private start = 0,
+    private end = file.size,
+  ) {}
+
+  get size(): number {
+    return this.end - this.start
+  }
+
+  slice(start = 0, end = this.size): DriveFileSource {
+    return new DriveFileSource(this.file, this.start + start, this.start + Math.min(end, this.size))
+  }
+
+  async arrayBuffer(): Promise<ArrayBuffer> {
+    const out = new Uint8Array(this.size)
+    const bs = this.file.fileKey ? PLAIN_BLOCK : BLOCK_SIZE
+    let pos = this.start
+    while (pos < this.end) {
+      const index = Math.floor(pos / bs)
+      const bytes = await block(this.file, index)
+      const from = pos - index * bs
+      const take = Math.min(bytes.length - from, this.end - pos)
+      if (take <= 0) throw new Error('The file is shorter than expected (it may be damaged)')
+      out.set(bytes.subarray(from, from + take), pos - this.start)
+      pos += take
+    }
+    return out.buffer
+  }
+}
+
+/** A drive file as an upload source: for re-encrypting it (uploading it again with a new key). */
+export class DriveFileUpload extends DriveFileSource implements UploadSource {
+  readonly name: string
+  readonly type: string
+  readonly lastModified: number
+
+  constructor(private item: FileItem) {
+    super(item)
+    this.name = item.name
+    this.type = item.mime
+    this.lastModified = item.ts * 1000
+  }
+
+  thumbnail(): Promise<Blob | null> {
+    return fetchThumbnail(this.item).catch(() => null)
+  }
 }

@@ -1,13 +1,15 @@
 import bigInt from 'big-integer'
 import { Api } from 'telegram'
 import { refreshDoc } from '../drive/download'
-import { randomLong } from '../drive/transfer'
+import { ROOT_LEVEL } from '../drive/keyring'
+import { DriveFileSource } from '../drive/stream'
+import { randomLong, withRetry, type TransferControl } from '../drive/transfer'
+import { uploadBytes } from '../drive/upload'
 import type { FileItem } from '../drive/tree'
 import { storagePeer } from './channel'
 import { getClient } from './client'
 
-// Sending drive files to a Telegram chat. Files are re-sent by reference (no re-upload), so even big
-// files go out instantly.
+// Sending drive files to a Telegram chat: a decrypted copy is uploaded into the chat.
 
 export interface Chat {
   key: string
@@ -58,40 +60,69 @@ export async function searchPeople(query: string): Promise<Chat[]> {
   )
 }
 
+/** Telegram's limit for one file sent to a chat. */
+const MAX_SEND = 2000 * 1024 * 1024
+
 /** Why a file can't be sent, or null if it can. */
 export function cantSend(file: FileItem): string | null {
-  if (file.salt) return "Encrypted files can't be sent (the other person couldn't open them)"
+  if (file.lock || file.level !== ROOT_LEVEL) return "Locked files, and files in locked folders, can't be sent"
   if (!file.complete) return 'This file is incomplete'
+  if (file.fileKey && file.size > MAX_SEND) return "Files over 2 GB can't be sent to a chat"
   return null
 }
 
-/** Send files to a chat (big files arrive as several parts). The message goes with the first file. */
-export async function sendFiles(peer: Api.TypeInputPeer, files: FileItem[], message = ''): Promise<void> {
+/**
+ * Send one file to a chat. Drive files are encrypted, so a decrypted copy is uploaded (with progress
+ * through `ctl`); the message goes with it.
+ */
+export async function sendFile(peer: Api.TypeInputPeer, file: FileItem, message: string, ctl: TransferControl): Promise<void> {
+  const why = cantSend(file)
+  if (why) throw new Error(why)
+  if (!file.fileKey) return sendByReference(peer, file, message)
+  const client = await getClient()
+  const inputFile = await uploadBytes(new DriveFileSource(file), file.name, ctl)
+  await ctl.checkpoint()
+  await withRetry(
+    () =>
+      client.invoke(
+        new Api.messages.SendMedia({
+          peer,
+          media: new Api.InputMediaUploadedDocument({
+            file: inputFile,
+            mimeType: file.mime,
+            attributes: [new Api.DocumentAttributeFilename({ fileName: file.name })],
+          }),
+          message,
+          randomId: randomLong(),
+        }),
+      ),
+    ctl,
+  )
+}
+
+/** Files from before everything was encrypted: re-send the stored document as it is (big files arrive in parts). */
+async function sendByReference(peer: Api.TypeInputPeer, file: FileItem, message: string): Promise<void> {
   const client = await getClient()
   let text = message
-  for (const file of files) {
-    const why = cantSend(file)
-    if (why) throw new Error(`“${file.name}”: ${why}`)
-    for (const part of file.parts) {
-      const send = async (doc = part.doc!) =>
-        client.invoke(
-          new Api.messages.SendMedia({
-            peer,
-            media: new Api.InputMediaDocument({
-              id: new Api.InputDocument({ id: bigInt(doc.docId), accessHash: bigInt(doc.accessHash), fileReference: Buffer.from(doc.fileRef) }),
-            }),
-            message: text,
-            randomId: randomLong(),
+  for (const part of file.parts) {
+    const send = async (doc = part.doc!) =>
+      client.invoke(
+        new Api.messages.SendMedia({
+          peer,
+          media: new Api.InputMediaDocument({
+            id: new Api.InputDocument({ id: bigInt(doc.docId), accessHash: bigInt(doc.accessHash), fileReference: Buffer.from(doc.fileRef) }),
           }),
-        )
-      try {
-        await send()
-      } catch (e) {
-        // File references expire; get a fresh one and try once more
-        if (!(e as { errorMessage?: string }).errorMessage?.startsWith('FILE_REFERENCE_')) throw e
-        await send(await refreshDoc(part))
-      }
-      text = ''
+          message: text,
+          randomId: randomLong(),
+        }),
+      )
+    try {
+      await send()
+    } catch (e) {
+      // File references expire; get a fresh one and try once more
+      if (!(e as { errorMessage?: string }).errorMessage?.startsWith('FILE_REFERENCE_')) throw e
+      await send(await refreshDoc(part))
     }
+    text = ''
   }
 }

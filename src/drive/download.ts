@@ -4,7 +4,8 @@ import { storageChannel } from '../telegram/channel'
 import { getClient } from '../telegram/client'
 import { docRef } from '../telegram/messages'
 import { isAndroid, phoneSaveTarget } from '../native/android'
-import { CIPHER_BLOCK, decryptBlock, decryptThumb, fileKey } from './crypto'
+import { CIPHER_BLOCK, decryptBlock, decryptThumb } from './crypto'
+import { fileKeyOf } from './keyring'
 import { makeZip } from 'client-zip'
 import type { DocRef, FileItem, Part, ZipEntry } from './tree'
 import { applyMessages } from './sync'
@@ -188,7 +189,7 @@ async function* readPart(file: FileItem, index: number, ctl: TransferControl): A
   const part = file.parts[index]
   if (!part.doc) throw new Error('Missing file data')
   const count = Math.ceil(part.doc.size / REQUEST_SIZE)
-  const key = file.salt ? await fileKey(file.salt) : null
+  const key = file.fileKey ? await fileKeyOf(file) : null
   // Encrypted blocks are numbered across the whole file
   const firstBlock = file.parts.slice(0, index).reduce((n, p) => n + (p.doc?.size ?? 0), 0) / CIPHER_BLOCK
   const inFlight = new Map<number, Promise<Uint8Array>>()
@@ -238,16 +239,16 @@ export async function readBlob(file: FileItem, ctl: TransferControl): Promise<Bl
 /** Read the first bytes of a file (e.g. to preview a text file). */
 export async function readHead(file: FileItem, maxBytes: number): Promise<Uint8Array> {
   const bytes = await fetchBlock(file.parts[0], 0)
-  const plain = file.salt ? await decryptBlock(await fileKey(file.salt), 0, bytes) : bytes
+  const plain = file.fileKey ? await decryptBlock(await fileKeyOf(file), 0, bytes) : bytes
   return plain.subarray(0, maxBytes)
 }
 
 /** Download the thumbnail Telegram stores with the file's first part, if any. */
 export async function fetchThumbnail(file: FileItem): Promise<Blob | null> {
   // Encrypted files keep an encrypted thumbnail in its own message
-  if (file.salt) {
+  if (file.fileKey) {
     if (!file.thumbPart) return null
-    return decryptThumb(await fileKey(file.salt), await fetchBlock(file.thumbPart, 0))
+    return decryptThumb(await fileKeyOf(file), await fetchBlock(file.thumbPart, 0))
   }
   const part = file.parts[0]
   if (!part?.doc?.thumb) return null

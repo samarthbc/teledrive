@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import DrivePage from './pages/Drive'
 import LoginPage from './pages/Login'
+import PasswordPage from './pages/Password'
 import SetupPage from './pages/Setup'
 import { initCameraBackup } from './native/backup'
 import { driveName } from './telegram/channel'
@@ -34,6 +35,7 @@ export default function App() {
 
   if (phase === 'setup') return <SetupPage />
   if (phase === 'login') return <LoginPage />
+  if (phase === 'password') return <PasswordPage />
   if (phase === 'otherTab')
     return (
       <Centered>

@@ -7,7 +7,7 @@ import { createFolder } from '../drive/ops'
 import { enqueue, subscribeTransfers, type Transfer } from '../drive/queue'
 import { isHidden, listFolder, uniqueName, type Drive } from '../drive/tree'
 import { uploadFile } from '../drive/upload'
-import { encrypting, needsUnlock } from '../drive/vault'
+import { hasAccountKeys, ROOT_LEVEL } from '../drive/keyring'
 import { currentDriveId } from '../telegram/channel'
 import { isAndroid, isHeadless, Native, PhoneFile, type CameraItem } from './android'
 
@@ -177,8 +177,8 @@ export async function runBackup(): Promise<number> {
       useBackup.setState({ status: `Paused: open the “${name ?? 'backup'}” drive to back up` })
       return 0
     }
-    if (needsUnlock(host.drive())) {
-      useBackup.setState({ status: 'Waiting: unlock encrypted files to back up' })
+    if (!hasAccountKeys()) {
+      useBackup.setState({ status: 'Waiting: enter your TeleDrive password in the app' })
       return 0
     }
     const sources = sourcesOf(useBackup.getState().settings)
@@ -248,8 +248,7 @@ function queue(item: CameraItem, folderId: string) {
     let failed = false
     try {
       const drive = host!.drive()
-      if (needsUnlock(drive)) throw new Error('Encrypted files are locked')
-      await uploadFile(new PhoneFile(item), uniqueName(drive, folderId, item.name), folderId, ctl, { encrypt: encrypting(drive) })
+      await uploadFile(new PhoneFile(item), uniqueName(drive, folderId, item.name), folderId, ctl, { level: ROOT_LEVEL })
       await markDone(item.id)
     } catch (e) {
       failed = true
@@ -268,6 +267,9 @@ async function ensureRootFolder(): Promise<string> {
   const drive = host!.drive()
   const { settings } = useBackup.getState()
   const saved = settings.folderId ? drive.items.get(settings.folderId) : undefined
+  // Backups run unattended, so they can't go into a locked folder
+  if (saved?.kind === 'folder' && saved.level !== ROOT_LEVEL)
+    throw new Error('The Camera Backup folder is inside a locked folder. Move it out to keep backing up.')
   if (saved?.kind === 'folder' && !isHidden(drive, saved)) return saved.id
   const existing = listFolder(drive, ROOT).find((i) => i.kind === 'folder' && i.name === FOLDER_NAME)
   const folderId = existing?.id ?? (await createFolder(drive, ROOT, FOLDER_NAME))

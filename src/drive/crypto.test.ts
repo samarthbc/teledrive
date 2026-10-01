@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
-  CIPHER_BLOCK, changePassword, cipherSize, createEncryption, decryptBlock, decryptThumb, EncryptedSource, encryptThumb,
-  fileKey, newFileSalt, open, PLAIN_BLOCK, seal, setKeys, unlockKeys, WrongPasswordError,
+  CIPHER_BLOCK, changeLockPassword, checkAccountPassword, cipherSize, createAccount, decryptBlock, decryptThumb,
+  EncryptedSource, encryptThumb, moveLock, newFileKey, newLock, openFileKey, openLock, PLAIN_BLOCK, rewrapFileKey, seal,
+  unlockAccount, unseal, WrongPasswordError,
 } from './crypto'
+import { closeAllLocks, openLevel, setAccount } from './keyring'
 import { decode, encode, ROOT, type Meta } from './meta'
-import { secretOf, resolveSecrets, unresolved, clearSecrets } from './secrets'
-import { buildDrive, LOCKED_FILE_NAME, type MessageRecord } from './tree'
+import { keyView, purgeClosedSecrets, resolveSecrets, unresolved } from './secrets'
+import { buildDrive, LOCKED_FOLDER_NAME, type MessageRecord } from './tree'
 import type { ByteSource } from './upload'
 
 /** In-memory ByteSource over a Uint8Array. */
@@ -29,78 +31,112 @@ function sample(n: number) {
 }
 
 afterEach(() => {
-  setKeys(null)
-  clearSecrets()
+  setAccount(null)
+  purgeClosedSecrets()
 })
 
-describe('crypto', () => {
-  it('unlocks with the right password only, and keeps the key across a password change', { timeout: 30_000 }, async () => {
-    const { config, keys } = await createEncryption('correct horse')
-    setKeys(keys)
-    const sealed = await seal({ n: 'secret.txt' })
+// PBKDF2 with 600k iterations takes a moment per password
+const SLOW = { timeout: 60_000 }
 
-    await expect(unlockKeys(config, 'wrong password')).rejects.toBeInstanceOf(WrongPasswordError)
-    const changed = await changePassword(config, 'correct horse', 'battery staple')
-    expect(changed.id).toBe(config.id)
-    await expect(unlockKeys(changed, 'correct horse')).rejects.toBeInstanceOf(WrongPasswordError)
+describe('TeleDrive password', () => {
+  it('opens only with the right password', SLOW, async () => {
+    const { config, keys } = await createAccount('correct horse battery')
+    const sealed = await seal(keys.root, { n: 'secret.txt' })
+    await expect(unlockAccount(config, 'wrong password')).rejects.toBeInstanceOf(WrongPasswordError)
+    expect(await checkAccountPassword(config, 'nope')).toBe(false)
+    const again = await unlockAccount(config, 'correct horse battery')
+    expect(again.id).toBe(config.id)
+    expect(await unseal(again.root, sealed)).toEqual({ n: 'secret.txt' })
+  })
+})
 
-    setKeys(await unlockKeys(changed, 'battery staple'))
-    expect(await open(sealed)).toEqual({ n: 'secret.txt' })
+describe('locks', () => {
+  it('need the parent level key and the item password; moving and changing the password keep the same key', SLOW, async () => {
+    const { keys } = await createAccount('account password')
+    const folderKey = (await createAccount('other')).keys.root
+    const { lock, key } = await newLock(keys.root, 'item password')
+    const wrapped = (await newFileKey(key)).wrapped
+
+    await expect(openLock(lock, keys.root, 'wrong')).rejects.toBeInstanceOf(WrongPasswordError)
+    await expect(openLock(lock, folderKey, 'item password')).rejects.not.toBeInstanceOf(WrongPasswordError)
+    await openFileKey(await openLock(lock, keys.root, 'item password'), wrapped)
+
+    // Moved into another level: the item password still works, with the new parent
+    const moved = await moveLock(lock, keys.root, folderKey)
+    await openFileKey(await openLock(moved, folderKey, 'item password'), wrapped)
+
+    const changed = await changeLockPassword(moved, folderKey, 'item password', 'new item password')
+    await expect(openLock(changed, folderKey, 'item password')).rejects.toBeInstanceOf(WrongPasswordError)
+    await openFileKey(await openLock(changed, folderKey, 'new item password'), wrapped)
   })
 
-  it('encrypts a file into 1 MB blocks that decrypt one by one', { timeout: 30_000 }, async () => {
-    setKeys((await createEncryption('pw123456')).keys)
-    const key = await fileKey(newFileSalt())
+  it('re-wraps file keys between levels without changing them', SLOW, async () => {
+    const a = (await createAccount('a')).keys.root
+    const b = (await createAccount('b')).keys.root
+    const { wrapped, key } = await newFileKey(a)
+    const block = await import('./crypto').then((c) => c.encryptBlock(key, 0, sample(100).buffer))
+    const moved = await rewrapFileKey(wrapped, a, b)
+    await expect(openFileKey(a, moved)).rejects.toThrow()
+    expect(await decryptBlock(await openFileKey(b, moved), 0, block)).toEqual(sample(100))
+  })
+})
+
+describe('file contents', () => {
+  it('encrypts a file into 1 MB blocks that decrypt one by one', SLOW, async () => {
+    const { key } = await newFileKey((await createAccount('pw123456')).keys.root)
     const plain = sample(2 * PLAIN_BLOCK + 1234)
     const src = new EncryptedSource(new Bytes(plain), key)
     expect(src.size).toBe(cipherSize(plain.length))
     expect(src.size).toBe(2 * CIPHER_BLOCK + 1234 + 16)
 
     // Read it the way uploads do: 512 KB parts
-    const parts: Uint8Array[] = []
-    for (let o = 0; o < src.size; o += 512 * 1024) parts.push(new Uint8Array(await src.slice(o, o + 512 * 1024).arrayBuffer()))
     const cipher = new Uint8Array(src.size)
-    parts.reduce((o, p) => (cipher.set(p, o), o + p.length), 0)
+    for (let o = 0; o < src.size; o += 512 * 1024) cipher.set(new Uint8Array(await src.slice(o, o + 512 * 1024).arrayBuffer()), o)
 
-    const out: Uint8Array[] = []
-    for (let b = 0; b * CIPHER_BLOCK < cipher.length; b++)
-      out.push(await decryptBlock(key, b, cipher.subarray(b * CIPHER_BLOCK, (b + 1) * CIPHER_BLOCK)))
     const joined = new Uint8Array(plain.length)
-    out.reduce((o, p) => (joined.set(p, o), o + p.length), 0)
+    for (let b = 0; b * CIPHER_BLOCK < cipher.length; b++)
+      joined.set(await decryptBlock(key, b, cipher.subarray(b * CIPHER_BLOCK, (b + 1) * CIPHER_BLOCK)), b * PLAIN_BLOCK)
     expect(Buffer.compare(joined, plain)).toBe(0) // (toEqual is very slow on MBs of data)
 
     // A block in the wrong place doesn't decrypt
     await expect(decryptBlock(key, 1, cipher.subarray(0, CIPHER_BLOCK))).rejects.toThrow()
   })
 
-  it('encrypts thumbnails', async () => {
-    setKeys((await createEncryption('pw123456')).keys)
-    const key = await fileKey(newFileSalt())
-    const thumb = new Blob([sample(5000)])
-    const ct = new Uint8Array(await (await encryptThumb(key, thumb)).arrayBuffer())
+  it('encrypts thumbnails', SLOW, async () => {
+    const { key } = await newFileKey((await createAccount('pw123456')).keys.root)
+    const ct = new Uint8Array(await (await encryptThumb(key, new Blob([sample(5000)]))).arrayBuffer())
     expect(new Uint8Array(await (await decryptThumb(key, ct)).arrayBuffer())).toEqual(sample(5000))
   })
 })
 
-describe('encrypted items', () => {
-  it('show real names only when unlocked', async () => {
-    const { keys } = await createEncryption('pw123456')
-    setKeys(keys)
-    const e = await seal({ n: 'Taxes 2026.pdf', m: 'application/pdf' })
-    const salt = newFileSalt()
-    const meta = decode(encode({ td: 1, t: 'f', id: 'a', p: ROOT, n: '', s: 10, m: '', of: 1, ts: 1, x: { enc: 1 }, k: salt, e }))!
-    expect(meta).toMatchObject({ t: 'f', n: '', e, k: salt })
-    const thumb: Meta = { td: 1, t: 'c', id: 'a', pt: 0 }
-    const records: MessageRecord[] = [{ msgId: 1, meta, date: 1 }, { msgId: 2, meta: thumb, date: 1 }]
+describe('locked folders in the tree', () => {
+  it('hide their contents until unlocked', SLOW, async () => {
+    const { config, keys } = await createAccount('account password')
+    setAccount(keys, config)
+    const { lock, key } = await newLock(keys.root, 'folder password')
+    const folder = decode(encode({
+      td: 1, t: 'd', id: 'box', p: ROOT, n: '', x: { enc: 1 }, e: await seal(key, { n: 'Private' }), l: lock,
+    }))!
+    expect(folder).toMatchObject({ t: 'd', l: lock })
+    const inside: Meta = {
+      td: 1, t: 'f', id: 'doc', p: 'box', n: '', s: 10, m: '', of: 1, ts: 1, x: { enc: 1 },
+      k: (await newFileKey(key)).wrapped, e: await seal(key, { n: 'passport.pdf', m: 'application/pdf' }),
+    }
+    const records: MessageRecord[] = [{ msgId: 1, meta: folder, date: 1 }, { msgId: 2, meta: inside, date: 1, doc: undefined }]
 
+    let drive = buildDrive(records, keyView)
+    expect(drive.items.get('box')).toMatchObject({ name: LOCKED_FOLDER_NAME, locked: true, concealed: false, level: 'box' })
+    expect(drive.items.get('doc')).toMatchObject({ concealed: true, level: 'box' })
+    expect(drive.children.get('box')).toBeUndefined()
+
+    openLevel('box', await openLock(lock, keys.root, 'folder password'))
     await resolveSecrets(unresolved(records))
-    const open = buildDrive(records, secretOf).items.get('a')!
-    expect(open).toMatchObject({ name: 'Taxes 2026.pdf', mime: 'application/pdf', locked: false, salt })
-    expect(open.kind === 'file' && open.thumbPart?.msgId).toBe(2)
+    drive = buildDrive(records, keyView)
+    expect(drive.items.get('box')).toMatchObject({ name: 'Private', locked: false })
+    expect(drive.children.get('box')?.map((i) => i.name)).toEqual(['passport.pdf'])
 
-    setKeys(null)
-    clearSecrets()
-    const locked = buildDrive(records, secretOf).items.get('a')!
-    expect(locked).toMatchObject({ name: LOCKED_FILE_NAME, locked: true })
+    closeAllLocks()
+    purgeClosedSecrets()
+    expect(buildDrive(records, keyView).items.get('doc')).toMatchObject({ concealed: true })
   })
 })

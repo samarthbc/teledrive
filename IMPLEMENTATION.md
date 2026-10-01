@@ -299,7 +299,7 @@ and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for ex
 
 ## Phase 4: Encryption and More Features ✅ (implemented; being tested)
 
-### 4.1 End-to-end encryption (optional per drive) — `src/drive/crypto.ts`, `vault.ts`, `secrets.ts`
+### 4.1 End-to-end encryption (optional per drive) — replaced by Phase 6
 - **Keys:** a random 256-bit master key, wrapped (AES-GCM) with a key from the password (PBKDF2-SHA256,
   600k iterations). The wrapped key, salt and a key ID are stored in the drive's pinned config message
   (`cfg.e`). Changing the password re-wraps the same master key, so every file stays readable and other
@@ -411,7 +411,7 @@ Notes: WhatsApp *Sent* folders contain a `.nomedia` file, so Android doesn't ind
 
 ---
 
-## Phase 6: Security (TeleDrive password, locked files and folders)
+## Phase 6: Security (TeleDrive password, locked files and folders) ✅ (implemented; being tested)
 
 Replaces Phase 4's optional per-drive encryption. Every file is encrypted before it reaches Telegram;
 individual files and folders can additionally be locked with their own password.
@@ -471,7 +471,16 @@ Locked file:  upload → encrypt (file key, protected by the TeleDrive password 
 - Normal files are decrypted on the device and uploaded as a normal copy into the chat (slower than
   Phase 4's instant re-send, uses data). Locked items are refused.
 
-### 6.6 Removed
+### 6.6 Code
+- `crypto.ts` (building blocks), `keyring.ts` (which keys are open, auto-lock), `vault.ts` (TeleDrive password:
+  check value, entering/creating, remembering on the device), `secrets.ts` (decrypted names per level),
+  `tree.ts` (`level`, `lock`, `locked`, `concealed` on every item), `ops.ts` (`lockItem`, `unlockItem`,
+  `removeLock`, `changeItemPassword`, level-aware `move`/`restore`), `pages/Password.tsx`,
+  `components/dialogs/LockDialog.tsx`.
+- Re-encrypt uploads the decrypted file (`DriveFileUpload` in `stream.ts`) as a new file with a new key and
+  the same lock, then deletes the old messages.
+
+### 6.7 Removed
 - Phase 4's optional per-drive password encryption and its "Encryption" settings (the drive will be emptied,
   so there's nothing to migrate).
 
