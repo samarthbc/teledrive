@@ -105,7 +105,7 @@ export default function Menu(props: { x: number; y: number; entries: MenuEntry[]
       ref={ref}
       role="menu"
       style={pos}
-      className="fixed z-40 max-h-[calc(100vh-16px)] min-w-56 overflow-y-auto rounded-md bg-surface p-2 raised-xl"
+      className="fixed z-40 max-h-[calc(100vh-16px)] min-w-56 overflow-y-auto rounded-md bg-surface p-2 lift"
       onContextMenu={(e) => e.preventDefault()}
     >
       {items}

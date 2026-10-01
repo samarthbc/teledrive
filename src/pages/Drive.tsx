@@ -592,7 +592,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       <aside className="panel hidden w-64 shrink-0 md:block">{sidebar}</aside>
       {drawer && (
         <div className="fixed inset-0 z-40 bg-scrim md:hidden" onClick={() => setDrawer(false)}>
-          <aside className="h-full w-72 rounded-r-md bg-surface raised-xl" onClick={(e) => e.stopPropagation()}>
+          <aside className="h-full w-72 rounded-r-md bg-surface lift" onClick={(e) => e.stopPropagation()}>
             {/* Close after the tapped button has handled the click (not in the capture phase, which runs first) */}
             <div onClick={() => setDrawer(false)} className="h-full">
               {sidebar}
@@ -790,7 +790,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6">
-          <div className="flex flex-col items-center gap-3 rounded-md bg-surface px-12 py-10 outline-2 outline-offset-4 outline-brand outline-dashed raised-xl">
+          <div className="flex flex-col items-center gap-3 rounded-md bg-surface px-12 py-10 outline-2 outline-offset-4 outline-brand outline-dashed lift">
             <CloudUpload className="size-12 text-brand-ink" strokeWidth={1.6} />
             <p className="font-bold">Drop to upload to {mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : rootName}</p>
           </div>

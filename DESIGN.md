@@ -105,7 +105,8 @@ Every depth is the same formula at a different distance `d`:
 | `raised` | 4 | Buttons, icon buttons, segmented thumb |
 | `raised-md` | 5–6 | Grid cards, toasts, bottom nav, + button |
 | `raised-lg` | 8 | Panels: sidebar, file list, transfers card |
-| `raised-xl` | 10–12 | Menus and dialogs (they float highest) |
+| `raised-xl` | 10–12 | The sign-in card (on the page) |
+| `lift` | — | **Anything floating above the page** (dialogs, menus, the phone drawer): a plain dark drop shadow, no white highlight, which would glow over the darkened page |
 | `pressed-xs` | 2 | Progress tracks, selected menu item, sheet handle |
 | `pressed` | 3–4 | Inputs, search, active nav / chip, selected row, storage card |
 | `pressed-lg` | 5 | Empty-state well, locked / folder thumbnails |
@@ -243,13 +244,13 @@ Map each component to its existing file and restyle it; don't create parallel ve
 - **Selected:** `outline: 2px solid var(--red); outline-offset: 3px`.
 
 ### Menu (`Menu.tsx`)
-- 240–250 px wide, 8 px padding, `raised-xl`.
+- 240–250 px wide, 8 px padding, `lift`.
 - Items: 40 px tall, 17 px icon, 14/600. Hover or keyboard focus = `pressed-xs`.
 - A 2 px `--line` divider sits before destructive items. "Move to trash" is `--red-text` 14/700.
 - On the phone, the same actions open in the **bottom sheet** instead.
 
 ### Dialog (`Dialog.tsx` and all of `dialogs/`)
-- Centred, max-width 440–520, padding 26, gap 18, `raised-xl`, over `--scrim`.
+- Centred, max-width 440–520, padding 26, gap 18, `lift`, over `--scrim`.
 - **Header:** an optional 40 px tile (red lock for lock actions), the H2 title, and a 13 px muted subtitle.
 - **Footer:** actions on the right, gap 12. The ghost Cancel comes first, then the primary or danger-solid button.
 - Dialogs that need the TeleDrive password show it as the first field, with a shield icon.

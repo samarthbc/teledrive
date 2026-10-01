@@ -30,7 +30,7 @@ export default function Dialog(props: {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-surface shadow-[0_-10px_30px_rgba(0,0,0,0.18)] sm:max-h-[90vh] sm:rounded-md sm:raised-xl ${
+        className={`flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-surface shadow-[0_-10px_30px_rgba(0,0,0,0.18)] sm:max-h-[90vh] sm:rounded-md sm:lift ${
           wide ? 'sm:max-w-[520px]' : 'sm:max-w-[440px]'
         }`}
         onMouseDown={(e) => e.stopPropagation()}
