@@ -1,13 +1,13 @@
 import {
-  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LogOut, Plus, ShieldCheck, Star,
+  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LogOut, Plus, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { driveName } from '../telegram/channel'
 import { installApp, useInstall } from '../lib/install'
-import { driveStats, starredItems, trashedItems } from '../drive/tree'
-import { formatBytes } from '../lib/format'
+import { driveStats, starredItems, trashedItems, type Drive } from '../drive/tree'
+import { category, formatBytes } from '../lib/format'
 import { useDrive, useRootName } from '../store/useDrive'
 import Logo from './Logo'
 import Menu, { type MenuEntry } from './Menu'
@@ -35,7 +35,6 @@ export default function Sidebar(props: {
   const canInstall = useInstall((s) => !!s.event)
   const drive = useDrive((s) => s.drive)
   const { pathname } = useLocation()
-  const stats = driveStats(drive)
   const counts = useMemo(() => ({ starred: starredItems(drive).length, trash: trashedItems(drive).length }), [drive])
   const inDrive = pathname === '/' || pathname.startsWith('/folder/')
 
@@ -116,14 +115,7 @@ export default function Sidebar(props: {
       </nav>
 
       <div className="mt-auto space-y-2 pt-6">
-        <div className="rounded-md p-3.5 pressed">
-          <p className="flex items-center gap-2 text-[13px] font-extrabold">
-            <ShieldCheck className="size-4 text-brand-ink" strokeWidth={2} /> Encrypted
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {formatBytes(stats.bytes)} used · {stats.files} file{stats.files === 1 ? '' : 's'} · no limit
-          </p>
-        </div>
+        <StorageCard drive={drive} />
         {canInstall && <Item icon={Download} label="Install app" onClick={() => void installApp()} />}
         <Item icon={LogOut} label="Log out" onClick={onLogout} />
       </div>
@@ -152,5 +144,55 @@ function Item({ icon: Icon, label, onClick, hint }: { icon: LucideIcon; label: s
       <Icon /> <span className="truncate">{label}</span>
       {hint && <span className="ml-auto text-xs font-medium">{hint}</span>}
     </button>
+  )
+}
+
+const KINDS = [
+  { key: 'photos', label: 'Photos', color: 'bg-ink' },
+  { key: 'videos', label: 'Videos', color: 'bg-brand' },
+  { key: 'documents', label: 'Docs', color: 'bg-muted' },
+  { key: 'other', label: 'Other', color: 'bg-ink/25' },
+] as const
+type Kind = (typeof KINDS)[number]['key']
+const KIND_OF: Partial<Record<string, Kind>> = { image: 'photos', video: 'videos', document: 'documents' }
+
+/** Space used, how many files, and what takes the space. */
+function StorageCard({ drive }: { drive: Drive }) {
+  const { stats, byKind } = useMemo(() => {
+    const byKind: Record<Kind, number> = { photos: 0, videos: 0, documents: 0, other: 0 }
+    for (const i of drive.items.values())
+      if (i.kind === 'file' && !i.concealed) byKind[KIND_OF[category(i)] ?? 'other'] += i.size
+    return { stats: driveStats(drive), byKind }
+  }, [drive])
+  const used = KINDS.filter((k) => byKind[k.key] > 0)
+
+  return (
+    <div className="rounded-md p-3.5 pressed">
+      <p className="flex items-baseline gap-1.5">
+        <span className="text-xl leading-none font-black tracking-[-0.02em]">{formatBytes(stats.bytes)}</span>
+        <span className="text-xs text-muted">used</span>
+      </p>
+      <p className="mt-1.5 text-xs text-muted">
+        {stats.files} file{stats.files === 1 ? '' : 's'} · {stats.folders} folder{stats.folders === 1 ? '' : 's'}
+      </p>
+      {stats.bytes > 0 && (
+        <>
+          <div className="mt-3 flex h-2 gap-0.5 overflow-hidden rounded-md" role="img" aria-label="Space used by type">
+            {used.map((k) => (
+              <span key={k.key} className={k.color} style={{ flexGrow: byKind[k.key], minWidth: 3 }} />
+            ))}
+          </div>
+          <ul className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+            {used.map((k) => (
+              <li key={k.key} className="flex min-w-0 items-center gap-1.5">
+                <span className={`size-2 shrink-0 rounded-[2px] ${k.color}`} />
+                <span className="font-semibold">{k.label}</span>
+                <span className="ml-auto truncate text-muted">{formatBytes(byKind[k.key])}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   )
 }
