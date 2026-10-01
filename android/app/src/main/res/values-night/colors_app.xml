@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Match the web app's dark theme (slate-950 / slate-900) -->
-    <color name="app_background">#020617</color>
-    <color name="app_bars">#0F172A</color>
+    <!-- The web app's dark surface (Soft Swiss) -->
+    <color name="app_background">#1F2023</color>
+    <color name="app_bars">#1F2023</color>
 </resources>

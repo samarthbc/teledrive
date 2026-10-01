@@ -52,6 +52,8 @@ interface TeleDriveNativePlugin {
   backgroundBackupStatus(): Promise<{ lastRun: number; lastResult: string }>
   backgroundBackupDone(o: { result: string }): Promise<void>
   openAppSettings(): Promise<void>
+  /** Status/navigation bar colours for the app's theme. */
+  systemBars(o: { dark: boolean }): Promise<void>
   /** Background backup page only. */
   network(): Promise<{ connected: boolean; wifi: boolean }>
   done(o: { result: string }): Promise<void>

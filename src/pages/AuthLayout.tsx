@@ -1,13 +1,15 @@
-import { Send, type LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import Logo from '../components/Logo'
 
 /** Sign-in screens: the Swiss wordmark beside (desktop) or above (phone) a raised card. */
 export default function AuthLayout(props: {
+  /** A step's icon; without one, the TeleDrive logo. */
   icon?: LucideIcon
   title: string
   subtitle: string
   children: React.ReactNode
 }) {
-  const { icon: Icon = Send, title, subtitle, children } = props
+  const { icon: Icon, title, subtitle, children } = props
   return (
     <div className="flex min-h-full flex-col overflow-y-auto lg:flex-row">
       <div className="flex flex-col justify-between gap-6 px-6 pt-12 pb-6 lg:w-[520px] lg:shrink-0 lg:p-16">
@@ -25,9 +27,13 @@ export default function AuthLayout(props: {
       <div className="flex flex-1 items-start justify-center px-4 pb-10 lg:items-center lg:p-10">
         <div className="w-full max-w-[460px] rounded-md bg-surface p-6 raised-xl sm:p-9">
           <div className="mb-6 flex flex-col gap-4">
-            <div className="flex size-13 items-center justify-center rounded-md bg-brand text-white raised-sm">
-              <Icon className="size-6.5" strokeWidth={2.2} />
-            </div>
+            {Icon ? (
+              <div className="flex size-13 items-center justify-center rounded-md bg-brand text-white raised-sm">
+                <Icon className="size-6.5" strokeWidth={2.2} />
+              </div>
+            ) : (
+              <Logo className="size-13" />
+            )}
             <div>
               <h1 className="text-[28px] leading-[1.05] font-black tracking-[-0.035em] sm:text-[34px]">{title}</h1>
               <p className="mt-2.5 text-sm leading-relaxed text-muted">{subtitle}</p>

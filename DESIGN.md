@@ -291,7 +291,9 @@ Map each component to its existing file and restyle it; don't create parallel ve
 - Inside: a 72 px raised tile with a 32 px muted icon; "Nothing here yet" (22/900); one muted line; a primary button.
 
 ### Logo
-- A red square (radius 6, `raised-sm`) with the white paper-plane icon. 40 px in the sidebar, 52–56 px on the password screens.
+- **The mark:** a white paper plane on a red square (concept 01 in [`design/5-logos/`](design/5-logos/); the other concepts are kept there and in [`design/6-logos-original/`](design/6-logos-original/) for reference).
+- In the app: `components/Logo.tsx`, the same drawing as the icons, with `raised-sm`. 40 px in the sidebar, 52 px on the sign-in screens (steps with their own icon, such as the TeleDrive password, show that icon instead).
+- Icons: `public/favicon.svg`, the PWA PNGs (`icon-192`, `icon-512`, `icon-maskable-512`, `apple-touch-icon`), and the Android launcher (adaptive icon on `#D0021B`, legacy PNGs per density) and splash screen.
 
 ### Avatar
 - 44 px, `raised-sm`, with the initial in 900 weight.

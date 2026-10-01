@@ -1,5 +1,5 @@
 import {
-  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LogOut, Plus, Send, ShieldCheck, Star,
+  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LogOut, Plus, ShieldCheck, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -9,6 +9,7 @@ import { installApp, useInstall } from '../lib/install'
 import { driveStats, starredItems, trashedItems } from '../drive/tree'
 import { formatBytes } from '../lib/format'
 import { useDrive, useRootName } from '../store/useDrive'
+import Logo from './Logo'
 import Menu, { type MenuEntry } from './Menu'
 
 export default function Sidebar(props: {
@@ -55,9 +56,7 @@ export default function Sidebar(props: {
         }}
         aria-expanded={picking}
       >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-brand text-white raised-sm">
-          <Send className="size-5" strokeWidth={2.2} />
-        </span>
+        <Logo />
         <span className="min-w-0 flex-1">
           <span className="block text-lg leading-tight font-black tracking-tight">TeleDrive</span>
           <span className="block truncate text-xs text-muted">{current ? driveName(current) : ' '}</span>

@@ -2,7 +2,7 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/app_background" />
     <item android:width="96dp" android:height="96dp" android:gravity="center">
-        <shape android:shape="oval"><solid android:color="#2AABEE" /></shape>
+        <shape android:shape="rectangle"><corners android:radius="18dp" /><solid android:color="#D0021B" /></shape>
     </item>
     <item android:width="96dp" android:height="96dp" android:gravity="center" android:drawable="@drawable/ic_launcher_teledrive" />
 </layer-list>

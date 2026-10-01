@@ -24,7 +24,7 @@
         <item name="android:background">@drawable/splash</item>
         <item name="windowSplashScreenBackground">@color/app_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_teledrive</item>
-        <item name="windowSplashScreenIconBackgroundColor">#2AABEE</item>
+        <item name="windowSplashScreenIconBackgroundColor">#D0021B</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isAndroid, Native } from '../native/android'
 
 // Light / Dark / System (follows the device). The early script in index.html applies the saved
 // choice before the first paint; this keeps it in sync afterwards. See DESIGN.md §2.
@@ -24,6 +25,8 @@ const resolve = (mode: ThemeMode): Theme => (mode === 'system' ? (media.matches 
 function apply(theme: Theme) {
   document.documentElement.dataset.theme = theme
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', COLORS[theme])
+  // The app's status bar follows this theme, not just the phone's
+  if (isAndroid) Native.systemBars({ dark: theme === 'dark' }).catch(() => {})
 }
 
 export const useTheme = create<{ mode: ThemeMode; theme: Theme }>(() => {

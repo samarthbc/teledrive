@@ -1,4 +1,4 @@
-import { ArrowLeft, Loader2, Send } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { checkPassword, describeError, sendCode, signIn } from '../telegram/auth'
 import { useDrive } from '../store/useDrive'
@@ -58,7 +58,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthLayout icon={Send} title={step === 'phone' ? 'Log in with Telegram' : step === 'code' ? 'Enter the code' : 'Two-step verification'} subtitle={subtitles[step]}>
+    <AuthLayout title={step === 'phone' ? 'Log in with Telegram' : step === 'code' ? 'Enter the code' : 'Two-step verification'} subtitle={subtitles[step]}>
       <form onSubmit={submit} className="space-y-4">
         {notice && step === 'phone' && (
           <Note>{notice}</Note>
