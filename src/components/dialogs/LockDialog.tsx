@@ -1,4 +1,4 @@
-import { KeyRound, Loader2, Lock, LockOpen } from 'lucide-react'
+import { ChevronRight, KeyRound, Loader2, Lock, LockOpen } from 'lucide-react'
 import { useState } from 'react'
 import { WrongPasswordError } from '../../drive/crypto'
 import { changeItemPassword, lockItem, removeLock, unlockItem } from '../../drive/ops'
@@ -93,8 +93,8 @@ export default function LockDialog(props: {
         {action === 'lock' && (
           <p className="leading-relaxed text-muted">
             {item.kind === 'folder'
-              ? 'The folder and everything in it will need this password. Its name and contents are hidden until it is unlocked.'
-              : 'The file will need this password to open. Its name and preview are hidden until it is unlocked.'}{' '}
+              ? 'Everything in the folder will need this password. Its name still shows, with a lock; what is inside stays hidden until it is unlocked.'
+              : 'The file will need this password to open. Its name still shows, with a lock; its preview stays hidden until it is unlocked.'}{' '}
             Locked items can't be sent to chats.
           </p>
         )}
@@ -147,17 +147,24 @@ export default function LockDialog(props: {
 
         {action === 'lock' && (
           <>
-            <fieldset className="space-y-3 pt-1">
-              <legend className="field-label">How to lock</legend>
-              <Choice name="lock-how" checked={!reencrypt} onChange={() => setReencrypt(false)} label="Lock now" hint="Instant." />
-              <Choice
-                name="lock-how"
-                checked={reencrypt}
-                onChange={() => setReencrypt(true)}
-                label="Lock and re-encrypt"
-                hint="Most secure: uploads the files again with new keys, so older copies Telegram may keep can't be opened with your TeleDrive password alone. Takes as long as uploading them."
-              />
-            </fieldset>
+            {/* Locks instantly by default; re-encrypting is the rare, slow option */}
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 font-bold [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="size-4 transition-transform group-open:rotate-90" /> Advanced
+                {reencrypt && <span className="font-semibold text-muted">· Lock and re-encrypt</span>}
+              </summary>
+              <fieldset className="mt-3 space-y-3">
+                <legend className="sr-only">How to lock</legend>
+                <Choice name="lock-how" checked={!reencrypt} onChange={() => setReencrypt(false)} label="Lock now" hint="Instant." />
+                <Choice
+                  name="lock-how"
+                  checked={reencrypt}
+                  onChange={() => setReencrypt(true)}
+                  label="Lock and re-encrypt"
+                  hint="Most secure: uploads the files again with new keys, so older copies Telegram may keep can't be opened with your TeleDrive password alone. Takes as long as uploading them."
+                />
+              </fieldset>
+            </details>
             <Note>
               If you forget this password, the {what} can't be opened. There's no way to recover it.
             </Note>
