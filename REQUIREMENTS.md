@@ -164,13 +164,23 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Title bar follows the app's theme
 
 ### 4.9 Public release
-- [ ] Website online (Vercel)
+- [x] Website online (Vercel): https://teledrive-storage.vercel.app
 - [x] Download links on the website for the Windows app and the Android app (GitHub Releases)
 - [x] No API keys in any public build; the website and both apps ask for them on a Setup screen
 - [x] Setup: clear message for wrong keys, a way to change keys, a short explanation
 - [x] Apps show their version and say when a newer one is available
 - [x] Updates install over the existing apps (no reinstall, data kept): automatic on Windows, one tap on Android
 - [x] Security headers (Content-Security-Policy) on the website
+
+### 4.10 Settings
+- [ ] A Settings page (side menu), per device, on the website and both apps
+- [ ] Density: comfortable / compact
+- [ ] Thumbnails on / off
+- [ ] Auto-lock time for unlocked items: 1 / 5 / 15 / 30 minutes
+- [ ] Lock TeleDrive when it closes (ask the TeleDrive password every start)
+- [ ] Lock everything now
+- [ ] Active sessions: see devices logged in to the Telegram account, log one or all others out
+- [ ] Check for updates (and the version)
 
 ---
 
@@ -206,3 +216,4 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **7** | UI redesign |
 | **8** | Windows desktop app (Electron) |
 | **9** | Public release: website online, app downloads, Setup screen everywhere |
+| **10** | Settings: density, thumbnails, auto-lock time, lock on close, lock everything, active sessions, updates |

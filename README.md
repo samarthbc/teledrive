@@ -190,7 +190,8 @@ electron/       Windows app (Electron): window, serving the app's files, preload
 | 6 | Security: TeleDrive password (every file encrypted), locked files and folders with their own passwords | ✅ Being tested |
 | 7 | UI redesign (Soft Swiss): light/dark themes and switch, every screen restyled | ✅ Being tested |
 | 8 | Windows desktop app (Electron): installer, no server needed | ✅ Being tested |
-| 9 | Public release: website on Vercel, downloads for the apps, everyone enters their own API keys | ✅ Built; going live needs your Vercel and GitHub setup |
+| 9 | Public release: website on Vercel, downloads for the apps, everyone enters their own API keys | ✅ Website live; app release needs the GitHub secrets |
+| 10 | Settings: density, thumbnails, auto-lock time, lock on close, lock everything, active sessions, check for updates | ⏳ Next |
 
 ## Tech stack
 

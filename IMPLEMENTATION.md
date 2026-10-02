@@ -693,9 +693,66 @@ is found in any published file.
 
 ---
 
-## Phase 10: Later
+## Phase 10: Settings ⏳ Next
 
-### Ideas (not planned yet)
+A **Settings** page for the things people want to adjust, on the website and in both apps. Settings are
+per device (like the theme): a phone and a PC can differ.
+
+### 10.1 The page
+- **Side menu → Settings** (gear icon, above Log out); route `#/settings`. Desktop: a page in the main area
+  with the sidebar still visible. Phone: a full screen with a back arrow (Android back button closes it).
+- Sections with Swiss labels (`label-swiss`), each setting a row: name, one-line explanation, control on the
+  right (switch, segmented control or button). Built from the existing `ui.tsx` controls.
+- Stored on the device: `lib/settings.ts`, a small Zustand store saved in IndexedDB (`db.kv`), with defaults,
+  read before the drive shows so nothing jumps after loading.
+
+### 10.2 Appearance
+- **Density** — Comfortable (today) / Compact. Compact: list rows 44 px instead of 56, smaller tiles, grid cards
+  ~8.5 rem wide instead of 10.5, tighter gaps. Done with a `data-density` attribute on `<html>` and CSS
+  variables, so components don't need two versions.
+- **Thumbnails** — on (today) / off. Off: files show their type icon only and no thumbnails are downloaded
+  (saves data and is faster on slow connections). Preview and streaming still work when a file is opened.
+  `Thumb.tsx` and the thumbnail loader check the setting; already-cached thumbnails stay cached.
+
+### 10.3 Security
+- **Auto-lock after** — 1 / 5 / 15 / 30 minutes without activity (5 today, `AUTO_LOCK_MS` in
+  `drive/keyring.ts` becomes the setting). Applies to locked files and folders that were unlocked.
+- **Lock TeleDrive when it closes** — off (today) / on. Today the TeleDrive password's keys are remembered on
+  the device (`accountKeys` in `drive/vault.ts`), so it's asked only once per device. On: the keys are kept in
+  memory only and the TeleDrive password is asked every time TeleDrive starts. Turning it on removes the
+  remembered keys from the device at once. (Locked items already lock when TeleDrive closes.)
+- **Lock everything now** — a button: closes every unlocked file and folder (`closeAllLocks`) and, if "Lock
+  TeleDrive when it closes" is on, also forgets the TeleDrive password, returning to its screen.
+- **Active sessions** — every device logged in to this Telegram account (`account.getAuthorizations`): device,
+  app name and version, place (country/region) and last active; this device marked **This device**.
+  - **Log out** on any other session (`account.resetAuthorization`) and **Log out all other devices**
+    (`auth.resetAuthorizations`), both with a confirmation.
+  - Telegram refuses this from a session less than 24 hours old (`FRESH_RESET_AUTHORISATION_FORBIDDEN`):
+    explain it ("Try again tomorrow, or use the Telegram app") instead of showing an error code.
+  - The list includes the person's other Telegram apps (phone, desktop); the confirmation says so.
+
+### 10.4 About and updates
+- **Version** of this app or website.
+- **Check for updates** — a button that asks GitHub now (skipping the once-a-day cache in `lib/releases.ts`):
+  - Windows app: starts the background download (`electron/updates.cjs`, a new `td-update-check` message);
+    the status shows here and in the side menu, then **Restart to update**.
+  - Android app: **Update to x.y.z** as in the side menu (download, then Android's installer).
+  - Website: "The website updates by itself"; shows the latest app version for download.
+  - "You're up to date" when nothing is newer.
+
+### 10.5 Tests and checks
+- Unit tests: settings defaults and saving; auto-lock timer uses the chosen time; density/thumbnail settings
+  applied to `<html>`.
+- On this PC (mock mode): screenshots of Settings (desktop and phone, light and dark), compact vs comfortable,
+  thumbnails off.
+- Needs a real account (you): active sessions list and logging out another device; lock on close.
+
+**Phase 10 done when:** every setting above can be changed, takes effect without reloading, is still set after
+restarting, and works on the website, the Windows app and the Android app.
+
+---
+
+## Later (ideas, not planned yet)
 - **Free up space:** delete photos from the phone once they're confirmed in TeleDrive (uses Android's delete confirmation dialog).
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).
 
