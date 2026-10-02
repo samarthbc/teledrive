@@ -1,0 +1,11 @@
+# Never uploaded to Vercel when deploying from this PC (the CLI); Vercel builds from the source alone
+.env
+.env.*
+!.env.example
+node_modules
+dist
+android
+design
+.screens
+src/viewer/generated
+*.tsbuildinfo
