@@ -2,7 +2,7 @@
   "name": "teledrive",
   "productName": "TeleDrive",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Personal cloud drive on Telegram",
   "author": "samarthbc",
   "type": "module",
