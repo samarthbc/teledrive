@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import GetApps from '../components/GetApps'
 import Logo from '../components/Logo'
+import ThemeButton from '../components/ThemeButton'
 import { isAndroid } from '../native/android'
 import { isDesktop } from '../native/desktop'
 
@@ -14,7 +15,8 @@ export default function AuthLayout(props: {
 }) {
   const { icon: Icon, title, subtitle, children } = props
   return (
-    <div className="flex min-h-full flex-col overflow-y-auto lg:flex-row">
+    <div className="relative flex min-h-full flex-col overflow-y-auto lg:flex-row">
+      <ThemeButton className="absolute top-4 right-4 z-10 lg:top-6 lg:right-6" />
       <div className="flex flex-col justify-between gap-6 px-6 pt-12 pb-6 lg:w-[520px] lg:shrink-0 lg:p-16">
         <p className="text-[64px] leading-[0.9] font-black tracking-[-0.05em] lg:text-[96px] lg:tracking-[-0.055em]" aria-label="TeleDrive">
           Tele

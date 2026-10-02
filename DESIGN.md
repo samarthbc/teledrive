@@ -47,7 +47,7 @@ The other folders hold the explorations that led here: `2-mix-neumorphism-swiss`
 
 - Three modes: **System** (default), **Light** and **Dark**, saved on the device (`localStorage`, key `teledrive.theme`).
 - Apply the theme by setting `data-theme="light" | "dark"` on `<html>`. In System mode, follow `prefers-color-scheme` and react live when it changes.
-- The sun/moon icon button in the top bar cycles System → Light → Dark. Settings, if added later, gets a 3-way segmented control.
+- The sun/moon icon button (`components/ThemeButton.tsx`) cycles System → Light → Dark: in the top bar, and top-right on the sign-in screens (Setup, login, TeleDrive password). Settings, if added later, gets a 3-way segmented control.
 - Set the theme before React renders, using the tiny script `public/theme-init.js` loaded first in `index.html` (a file, not inline, so the website's Content-Security-Policy needs no exception), so the page never flashes the wrong theme.
 - Update `<meta name="theme-color">` to the surface colour (`#E6E6E3` / `#1F2023`), so the Android status bar and the browser UI match.
 - Tailwind v4: make `dark:` follow the attribute, not only the media query:

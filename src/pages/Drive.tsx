@@ -1,7 +1,7 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, Camera, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen, FolderPlus,
-  FolderUp, HardDrive, Info, LayoutGrid, List, Menu as MenuIcon, Moon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Sun,
-  SunMoon, Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, MonitorSmartphone, RefreshCcwDot, Send,
+  FolderUp, HardDrive, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff,
+  Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, MonitorSmartphone, RefreshCcwDot, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -34,6 +34,7 @@ import { useIncomingShares } from '../native/share'
 import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
 import Dialog from '../components/Dialog'
 import GetApps from '../components/GetApps'
+import ThemeButton from '../components/ThemeButton'
 import LockDialog, { type LockAction } from '../components/dialogs/LockDialog'
 import DuplicatesDialog, { type Duplicate } from '../components/dialogs/DuplicatesDialog'
 import SendDialog from '../components/dialogs/SendDialog'
@@ -43,7 +44,6 @@ import { createFolders, treeFromDrop, treeFromInput, type PickedTree } from '../
 import { closeAllLocks, holdOpen } from '../drive/keyring'
 import { DriveFileUpload } from '../drive/stream'
 import { FILTERS, formatBytes, formatDate, type FilterKey } from '../lib/format'
-import { cycleTheme, THEME_LABELS, useTheme } from '../lib/theme'
 import { useDrive, useRootName, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
 
@@ -90,8 +90,6 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout } = useDrive()
   const anyUnlocked = useMemo(() => [...drive.items.values()].some((i) => i.lock && !i.locked), [drive])
   const rootName = useRootName()
-  const themeMode = useTheme((t) => t.mode)
-
   const [modal, setModal] = useState<Modal | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[]; header?: MenuHeader } | null>(null)
   const [preview, setPreview] = useState<{ files: FileItem[]; index: number } | null>(null)
@@ -562,7 +560,6 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     ...(isAndroid ? [] : [{ label: 'Upload folder', icon: FolderUp, onClick: () => folderInput.current?.click() }]),
     { label: 'New folder', icon: FolderPlus, onClick: newFolder },
   ]
-  const ThemeIcon = { system: SunMoon, light: Sun, dark: Moon }[themeMode]
   const title = mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : TITLES[mode]
   const count =
     mode === 'search'
@@ -698,9 +695,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
               <button className="icon-btn hidden md:inline-flex" onClick={() => void refresh()} aria-label="Refresh" title="Refresh">
                 <RefreshCw className={syncing ? 'animate-spin' : ''} />
               </button>
-              <button className="icon-btn" onClick={cycleTheme} aria-label={THEME_LABELS[themeMode]} title={THEME_LABELS[themeMode]}>
-                <ThemeIcon />
-              </button>
+              <ThemeButton />
             </>
           )}
         </header>
