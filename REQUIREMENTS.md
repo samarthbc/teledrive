@@ -67,7 +67,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | Local storage | IndexedDB |
 | Mobile | Capacitor 7 (wraps the web app into a native Android app; Android 10+) |
 | Desktop | Electron (wraps the web app into a Windows app with an installer) |
-| Website hosting | Static hosting: GitHub Pages / Cloudflare Pages / Vercel (free, no server code) |
+| Website hosting | Vercel (static files only, no server code); app downloads on GitHub Releases |
 
 ### Configuration
 - `api_id` and `api_hash` from https://my.telegram.org (API development tools)
@@ -164,7 +164,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Title bar follows the app's theme
 
 ### 4.9 Public release
-- [ ] Website online (Cloudflare Pages)
+- [ ] Website online (Vercel)
 - [ ] Download links on the website for the Windows app and the Android app (GitHub Releases)
 - [ ] No API keys in any public build; the website and both apps ask for them on a Setup screen
 - [ ] Setup: clear message for wrong keys, a way to change keys, a short explanation

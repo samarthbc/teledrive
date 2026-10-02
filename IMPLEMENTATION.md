@@ -582,8 +582,9 @@ own `api_id` / `api_hash` once per device.
 |---|---|
 | **No API keys in any public build** (website, APK, Windows installer) | Anything in the website's JavaScript or an app file can be read by anyone. Keys built in would let others use your Telegram app ID; abuse can get it blocked, which would break your own apps too |
 | Builds made by **GitHub Actions**, not on the PC | CI has no `.env`, so keys can't slip in; a check also fails the build if a key appears in the output |
-| Website on **Cloudflare Pages** | Served at the root (`/`, no base path to change); a `_headers` file for security headers; free; deploys from GitHub |
-| App files on **GitHub Releases** | Cloudflare Pages allows 25 MB per file; the installer is ~100 MB. Releases are free, versioned, and have stable "latest" links |
+| Website on **Vercel** (Hobby, free for personal use) | Served at the root (`/`, no base path to change); `vercel.json` sets security and cache headers; connects to the GitHub repo and deploys on every push, with a preview link for other branches |
+| App files on **GitHub Releases**, not on Vercel | The installer (~100 MB) and APK would be re-uploaded with every website deploy and count against Vercel's bandwidth; Releases are free, versioned, and have stable "latest" links |
+| **No API keys set in Vercel** | Vercel runs the build on its servers; with no `VITE_TG_*` environment variables there (and the public build mode ignoring them anyway), keys can't end up in the site |
 | Stable file names: `TeleDrive-Setup.exe`, `TeleDrive.apk` | The website links to `…/releases/latest/download/<name>`, so links never change between versions |
 | One version number (`package.json`) | Used for the installer, the APK (`versionName` / `versionCode`) and shown in the app |
 | Android release APK **signed with a release key** | Debug APKs can't be updated safely by others. The keystore stays off GitHub (an Actions secret + a local backup); losing it means users must uninstall to update |
@@ -621,21 +622,26 @@ own `api_id` / `api_hash` once per device.
 ### 9.4 Deploy
 - GitHub Actions workflow, run when a version tag (`v*`) is pushed:
   1. Install, unit tests, typecheck.
-  2. Website: public build → key check → deploy to Cloudflare Pages (API token as a secret).
+  2. Website: deployed by Vercel itself (below), not by this workflow.
   3. Android: public build → `cap sync` → `assembleRelease` signed with the release keystore (secret) →
      key check.
   4. Windows (Windows runner): public build → `electron-builder` → key check.
   5. Create the GitHub Release with `TeleDrive-Setup.exe` and `TeleDrive.apk`.
-- The website also deploys on every push to `main` (website only, no release).
+- **Vercel:** import the GitHub repo once (framework preset Vite, build command `npm run build:public`,
+  output `dist`). Every push to `main` deploys the website; other branches get preview links. The key check
+  runs as part of `build:public`, so a build with a key in it fails and nothing is published.
+- Optional: a custom domain in Vercel's settings; otherwise `teledrive-<name>.vercel.app`.
 
 ### 9.5 Website hardening
-- `public/_headers` for Cloudflare: Content-Security-Policy (scripts and styles only from the site itself,
+- Headers in `vercel.json`: Content-Security-Policy (scripts and styles only from the site itself,
   `wasm-unsafe-eval` for hash-wasm/pdf.js, `connect-src` only Telegram's `wss://*.web.telegram.org`, the
   site and the GitHub API for the version check, `frame-src` for the sandboxed previews), plus
   `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `frame-ancestors 'none'`.
 - Check that the streaming service worker, previews (PDF, Office, ZIP, text) and uploads all still work
   under the policy.
-- Two-factor login on GitHub and Cloudflare: whoever controls them controls the code your browser runs.
+- Cache: `sw.js` and `index.html` never cached (updates reach everyone at once); hashed files in
+  `assets/` cached for a year.
+- Two-factor login on GitHub and Vercel: whoever controls them controls the code your browser runs.
 - Optional: create a fresh `api_hash` at my.telegram.org before going public.
 
 ### 9.6 Docs
