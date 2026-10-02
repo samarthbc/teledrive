@@ -1,6 +1,7 @@
 import { ArrowLeft, KeyRound, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { builtInKeys } from '../config'
+import { fullPhone, guessCountryCode, isCountryCode, rememberCountryCode, splitPhone } from '../lib/phone'
 import { checkPassword, describeError, errorCode, sendCode, signIn } from '../telegram/auth'
 import { BAD_KEYS_NOTICE, useDrive } from '../store/useDrive'
 import AuthLayout from './AuthLayout'
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const changeKeys = useDrive((s) => s.changeKeys)
   const ownKeys = !builtInKeys()
   const [step, setStep] = useState<Step>('phone')
+  const [countryCode, setCountryCode] = useState(guessCountryCode)
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
@@ -35,11 +37,32 @@ export default function LoginPage() {
     }
   }
 
+  const fullNumber = fullPhone(countryCode, phone)
+  const phoneDigits = phone.replace(/\D/g, '').length
+
+  // A whole "+91 98765 43210" typed or pasted into either box goes into both
+  const enterPhone = (text: string) => {
+    const split = splitPhone(text)
+    if (split) {
+      setCountryCode(split.code)
+      setPhone(split.number)
+    } else setPhone(text)
+  }
+  const enterCode = (text: string) => {
+    const split = splitPhone(text.startsWith('+') ? text : `+${text}`)
+    // Only digits fit here; a pasted full number spills its rest into the number box
+    if (split && split.number) {
+      setCountryCode(split.code)
+      setPhone(split.number)
+    } else setCountryCode(text.replace(/\D/g, '').slice(0, 3))
+  }
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (step === 'phone')
       return run(async () => {
-        const res = await sendCode(phone)
+        const res = await sendCode(fullNumber)
+        rememberCountryCode(countryCode)
         setViaApp(res.viaApp)
         setStep('code')
       })
@@ -58,7 +81,7 @@ export default function LoginPage() {
 
   const subtitles: Record<Step, string> = {
     phone: 'Your files are stored in a private channel in your own Telegram account.',
-    code: viaApp ? `We sent a code to your Telegram app (${phone})` : `We sent a code by SMS to ${phone}`,
+    code: viaApp ? `We sent a code to your Telegram app (+${countryCode} ${phone})` : `We sent a code by SMS to +${countryCode} ${phone}`,
     password: 'Your account has two-step verification. Enter your password.',
   }
 
@@ -73,10 +96,20 @@ export default function LoginPage() {
             <label className="field-label" htmlFor="login-phone">
               Phone number
             </label>
-            <input
-              id="login-phone" className="input" type="tel" autoComplete="tel" autoFocus placeholder="+91 98765 43210"
-              value={phone} onChange={(e) => setPhone(e.target.value)}
-            />
+            <div className="flex gap-2.5">
+              <div className="relative w-22 shrink-0">
+                <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-sm font-bold text-muted">+</span>
+                <input
+                  className={`input pl-7.5 ${countryCode.length === 3 && !isCountryCode(countryCode) ? 'input-error' : ''}`} type="tel"
+                  inputMode="numeric" autoComplete="tel-country-code" aria-label="Country code" placeholder="91"
+                  value={countryCode} onChange={(e) => enterCode(e.target.value)}
+                />
+              </div>
+              <input
+                id="login-phone" className="input min-w-0 flex-1" type="tel" autoComplete="tel-national" autoFocus
+                placeholder="98765 43210" value={phone} onChange={(e) => enterPhone(e.target.value)}
+              />
+            </div>
           </div>
         )}
         {step === 'code' && (
@@ -100,7 +133,7 @@ export default function LoginPage() {
 
         {error && <ErrorText>{error}</ErrorText>}
 
-        <button className="btn-primary w-full" disabled={busy || (step === 'phone' ? phone.length < 6 : step === 'code' ? code.length < 5 : !password)}>
+        <button className="btn-primary w-full" disabled={busy || (step === 'phone' ? !isCountryCode(countryCode) || phoneDigits < 4 : step === 'code' ? code.length < 5 : !password)}>
           {busy && <Loader2 className="animate-spin" />}
           {step === 'phone' ? 'Send code' : 'Log in'}
         </button>
