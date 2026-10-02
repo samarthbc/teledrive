@@ -4,6 +4,10 @@
   "installCommand": "ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci",
   "buildCommand": "npm run build:website",
   "outputDirectory": "dist",
+  "redirects": [
+    { "source": "/download/windows", "destination": "https://github.com/samarthbc/teledrive/releases/latest/download/TeleDrive-Setup.exe", "permanent": false },
+    { "source": "/download/android", "destination": "https://github.com/samarthbc/teledrive/releases/latest/download/TeleDrive.apk", "permanent": false }
+  ],
   "headers": [
     {
       "source": "/(.*)",

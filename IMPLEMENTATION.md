@@ -626,8 +626,10 @@ own `api_id` / `api_hash` once per device.
 - `components/GetApps.tsx`: Windows and Android download cards with install notes, the visitor's own system
   first, version and file sizes from GitHub Releases. On the website only: below the Setup/login card and as
   **Get the app** in the side menu (a dialog).
-- Links: `https://github.com/samarthbc/teledrive/releases/latest/download/TeleDrive-Setup.exe` and
-  `…/TeleDrive.apk` (`lib/releases.ts`). They work once the first release exists.
+- Links: the website's own `/download/windows` and `/download/android`, which `vercel.json` redirects (302) to
+  `https://github.com/samarthbc/teledrive/releases/latest/download/TeleDrive-Setup.exe` and `…/TeleDrive.apk`,
+  so the download starts on the site without opening GitHub (`lib/releases.ts`). Before the first release the
+  buttons say **Coming soon** instead of linking to GitHub's "not found" page.
 - In the apps: **Version x.y.z** at the bottom of the side menu, with the update state next to it (9.7).
 - One version: `package.json` → `__APP_VERSION__` in the app, the installer, and the APK (`versionName`,
   `versionCode` = major·10000 + minor·100 + patch) in `android/app/build.gradle`. Now **1.1.0** (10100).

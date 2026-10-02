@@ -13,7 +13,13 @@ export const DOWNLOADS = {
 } as const
 export type Platform = keyof typeof DOWNLOADS
 
-export const downloadUrl = (p: Platform) => `https://github.com/${REPO}/releases/latest/download/${DOWNLOADS[p].file}`
+/** GitHub's link to a file of the newest release, which downloads it straight away. */
+export const githubDownloadUrl = (p: Platform) => `https://github.com/${REPO}/releases/latest/download/${DOWNLOADS[p].file}`
+/**
+ * The website's own download link (`/download/windows`), which vercel.json forwards to the GitHub file, so the
+ * download starts without leaving the site. The dev server has no such route: GitHub's link there.
+ */
+export const downloadUrl = (p: Platform) => (import.meta.env.DEV ? githubDownloadUrl(p) : `/download/${p}`)
 
 export interface Release {
   version: string
@@ -63,11 +69,12 @@ export async function latestRelease(fresh = false): Promise<Release | null | und
   return release
 }
 
-export function useLatestRelease(): Release | null {
-  const [release, setRelease] = useState<Release | null>(null)
+/** The newest release; null if there's none yet, undefined while checking or if GitHub can't be reached. */
+export function useLatestRelease(): Release | null | undefined {
+  const [release, setRelease] = useState<Release | null | undefined>(undefined)
   useEffect(() => {
     let live = true
-    void latestRelease().then((r) => live && setRelease(r ?? null))
+    void latestRelease().then((r) => live && setRelease(r))
     return () => {
       live = false
     }

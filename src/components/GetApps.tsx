@@ -35,9 +35,16 @@ export default function GetApps({ className = '', heading = true }: { className?
                     {size ? ` · ${formatBytes(size)}` : ''}
                   </span>
                 </span>
-                <a className="btn-secondary h-10 shrink-0 px-3.5 text-sm" href={downloadUrl(p)} download aria-label={`Download for ${label}`}>
-                  <Download /> Download
-                </a>
+                {release === null ? (
+                  // Nothing published yet: no link to GitHub's "not found" page
+                  <button className="btn-secondary h-10 shrink-0 px-3.5 text-sm" disabled>
+                    Coming soon
+                  </button>
+                ) : (
+                  <a className="btn-secondary h-10 shrink-0 px-3.5 text-sm" href={downloadUrl(p)} download aria-label={`Download for ${label}`}>
+                    <Download /> Download
+                  </a>
+                )}
               </div>
               <p className="mt-2.5 text-xs leading-relaxed text-muted">{note}</p>
             </li>
