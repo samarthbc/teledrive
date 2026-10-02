@@ -39,7 +39,8 @@ const CACHE_FOR = 24 * 60 * 60 * 1000
 export async function latestRelease(fresh = false): Promise<Release | null | undefined> {
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null') as { at: number; release: Release | null } | null
-    if (!fresh && cached && Date.now() - cached.at < CACHE_FOR) return cached.release
+    // Only a found release is remembered: "none yet" is asked again, so the first release shows at once
+    if (!fresh && cached?.release && Date.now() - cached.at < CACHE_FOR) return cached.release
   } catch {
     // Storage blocked or bad data: just ask GitHub
   }
@@ -62,7 +63,8 @@ export async function latestRelease(fresh = false): Promise<Release | null | und
     return undefined
   }
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), release }))
+    if (release) localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), release }))
+    else localStorage.removeItem(CACHE_KEY)
   } catch {
     // Fine: we'll ask again next time
   }
