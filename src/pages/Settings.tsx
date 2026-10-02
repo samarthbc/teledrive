@@ -23,7 +23,7 @@ export default function SettingsView({ onGetApps }: { onGetApps?: () => void }) 
   const lockNow = useDrive((s) => s.lockNow)
 
   return (
-    // Full width; on very wide screens two columns (appearance and security | sessions and about)
+    // Full width; on very wide screens two columns (appearance, security and about | sessions)
     <div className="grid items-start gap-8 pb-6 2xl:grid-cols-2">
       <div className="space-y-8">
         <Section title="Appearance">
@@ -100,12 +100,10 @@ export default function SettingsView({ onGetApps }: { onGetApps?: () => void }) 
             </button>
           </Row>
         </Section>
-      </div>
-
-      <div className="space-y-8">
-        <ActiveSessions />
         <About onGetApps={onGetApps} />
       </div>
+
+      <ActiveSessions />
     </div>
   )
 }

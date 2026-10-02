@@ -335,7 +335,7 @@ Map each component to its existing file and restyle it; don't create parallel ve
 ---
 
 ### Settings page
-- Big `h-display` title, then sections across the full width (two columns from 1536 px: appearance and security | sessions and about): a `label-swiss` heading over a `panel` of rows divided by 2 px `line`.
+- Big `h-display` title, then sections across the full width (two columns from 1536 px: appearance, security and about | sessions): a `label-swiss` heading over a `panel` of rows divided by 2 px `line`.
 - A row: bold name, 13 px muted explanation, control on the right; on phones the control drops below the text,
   except switches. Choices of 2-4 options use `Segmented` (a pressed track, the chosen option raised in red).
 
