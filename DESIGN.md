@@ -344,10 +344,16 @@ Map each component to its existing file and restyle it; don't create parallel ve
   except switches. Choices of 2-4 options use `Segmented` (a pressed track, the chosen option raised in red).
 
 ### Scrollbars
-- A slim pill (12 px bar, 6 px thumb inset by 3 px) on a clear track: `--scroll-thumb` (ink at 26 % in light,
-  light at 20 % in dark), `--scroll-thumb-hover` on hover, red (`--red`) while dragged. In `src/index.css`:
-  `::-webkit-scrollbar` for Chromium (Chrome, Edge, the Windows app, the Android WebView); Firefox gets
-  `scrollbar-width: thin` with the same colours.
+- Soft UI, square-cornered (2 px radius), 18 px wide. In `src/index.css`:
+  - **Track:** a groove pressed into the surface (`--surface` with inset `--shadow-dark` / `--shadow-light`), inset
+    3 px.
+  - **Thumb:** a raised bar in the groove, inset 4 px: one solid grey (`--scroll-thumb`, lighter in dark), a light
+    top-left edge (`--scroll-thumb-lit`) and a dark bottom-right edge (`--scroll-thumb-edge`); `--scroll-thumb-hover`
+    on hover.
+  - **Dragging:** red (`--red`), with the same raised edges in red (`--scroll-thumb-red-lit` / `-red-edge`).
+  - No gradients. Shadows are inset so they stay inside each part's transparent border.
+- `::-webkit-scrollbar` for Chromium (Chrome, Edge, the Windows app, the Android WebView); Firefox gets
+  `scrollbar-width: thin` in the same colours, without depth.
 
 ## 10. Motion
 
