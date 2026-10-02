@@ -1,4 +1,4 @@
-import { getKV, KEYS, setKV } from './db/db'
+import { delKV, getKV, KEYS, setKV } from './db/db'
 
 export interface ApiKeys {
   apiId: number
@@ -30,4 +30,21 @@ export function validateKeys(apiId: string, apiHash: string): string | null {
 export async function saveKeys(apiId: string, apiHash: string): Promise<void> {
   await setKV(KEYS.apiId, Number(apiId.trim()))
   await setKV(KEYS.apiHash, apiHash.trim().toLowerCase())
+}
+
+/** Remove keys entered on the Setup page (the app then asks for them again). */
+export async function forgetSavedKeys(): Promise<void> {
+  await delKV(KEYS.apiId)
+  await delKV(KEYS.apiHash)
+}
+
+/**
+ * Pull api_id and api_hash out of pasted text, e.g. both copied from my.telegram.org at once
+ * ("App api_id: 1234567 App api_hash: 0123…cdef"). Returns what it found.
+ */
+export function parseKeys(text: string): { apiId?: string; apiHash?: string } {
+  const apiHash = /\b[0-9a-f]{32}\b/i.exec(text)?.[0]
+  const rest = apiHash ? text.replace(apiHash, ' ') : text
+  const apiId = /\b\d{3,12}\b/.exec(rest)?.[0]
+  return { apiId, apiHash: apiHash?.toLowerCase() }
 }

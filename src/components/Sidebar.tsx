@@ -1,11 +1,15 @@
 import {
-  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, Plus, Star,
+  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { driveName } from '../telegram/channel'
 import { installApp, useInstall } from '../lib/install'
+import { APP_VERSION, isNewer, RELEASES_PAGE, useLatestRelease } from '../lib/releases'
+import { isAndroid } from '../native/android'
+import { isDesktop } from '../native/desktop'
+
 import { collectTree, driveStats, isHidden, starredItems, trashedItems, type Drive } from '../drive/tree'
 import { category, formatBytes } from '../lib/format'
 import { useBackup } from '../native/backup'
@@ -25,12 +29,15 @@ export default function Sidebar(props: {
   onNewDrive: () => void
   /** Only in the Android app. */
   onCameraBackup?: () => void
+  /** Only on the website: download links for the apps. */
+  onGetApps?: () => void
 }) {
-  const { onUpload, onUploadFolder, onNewFolder, onLogout, onLockAll, onSwitchDrive, onNewDrive, onCameraBackup } = props
+  const { onUpload, onUploadFolder, onNewFolder, onLogout, onLockAll, onSwitchDrive, onNewDrive, onCameraBackup, onGetApps } = props
   const drives = useDrive((s) => s.drives)
   const currentDrive = useDrive((s) => s.currentDrive)
   const [picking, setPicking] = useState(false)
   const [newMenu, setNewMenu] = useState<{ x: number; y: number } | null>(null)
+  const isApp = isAndroid || isDesktop
   const current = drives.find((d) => d.id === currentDrive)
   const rootName = useRootName()
   const canInstall = useInstall((s) => !!s.event)
@@ -116,12 +123,31 @@ export default function Sidebar(props: {
 
       <div className="mt-auto space-y-2 pt-6">
         <StorageCard drive={drive} onCameraBackup={onCameraBackup} onLockAll={onLockAll} />
+        {onGetApps && !isApp && <Item icon={MonitorSmartphone} label="Get the app" onClick={onGetApps} />}
         {canInstall && <Item icon={Download} label="Install app" onClick={() => void installApp()} />}
         <Item icon={LogOut} label="Log out" onClick={onLogout} />
+        {isApp && <AppVersion />}
       </div>
+
 
       {newMenu && <Menu {...newMenu} entries={newEntries} onClose={() => setNewMenu(null)} />}
     </div>
+  )
+}
+
+/** The app's version, and a link when a newer one is on GitHub (Windows and Android apps). */
+function AppVersion() {
+  const release = useLatestRelease()
+  const update = release && isNewer(release.version, APP_VERSION) ? release.version : null
+  return (
+    <p className="flex items-center justify-between gap-2 px-3.5 pt-1 text-[11px] text-muted">
+      <span>Version {APP_VERSION}</span>
+      {update && (
+        <a href={RELEASES_PAGE} target="_blank" rel="noreferrer" className="font-bold text-brand-ink hover:underline">
+          Update to {update}
+        </a>
+      )}
+    </p>
   )
 }
 

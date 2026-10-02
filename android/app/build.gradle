@@ -1,5 +1,23 @@
 apply plugin: 'com.android.application'
 
+// One version for every build: the "version" in package.json (1.2.3 → versionCode 10203)
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+def (vMajor, vMinor, vPatch) = appVersion.tokenize('.').collect { it as int }
+
+// Release signing (IMPLEMENTATION.md Phase 9). CI passes the TELEDRIVE_* environment variables; on
+// your PC they come from ~/.teledrive/release-signing.properties. Neither file is in the repository.
+def signing = [:]
+def signingFile = new File(System.getProperty('user.home'), '.teledrive/release-signing.properties')
+if (signingFile.exists()) {
+    def props = new Properties()
+    signingFile.withInputStream { props.load(it) }
+    props.each { k, v -> signing[k] = v }
+}
+['storeFile': 'TELEDRIVE_KEYSTORE', 'storePassword': 'TELEDRIVE_KEYSTORE_PASSWORD',
+ 'keyAlias': 'TELEDRIVE_KEY_ALIAS', 'keyPassword': 'TELEDRIVE_KEY_PASSWORD'].each { k, env ->
+    if (System.getenv(env)) signing[k] = System.getenv(env)
+}
+
 android {
     namespace "com.samarthbc.teledrive"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +25,8 @@ android {
         applicationId "com.samarthbc.teledrive"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode vMajor * 10000 + vMinor * 100 + vPatch
+        versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +34,19 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (signing.storeFile) {
+            release {
+                storeFile file(signing.storeFile)
+                storePassword signing.storePassword
+                keyAlias signing.keyAlias
+                keyPassword signing.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signing.storeFile) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

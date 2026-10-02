@@ -1,4 +1,4 @@
-import { Check, Eye, EyeOff, Lock, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { Check, Eye, EyeOff, Lock, ShieldCheck, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { useId, useState } from 'react'
 
 // Shared Soft Swiss form controls (DESIGN.md §7)
@@ -15,11 +15,16 @@ export function PasswordField(props: {
   placeholder?: string
   hint?: string
   error?: boolean
+  /** Instead of the shield/lock (e.g. a key for the api_hash). */
+  icon?: LucideIcon
+  /** Monospace text (codes and keys). */
+  mono?: boolean
+  onPaste?: React.ClipboardEventHandler<HTMLInputElement>
 }) {
-  const { label, value, onChange, kind = 'item', autoFocus, autoComplete, placeholder, hint, error } = props
+  const { label, value, onChange, kind = 'item', autoFocus, autoComplete, placeholder, hint, error, mono, onPaste } = props
   const id = useId()
   const [shown, setShown] = useState(false)
-  const Icon = kind === 'account' ? ShieldCheck : Lock
+  const Icon = props.icon ?? (kind === 'account' ? ShieldCheck : Lock)
   return (
     <div>
       <label className="field-label" htmlFor={id}>
@@ -29,20 +34,22 @@ export function PasswordField(props: {
         <Icon className="pointer-events-none absolute top-1/2 left-3.5 size-[17px] -translate-y-1/2 text-muted" />
         <input
           id={id}
-          className={`input pr-12 pl-10.5 ${error ? 'input-error' : ''}`}
+          className={`input pr-12 pl-10.5 ${mono && shown ? 'font-mono' : ''} ${error ? 'input-error' : ''}`}
           type={shown ? 'text' : 'password'}
           autoFocus={autoFocus}
           autoComplete={autoComplete}
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onPaste={onPaste}
+          spellCheck={false}
           aria-invalid={error || undefined}
         />
         <button
           type="button"
           className="absolute top-1/2 right-1 -translate-y-1/2 icon-btn-flat"
           onClick={() => setShown(!shown)}
-          aria-label={shown ? 'Hide password' : 'Show password'}
+          aria-label={`${shown ? 'Hide' : 'Show'} ${label}`}
         >
           {shown ? <EyeOff /> : <Eye />}
         </button>

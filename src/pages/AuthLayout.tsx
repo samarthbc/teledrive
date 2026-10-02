@@ -1,5 +1,8 @@
 import type { LucideIcon } from 'lucide-react'
+import GetApps from '../components/GetApps'
 import Logo from '../components/Logo'
+import { isAndroid } from '../native/android'
+import { isDesktop } from '../native/desktop'
 
 /** Sign-in screens: the Swiss wordmark beside (desktop) or above (phone) a raised card. */
 export default function AuthLayout(props: {
@@ -24,7 +27,7 @@ export default function AuthLayout(props: {
           <span className="font-medium text-muted">Encrypted before it leaves your device.</span>
         </p>
       </div>
-      <div className="flex flex-1 items-start justify-center px-4 pb-10 lg:items-center lg:p-10">
+      <div className="flex flex-1 flex-col items-center justify-start gap-10 px-4 pb-10 lg:justify-center lg:p-10">
         <div className="w-full max-w-[460px] rounded-md bg-surface p-6 raised-xl sm:p-9">
           <div className="mb-6 flex flex-col gap-4">
             {Icon ? (
@@ -41,6 +44,8 @@ export default function AuthLayout(props: {
           </div>
           {children}
         </div>
+        {/* The website offers the apps; the apps themselves don't */}
+        {!isAndroid && !isDesktop && <GetApps className="w-full max-w-[460px] px-1" />}
       </div>
     </div>
   )

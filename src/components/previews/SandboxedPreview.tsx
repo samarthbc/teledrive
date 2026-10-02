@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FrameKind, RenderMessage } from '../../viewer/frame'
+import { inlineScript } from '../../viewer/inline'
 
 /**
  * Shows a document rendered by src/viewer/frame.ts inside a sandboxed iframe:
@@ -20,8 +21,7 @@ let frameCode: Promise<string> | null = null
 const loadFrameCode = () => (frameCode ??= import('../../viewer/generated/frame.js?raw').then((m) => m.default))
 
 function srcDoc(code: string) {
-  // The script is inlined, so "</script" inside it must not end the tag early
-  const safe = code.replace(/<\/script/gi, '<\\/script')
+  const safe = inlineScript(code)
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="${CSP}">
@@ -47,7 +47,7 @@ export default function SandboxedPreview(props: {
       if (!frame.current || e.source !== frame.current.contentWindow) return
       const msg = e.data as { type: string; message?: string; url?: string }
       if (msg.type === 'ready') {
-        const dark = document.documentElement.classList.contains('dark') || matchMedia('(prefers-color-scheme: dark)').matches
+        const dark = document.documentElement.dataset.theme === 'dark'
         const width = frame.current.clientWidth || window.innerWidth
         const render: RenderMessage = { type: 'render', kind, bytes: bytes.slice(0), dark, width }
         // Opaque-origin frames can only be addressed with '*'; the frame's content is our own srcdoc

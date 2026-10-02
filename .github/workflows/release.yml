@@ -1,0 +1,90 @@
+# Builds the public Windows and Android apps and publishes them as a GitHub Release.
+# Run: set "version" in package.json, commit, then `git tag v1.2.3 && git push origin v1.2.3`.
+# The website is deployed by Vercel on every push to main (vercel.json), not here.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64     the release keystore, base64 (~/.teledrive/teledrive-release.jks)
+#   ANDROID_KEYSTORE_PASSWORD   from ~/.teledrive/release-signing.properties (store and key password)
+#   TG_API_HASH (optional)      your api_hash, only so the build can check it isn't inside the apps
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  KEY_CHECK_HASH: ${{ secrets.TG_API_HASH }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - name: Tag matches package.json version
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - run: npm run build:frame && npm run typecheck && npm test
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: npm ci
+      - run: npm run android:release
+      - name: Build the signed APK
+        working-directory: android
+        env:
+          TELEDRIVE_KEYSTORE: ${{ runner.temp }}/release.jks
+          TELEDRIVE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          TELEDRIVE_KEY_ALIAS: teledrive
+          TELEDRIVE_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$TELEDRIVE_KEYSTORE"
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mv app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/TeleDrive.apk"
+          rm "$TELEDRIVE_KEYSTORE"
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: '${{ runner.temp }}/TeleDrive.apk' }
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run desktop:release
+      - name: Check the packaged app for keys
+        shell: bash
+        run: |
+          node scripts/check-keys.mjs "$LOCALAPPDATA/TeleDrive-build/win-unpacked/resources/app.asar"
+          cp "$LOCALAPPDATA/TeleDrive-build/TeleDrive-Setup.exe" TeleDrive-Setup.exe
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: TeleDrive-Setup.exe }
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: files, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            files/TeleDrive.apk
+            files/TeleDrive-Setup.exe
+          generate_release_notes: true

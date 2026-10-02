@@ -8,3 +8,6 @@ interface ImportMetaEnv {
 // Use the global Buffer (injected by vite-plugin-node-polyfills). GramJS checks
 // `instanceof Buffer` against this exact class, so never import 'buffer' directly.
 declare const Buffer: typeof import('buffer').Buffer
+
+/** package.json version, set in vite.config.ts. */
+declare const __APP_VERSION__: string

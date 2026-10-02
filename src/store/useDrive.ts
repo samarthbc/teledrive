@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { loadKeys } from '../config'
+import { builtInKeys, forgetSavedKeys, loadKeys } from '../config'
 import { clearAccountData, delKV, getKV, KEYS, openDriveDb, setKV } from '../db/db'
 import { cleanup } from '../drive/ops'
 import { hasActiveTransfers, subscribeTransfers, type Transfer } from '../drive/queue'
@@ -31,6 +31,8 @@ interface State {
   error: string | null
   /** Shown on the login screen, e.g. why the user was logged out. */
   loginNotice: string | null
+  /** Shown on the Setup screen, e.g. that Telegram rejected the keys. */
+  setupNotice: string | null
   drive: Drive
   syncing: boolean
   syncError: string | null
@@ -46,6 +48,8 @@ interface State {
   afterLogin: () => Promise<void>
   refresh: () => Promise<void>
   logout: () => Promise<void>
+  /** Forget the API keys entered on this device and show the Setup screen (not for built-in keys). */
+  changeKeys: (notice?: string) => Promise<void>
   setView: (v: ViewMode) => void
   setSort: (s: Sort) => void
   /** The TeleDrive password screen. Throws WrongPasswordError if the password is wrong. */
@@ -56,6 +60,7 @@ interface State {
 }
 
 const SYNC_INTERVAL = 30_000
+export const BAD_KEYS_NOTICE = 'Telegram didn\'t accept these API keys. Check api_id and api_hash on my.telegram.org and enter them again.'
 const LOGGED_OUT_CODES = SESSION_LOST_CODES
 const SESSION_LOST_NOTICE: Record<string, string> = {
   AUTH_KEY_DUPLICATED: 'Telegram ended this session because it was used from two places at once. Please log in again.',
@@ -194,7 +199,8 @@ export const useDrive = create<State>((set, get) => {
 
   const fail = (e: unknown) => {
     console.error(e)
-    if (LOGGED_OUT_CODES.includes(errorCode(e))) void sessionLost(errorCode(e))
+    if (errorCode(e) === 'API_ID_INVALID' && !builtInKeys()) void get().changeKeys(BAD_KEYS_NOTICE)
+    else if (LOGGED_OUT_CODES.includes(errorCode(e))) void sessionLost(errorCode(e))
     else set({ phase: 'error', error: describeError(e) })
   }
 
@@ -202,6 +208,7 @@ export const useDrive = create<State>((set, get) => {
     phase: 'boot',
     error: null,
     loginNotice: null,
+    setupNotice: null,
     drive: buildDrive([]),
     syncing: false,
     syncError: null,
@@ -273,6 +280,13 @@ export const useDrive = create<State>((set, get) => {
       await forgetKeys()
       set({ drives: [], currentDrive: null })
       set({ drive: buildDrive([]), phase: 'login', loginNotice: null })
+    },
+
+    changeKeys: async (notice) => {
+      if (builtInKeys()) return
+      await resetClient()
+      await forgetSavedKeys()
+      set({ phase: 'setup', setupNotice: notice ?? null, loginNotice: null })
     },
 
     setView: (view) => {

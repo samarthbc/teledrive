@@ -165,11 +165,11 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 
 ### 4.9 Public release
 - [ ] Website online (Vercel)
-- [ ] Download links on the website for the Windows app and the Android app (GitHub Releases)
-- [ ] No API keys in any public build; the website and both apps ask for them on a Setup screen
-- [ ] Setup: clear message for wrong keys, a way to change keys, a short explanation
-- [ ] Apps show their version and say when a newer one is available
-- [ ] Security headers (Content-Security-Policy) on the website
+- [x] Download links on the website for the Windows app and the Android app (GitHub Releases)
+- [x] No API keys in any public build; the website and both apps ask for them on a Setup screen
+- [x] Setup: clear message for wrong keys, a way to change keys, a short explanation
+- [x] Apps show their version and say when a newer one is available
+- [x] Security headers (Content-Security-Policy) on the website
 
 ---
 

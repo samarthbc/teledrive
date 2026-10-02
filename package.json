@@ -2,7 +2,7 @@
   "name": "teledrive",
   "productName": "TeleDrive",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Personal cloud drive on Telegram",
   "author": "samarthbc",
   "type": "module",
@@ -18,7 +18,12 @@
     "build:frame": "vite build --config vite.frame.config.ts",
     "predev": "npm run build:frame",
     "desktop": "npm run build && electron .",
-    "desktop:build": "npm run build && electron-builder --win"
+    "desktop:build": "npm run build && electron-builder --win",
+    "build:website": "npm run build:frame && tsc -b && vite build --mode website && node scripts/check-keys.mjs dist",
+    "build:release": "npm run build:frame && tsc -b && vite build --mode release && node scripts/check-keys.mjs dist",
+    "android:release": "npm run build:release && cap sync android && node scripts/check-keys.mjs android/app/src/main/assets/public",
+    "desktop:release": "npm run build:release && electron-builder --win --publish never",
+    "check:keys": "node scripts/check-keys.mjs dist"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",
@@ -85,7 +90,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "TeleDrive",
-      "artifactName": "TeleDrive-Setup-${version}.exe"
+      "artifactName": "TeleDrive-Setup.exe"
     },
     "npmRebuild": false
   }

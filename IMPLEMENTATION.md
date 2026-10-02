@@ -554,7 +554,7 @@ website online. Same web build, wrapped with Electron (as Phase 3 wraps it for A
 ### Build and install
 ```bash
 npm run desktop          # build, then open the app without installing (quick check)
-npm run desktop:build    # build the installer: %LOCALAPPDATA%\TeleDrive-build\TeleDrive-Setup-<version>.exe
+npm run desktop:build    # build the installer: %LOCALAPPDATA%\TeleDrive-build\TeleDrive-Setup.exe
 ```
 Run the installer once; TeleDrive then appears in the Start menu and on the desktop. After changing the
 code, run `npm run desktop:build` again and re-run the installer (your login and files stay).
@@ -571,7 +571,7 @@ like the browser version, and keeps you logged in after a restart.
 
 ---
 
-## Phase 9: Public Release (website online, app downloads, keys entered by the user) ⏳ Next
+## Phase 9: Public Release (website online, app downloads, keys entered by the user) ✅ (implemented; going live needs your accounts)
 
 Put the website online, offer the Windows and Android apps for download from it, and ship every public
 build **without** API keys: the website and both apps show the Setup screen and each person enters their
@@ -588,66 +588,86 @@ own `api_id` / `api_hash` once per device.
 | Stable file names: `TeleDrive-Setup.exe`, `TeleDrive.apk` | The website links to `…/releases/latest/download/<name>`, so links never change between versions |
 | One version number (`package.json`) | Used for the installer, the APK (`versionName` / `versionCode`) and shown in the app |
 | Android release APK **signed with a release key** | Debug APKs can't be updated safely by others. The keystore stays off GitHub (an Actions secret + a local backup); losing it means users must uninstall to update |
+| Website CSP as a `<meta>` tag (built in), plus `frame-ancestors` in `vercel.json` | The document viewer's sandboxed frame inherits the page's policy, so its one inline script must be allowed **by hash**, and that hash changes whenever the viewer is rebuilt. The build computes it; a static header couldn't |
 | Windows installer stays unsigned for now | A code-signing certificate costs money; the download page explains SmartScreen's "More info → Run anyway" |
 
-### 9.1 Builds without keys
-- A public build mode (e.g. `vite build --mode public`) that ignores `VITE_TG_API_ID` / `VITE_TG_API_HASH`
-  even if `.env` has them; local `npm run dev` keeps using `.env`.
-- `npm run check:keys`: fails if the api_hash (or any 32-hex string next to `apiHash`) is found in `dist/`,
-  the APK or the installer. Runs in CI after every build.
-- Personal builds with keys stay possible (`npm run desktop:build`, `npm run android:sync` as now) but are
-  never uploaded anywhere.
+### 9.1 Builds without keys ✅
+- Build modes in `vite.config.ts`: `release` (public apps) and `website` (public site). Both read no
+  `VITE_*` variables (`envPrefix`), so the keys in `.env` can't get in. `npm run dev` / `npm run build`
+  (your own builds) still use `.env`.
+- `scripts/check-keys.mjs <file or folder>` fails if your api_hash is inside a build. It takes the hash from
+  `.env`, or from `KEY_CHECK_HASH` (CI secret `TG_API_HASH`, optional). Runs after every public build.
 
-### 9.2 Setup screen everywhere (website, Windows app, Android app)
-- Shown on first start when no keys are saved on this device (exists: `pages/Setup.tsx`).
-- Improvements:
-  - **Wrong keys:** when Telegram answers `API_ID_INVALID`, go back to Setup with a clear message instead of
-    a login error.
-  - **Change API keys:** a link on the login page (and in the side menu) to re-enter them; logs out first.
-  - **Paste help:** trim spaces, accept `api_id` and `api_hash` pasted together, show/hide the hash.
-  - A short "Why do I need this?" note: the keys identify your copy of the app to Telegram; they don't give
-    access to your account; they stay on this device.
-- Android: camera backup while the app is closed (`backup.html`, headless) must read the saved keys too.
+| Command | Builds |
+|---|---|
+| `npm run build:website` | the website (`dist/`), with the CSP |
+| `npm run android:release` | the public build copied into `android/`; then `cd android && ./gradlew assembleRelease` |
+| `npm run desktop:release` | `%LOCALAPPDATA%\TeleDrive-build\TeleDrive-Setup.exe` |
+| `npm run android:sync`, `npm run desktop:build` | your own builds **with** keys (never upload these) |
+
+### 9.2 Setup screen everywhere ✅
+- `pages/Setup.tsx`, shown whenever no keys are saved on the device (website and both public apps).
+- **Wrong keys:** when Telegram answers `API_ID_INVALID` (while starting, or on "Send code"), the saved keys
+  are removed and Setup comes back with "Telegram didn't accept these API keys…" (`changeKeys` in the store).
+- **Use different API keys:** a button on the login screen (only when the keys were entered, not built in).
+- **Paste help:** pasting text with both keys (as copied from my.telegram.org) fills both fields
+  (`parseKeys`, unit-tested); spaces are trimmed; the api_hash has a show/hide button.
+- **"Why do I need this?"**: a short explanation that opens under the button.
+- Android camera backup while the app is closed reads the same saved keys (same app storage).
 - Your current installs (built with keys): after updating to a public build, Setup appears once; entering
   the same keys keeps you logged in (the Telegram session is still saved).
 
-### 9.3 Download links
-- **Website:** a "Get the app" section on the login/Setup screens and in the side menu: Windows (`.exe`) and
-  Android (`.apk`), with the version and size. The link for the visitor's own system is shown first.
-- Short install notes next to each link: Windows SmartScreen ("More info → Run anyway"); Android "Install
-  unknown apps" permission for the browser.
-- **Inside the apps:** no download links; instead "Version x.y.z" and a "New version available" note when
-  GitHub Releases has a newer one (checked at most once a day; opens the release page).
+### 9.3 Download links and versions ✅
+- `components/GetApps.tsx`: Windows and Android download cards with install notes, the visitor's own system
+  first, version and file sizes from GitHub Releases. On the website only: below the Setup/login card and as
+  **Get the app** in the side menu (a dialog).
+- Links: `https://github.com/samarthbc/teledrive/releases/latest/download/TeleDrive-Setup.exe` and
+  `…/TeleDrive.apk` (`lib/releases.ts`). They work once the first release exists.
+- In the apps: **Version x.y.z** at the bottom of the side menu, and **Update to x.y.z** when GitHub has a
+  newer release (checked at most once a day, cached on the device).
+- One version: `package.json` → `__APP_VERSION__` in the app, the installer, and the APK (`versionName`,
+  `versionCode` = major·10000 + minor·100 + patch) in `android/app/build.gradle`. Now **1.0.0**.
 
-### 9.4 Deploy
-- GitHub Actions workflow, run when a version tag (`v*`) is pushed:
-  1. Install, unit tests, typecheck.
-  2. Website: deployed by Vercel itself (below), not by this workflow.
-  3. Android: public build → `cap sync` → `assembleRelease` signed with the release keystore (secret) →
-     key check.
-  4. Windows (Windows runner): public build → `electron-builder` → key check.
-  5. Create the GitHub Release with `TeleDrive-Setup.exe` and `TeleDrive.apk`.
-- **Vercel:** import the GitHub repo once (framework preset Vite, build command `npm run build:public`,
-  output `dist`). Every push to `main` deploys the website; other branches get preview links. The key check
-  runs as part of `build:public`, so a build with a key in it fails and nothing is published.
-- Optional: a custom domain in Vercel's settings; otherwise `teledrive-<name>.vercel.app`.
+### 9.4 Release signing (Android) ✅
+- Keystore created at `~/.teledrive/teledrive-release.jks` (alias `teledrive`), passwords in
+  `~/.teledrive/release-signing.properties`. Neither is in the repository. **Back up that folder**; without
+  it the app can't be updated (only uninstalled and reinstalled).
+- `build.gradle` signs release builds from that file, or from `TELEDRIVE_KEYSTORE`,
+  `TELEDRIVE_KEYSTORE_PASSWORD`, `TELEDRIVE_KEY_ALIAS`, `TELEDRIVE_KEY_PASSWORD` (CI).
+- Your phone has the debug-signed app: the release APK can't install over it (different signature).
+  Uninstall once, install the release APK, and log in again.
 
-### 9.5 Website hardening
-- Headers in `vercel.json`: Content-Security-Policy (scripts and styles only from the site itself,
-  `wasm-unsafe-eval` for hash-wasm/pdf.js, `connect-src` only Telegram's `wss://*.web.telegram.org`, the
-  site and the GitHub API for the version check, `frame-src` for the sandboxed previews), plus
-  `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `frame-ancestors 'none'`.
-- Check that the streaming service worker, previews (PDF, Office, ZIP, text) and uploads all still work
-  under the policy.
-- Cache: `sw.js` and `index.html` never cached (updates reach everyone at once); hashed files in
-  `assets/` cached for a year.
-- Two-factor login on GitHub and Vercel: whoever controls them controls the code your browser runs.
-- Optional: create a fresh `api_hash` at my.telegram.org before going public.
+### 9.5 Publishing ✅ (workflow ready; needs your accounts)
+- `.github/workflows/release.yml`, run by pushing a tag `v<version>` (must match `package.json`):
+  checks (typecheck, tests) → Android (signed APK) and Windows (installer) in parallel, each key-checked →
+  a GitHub Release with `TeleDrive.apk` and `TeleDrive-Setup.exe`.
+- Repository secrets it needs: `ANDROID_KEYSTORE_BASE64` (the .jks file, base64), `ANDROID_KEYSTORE_PASSWORD`;
+  optional `TG_API_HASH` for the key check.
+- **Vercel** (`vercel.json`): install `ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci`, build `npm run build:website`,
+  output `dist`. Import the GitHub repo once; every push to `main` deploys. Add **no** environment variables.
+- Steps to go live:
+  1. Vercel: log in with GitHub, turn on two-factor login, **Add New → Project → import `teledrive`** (settings
+     come from `vercel.json`), Deploy.
+  2. GitHub: turn on two-factor login; add the two secrets above.
+  3. `git tag v1.0.0 && git push origin v1.0.0` → the release appears under Releases; the website's
+     download links start working.
 
-### 9.6 Docs
-- README: link to the website and the downloads; first-run steps (get your keys, enter them, log in).
-- A short privacy note on the website: no server, files encrypted on the device, keys and login stay on the
-  device.
+### 9.6 Website hardening ✅
+- Content-Security-Policy (`<meta>`, built by the `website` mode): scripts only from the site plus the
+  viewer's inline script by hash; `wasm-unsafe-eval` (hash-wasm, pdf.js); `connect-src` only the site,
+  `wss://*.web.telegram.org` and `api.github.com`; `object-src 'none'`; `base-uri 'self'`.
+- `vercel.json` headers: `frame-ancestors 'none'`, `X-Frame-Options`, `nosniff`, `Referrer-Policy: no-referrer`,
+  `Permissions-Policy`, `Cross-Origin-Opener-Policy`; `index.html`, `sw.js` never cached, `assets/` cached
+  for a year.
+- The theme script moved from inline to `public/theme-init.js`, so no inline script is needed in the page.
+
+### Checked on this PC
+- Website build served with Vercel's headers: Setup shows, no CSP violations, the streaming service worker
+  takes control, a WebSocket to Telegram opens, the document viewer frame renders, the GitHub API is
+  reachable. Made-up keys: Telegram rejects them on "Send code" and Setup returns with the message.
+- Release APK: signed with the release key, version 1.0.0 (10000), no key inside.
+- Release installer: opens on Setup, no key inside the packaged app.
+- Screenshots of Setup, and "Get the app" on desktop and phone.
 
 **Phase 9 done when:** the site is live; a fresh browser, a fresh Windows install and a fresh phone install
 each show Setup, accept keys, log in and work; the download links fetch the latest app files; and no API key

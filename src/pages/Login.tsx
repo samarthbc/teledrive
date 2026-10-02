@@ -1,7 +1,8 @@
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, KeyRound, Loader2 } from 'lucide-react'
 import { useState } from 'react'
-import { checkPassword, describeError, sendCode, signIn } from '../telegram/auth'
-import { useDrive } from '../store/useDrive'
+import { builtInKeys } from '../config'
+import { checkPassword, describeError, errorCode, sendCode, signIn } from '../telegram/auth'
+import { BAD_KEYS_NOTICE, useDrive } from '../store/useDrive'
 import AuthLayout from './AuthLayout'
 import { ErrorText, Note, PasswordField } from '../components/ui'
 
@@ -10,6 +11,8 @@ type Step = 'phone' | 'code' | 'password'
 export default function LoginPage() {
   const afterLogin = useDrive((s) => s.afterLogin)
   const notice = useDrive((s) => s.loginNotice)
+  const changeKeys = useDrive((s) => s.changeKeys)
+  const ownKeys = !builtInKeys()
   const [step, setStep] = useState<Step>('phone')
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
@@ -24,6 +27,8 @@ export default function LoginPage() {
     try {
       await fn()
     } catch (e) {
+      // Keys entered on Setup that Telegram doesn't know: back to Setup to fix them
+      if (errorCode(e) === 'API_ID_INVALID' && ownKeys) return void changeKeys(BAD_KEYS_NOTICE)
       setError(describeError(e))
     } finally {
       setBusy(false)
@@ -103,6 +108,11 @@ export default function LoginPage() {
         {step !== 'phone' && (
           <button type="button" className="btn-ghost w-full" onClick={() => { setStep('phone'); setCode(''); setPassword(''); setError(null) }}>
             <ArrowLeft /> Use a different number
+          </button>
+        )}
+        {step === 'phone' && ownKeys && (
+          <button type="button" className="btn-ghost w-full text-muted" onClick={() => void changeKeys()}>
+            <KeyRound /> Use different API keys
           </button>
         )}
       </form>

@@ -2,7 +2,7 @@
 
 A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, an **Android app** and a **Windows app**. There's **no backend server**; the app runs on your device and talks to Telegram directly.
 
-> Status: **Phase 8 (Windows app)**. See the [roadmap](#roadmap).
+> Status: **Phase 9 (public release)**. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -86,14 +86,35 @@ VITE_TG_API_HASH=your32characterhashhere
 ```
 
 `.env` is git-ignored. Never commit it. If you leave it empty, the app asks for the keys on first launch and stores them on that device only.
+Public builds (website, release apps) never include these keys: everyone enters their own on the Setup screen.
 
 ### 3. Run
 
 ```bash
 npm run dev      # http://localhost:5173
 npm test         # unit tests
-npm run build    # production build in dist/
+npm run build    # production build in dist/ (with your keys, for yourself)
 ```
+
+## Public release
+
+The website and the downloadable apps are built **without** API keys; each person enters their own on the
+Setup screen (once per device).
+
+```bash
+npm run build:website     # the website (dist/), with a Content-Security-Policy
+npm run android:release   # then: cd android && ./gradlew assembleRelease  (signed APK)
+npm run desktop:release   # %LOCALAPPDATA%\TeleDrive-build\TeleDrive-Setup.exe
+```
+
+Every public build runs `scripts/check-keys.mjs`, which fails if your api_hash is inside it.
+
+- **Website:** hosted on Vercel (`vercel.json`), deployed on every push to `main`.
+- **Apps:** pushing a tag `v<version>` runs `.github/workflows/release.yml`, which builds the signed APK and
+  the Windows installer and publishes them as a GitHub Release. The website's **Get the app** links always
+  point to the latest one.
+
+Details and first-time setup (Vercel, GitHub secrets, the Android signing key): IMPLEMENTATION.md Phase 9.
 
 ## Android app
 
@@ -118,7 +139,7 @@ Building from a terminal instead: point `JAVA_HOME` at Android Studio's Java, th
 npm run desktop:build    # builds the installer into %LOCALAPPDATA%\TeleDrive-build
 ```
 
-Run `TeleDrive-Setup-<version>.exe` from that folder. It installs for your user only (no admin), adds
+Run `TeleDrive-Setup.exe` from that folder. It installs for your user only (no admin), adds
 TeleDrive to the Start menu and desktop, and keeps you logged in between launches. It isn't signed, so
 Windows may say "Unknown publisher" the first time: **More info → Run anyway**. After code changes, build
 and run the installer again. `npm run desktop` opens the app without installing it.
@@ -166,7 +187,7 @@ electron/       Windows app (Electron): window, serving the app's files, preload
 | 6 | Security: TeleDrive password (every file encrypted), locked files and folders with their own passwords | ✅ Being tested |
 | 7 | UI redesign (Soft Swiss): light/dark themes and switch, every screen restyled | ✅ Being tested |
 | 8 | Windows desktop app (Electron): installer, no server needed | ✅ Being tested |
-| 9 | Public release: website online, downloads for the apps, everyone enters their own API keys | ⏳ Next |
+| 9 | Public release: website on Vercel, downloads for the apps, everyone enters their own API keys | ✅ Built; going live needs your Vercel and GitHub setup |
 
 ## Tech stack
 

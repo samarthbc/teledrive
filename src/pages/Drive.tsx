@@ -1,7 +1,7 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, Camera, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen, FolderPlus,
   FolderUp, HardDrive, Info, LayoutGrid, List, Menu as MenuIcon, Moon, Pencil, Plus, RefreshCw, Search, Star, StarOff, Sun,
-  SunMoon, Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, RefreshCcwDot, Send,
+  SunMoon, Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, MonitorSmartphone, RefreshCcwDot, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -32,6 +32,8 @@ import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } fr
 import { useBackHandler } from '../native/backButton'
 import { useIncomingShares } from '../native/share'
 import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
+import Dialog from '../components/Dialog'
+import GetApps from '../components/GetApps'
 import LockDialog, { type LockAction } from '../components/dialogs/LockDialog'
 import DuplicatesDialog, { type Duplicate } from '../components/dialogs/DuplicatesDialog'
 import SendDialog from '../components/dialogs/SendDialog'
@@ -57,6 +59,7 @@ type Modal =
   | { type: 'details'; item: Item }
   | { type: 'logout' }
   | { type: 'backup' }
+  | { type: 'getApps' }
   | { type: 'lock'; item: Item; action: LockAction; then?: (item: Item) => void }
   | { type: 'send'; files: FileItem[] }
   | { type: 'newDrive' }
@@ -543,6 +546,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       }}
       onNewDrive={() => setModal({ type: 'newDrive' })}
       onCameraBackup={appUi ? () => setModal({ type: 'backup' }) : undefined}
+      onGetApps={() => setModal({ type: 'getApps' })}
     />
   )
 
@@ -906,6 +910,11 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         />
       )}
       {modal?.type === 'backup' && <CameraBackupDialog onClose={() => setModal(null)} />}
+      {modal?.type === 'getApps' && (
+        <Dialog title="Get the app" icon={MonitorSmartphone} subtitle="TeleDrive for Windows and Android" onClose={() => setModal(null)}>
+          <GetApps heading={false} />
+        </Dialog>
+      )}
       {modal?.type === 'newDrive' && (
         <PromptDialog
           title="New drive"
