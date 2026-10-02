@@ -52,6 +52,31 @@ export default function SetupPage() {
           <li>Go to “API development tools” and create an app (any name)</li>
           <li>Copy the api_id and api_hash below; pasting both at once works too</li>
         </ol>
+        <details className="group text-[13px] leading-relaxed text-muted">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 font-bold text-ink [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="size-4 transition-transform group-open:rotate-90" /> More help
+          </summary>
+          <ul className="mt-2 list-disc space-y-1.5 pl-10 marker:text-brand-ink">
+            <li>
+              <b className="text-ink">Log in:</b> your phone number with the country code (+91…). The code arrives in your
+              Telegram app, not by SMS.
+            </li>
+            <li>
+              <b className="text-ink">App title and short name:</b> anything, e.g. TeleDrive and teledrive (short name: 5–32
+              letters or digits). URL and description can stay empty.
+            </li>
+            <li>
+              <b className="text-ink">Platform:</b> choose Desktop. Any works the same.
+            </li>
+            <li>
+              <b className="text-ink">“ERROR” when creating:</b> turn off any VPN or ad blocker, then try again, in another
+              browser, or on mobile data. Telegram sometimes needs a few minutes.
+            </li>
+            <li>
+              <b className="text-ink">Already made one?</b> Reuse it: the api_id and api_hash are on the same page.
+            </li>
+          </ul>
+        </details>
         <div>
           <label className="field-label" htmlFor={idField}>
             api_id
