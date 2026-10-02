@@ -119,10 +119,13 @@ export function Toggle(props: { checked: boolean; onChange: (v: boolean) => void
   )
 }
 
-/** Something to be careful about (e.g. a password that can't be recovered). */
+/**
+ * Something to be careful about (e.g. a password that can't be recovered). Flat on the surface with a red rule:
+ * pressed-in wells are for things you fill in or that hold a value, and a warning is neither.
+ */
 export function Note({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex gap-3 rounded-md p-3.5 text-[13px] leading-relaxed pressed">
+    <div className="flex gap-3 border-l-[3px] border-brand py-1 pl-3.5 text-[13px] leading-relaxed">
       <TriangleAlert className="mt-0.5 size-4 shrink-0 text-brand-ink" strokeWidth={2.2} />
       <div className="min-w-0">{children}</div>
     </div>

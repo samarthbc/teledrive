@@ -249,6 +249,10 @@ Map each component to its existing file and restyle it; don't create parallel ve
 - A 2 px `--line` divider sits before destructive items. "Move to trash" is `--red-text` 14/700.
 - On the phone, the same actions open in the **bottom sheet** instead.
 
+### Warnings (`Note` in `ui.tsx`)
+- Flat on the surface, not pressed in: a 3 px red rule on the left, the red warning icon, 13 px text. Pressed
+  wells mean "fill this in" or "holds a value", so a warning must never look like one.
+
 ### Dialog (`Dialog.tsx` and all of `dialogs/`)
 - Centred, max-width 440–520, padding 26, gap 18, `lift`, over `--scrim`.
 - **Header:** an optional 40 px tile (red lock for lock actions), the H2 title, and a 13 px muted subtitle.
