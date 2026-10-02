@@ -19,6 +19,8 @@
   --red-text: #b80218;
   --scrim: rgba(17, 17, 17, 0.28);
   --float-shadow: 0 0 0 1px rgba(17, 17, 17, 0.08), 0 0 64px rgba(17, 17, 17, 0.55), 0 20px 44px rgba(17, 17, 17, 0.3);
+  --scroll-thumb: rgba(17, 17, 17, 0.26);
+  --scroll-thumb-hover: rgba(17, 17, 17, 0.45);
   color-scheme: light;
 }
 :root[data-theme='dark'] {
@@ -33,6 +35,8 @@
   --red-text: #ff5a63;
   --scrim: rgba(0, 0, 0, 0.5);
   --float-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 20px rgba(255, 255, 255, 0.1), 0 0 64px rgba(255, 255, 255, 0.22);
+  --scroll-thumb: rgba(242, 242, 242, 0.2);
+  --scroll-thumb-hover: rgba(242, 242, 242, 0.38);
   color-scheme: dark;
 }
 
@@ -59,6 +63,36 @@ body,
 body {
   @apply bg-surface text-ink antialiased;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* ---- Scrollbars: a slim pill in ink (or light, in dark) on a clear track, red while dragged ---- */
+/* Chromium: the website in Chrome/Edge, the Windows app, the Android app's WebView */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scroll-thumb) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-thumb-hover);
+}
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--red);
+}
+/* Firefox (no ::-webkit-scrollbar): thin, same colours */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
 }
 
 :focus-visible {

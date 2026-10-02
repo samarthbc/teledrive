@@ -334,6 +334,12 @@ Map each component to its existing file and restyle it; don't create parallel ve
 
 ---
 
+### Scrollbars
+- A slim pill (12 px bar, 6 px thumb inset by 3 px) on a clear track: `--scroll-thumb` (ink at 26 % in light,
+  light at 20 % in dark), `--scroll-thumb-hover` on hover, red (`--red`) while dragged. In `src/index.css`:
+  `::-webkit-scrollbar` for Chromium (Chrome, Edge, the Windows app, the Android WebView); Firefox gets
+  `scrollbar-width: thin` with the same colours.
+
 ## 10. Motion
 
 - Press: swap the shadow in 120 ms ease-out.
