@@ -645,7 +645,7 @@ own `api_id` / `api_hash` once per device.
 - **Vercel** (`vercel.json`): install `ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci`, build `npm run build:website`,
   output `dist`. Import the GitHub repo once; every push to `main` deploys. Add **no** environment variables.
 - Steps to go live:
-  1. ✅ Vercel: project `teledrive` linked to the GitHub repo; live at **https://teledrive-amber.vercel.app**
+  1. ✅ Vercel: project `teledrive` linked to the GitHub repo; live at **https://teledrive-storage.vercel.app**
      (first deploy 2 Oct 2026). Checked live: headers, CSP with no violations, Telegram reachable, previews,
      the wrong-keys flow, and no api_hash in any file the site serves. Turn on two-factor login in Vercel.
   2. GitHub: turn on two-factor login; add the two secrets above.

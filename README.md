@@ -2,7 +2,7 @@
 
 A personal cloud drive that stores your files in **Telegram**: unlimited storage, a web app, an **Android app** and a **Windows app**. There's **no backend server**; the app runs on your device and talks to Telegram directly.
 
-> **Website: https://teledrive-amber.vercel.app** · Status: **Phase 9 (public release)**. See the [roadmap](#roadmap).
+> **Website: https://teledrive-storage.vercel.app** · Status: **Phase 9 (public release)**. See the [roadmap](#roadmap).
 
 ## Features
 
@@ -109,7 +109,7 @@ npm run desktop:release   # %LOCALAPPDATA%\TeleDrive-build\TeleDrive-Setup.exe
 
 Every public build runs `scripts/check-keys.mjs`, which fails if your api_hash is inside it.
 
-- **Website:** https://teledrive-amber.vercel.app, hosted on Vercel (`vercel.json`), deployed on every push to `main`.
+- **Website:** https://teledrive-storage.vercel.app, hosted on Vercel (`vercel.json`), deployed on every push to `main`.
 - **Apps:** pushing a tag `v<version>` runs `.github/workflows/release.yml`, which builds the signed APK and
   the Windows installer and publishes them as a GitHub Release. The website's **Get the app** links always
   point to the latest one.
