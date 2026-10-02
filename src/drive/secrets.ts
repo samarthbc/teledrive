@@ -1,6 +1,6 @@
 import { unseal } from './crypto'
-import { isLevelOpen, levelKey } from './keyring'
-import type { Secret } from './meta'
+import { isLevelOpen, levelKey, ROOT_LEVEL } from './keyring'
+import { ROOT, type Secret } from './meta'
 import { levelsOf, type KeyView, type MessageRecord } from './tree'
 
 // Decrypted caption fields (names, types, hashes), kept in memory only and dropped when their level locks.
@@ -25,11 +25,15 @@ export function unresolved(records: Iterable<MessageRecord>): { sealed: string; 
   }
   const levels = levelsOf(entries)
   const todo: { sealed: string; level: string }[] = []
+  const want = (sealed: string | undefined, level: string) => {
+    if (sealed && !cache.has(sealed) && !failed.has(sealed) && isLevelOpen(level)) todo.push({ sealed, level })
+  }
   for (const r of list) {
     const m = r.meta
-    if ((m.t !== 'd' && m.t !== 'f') || !m.e || cache.has(m.e) || failed.has(m.e)) continue
-    const level = levels.get(m.id)!
-    if (isLevelOpen(level)) todo.push({ sealed: m.e, level })
+    if (m.t !== 'd' && m.t !== 'f') continue
+    want(m.e, levels.get(m.id)!)
+    // A locked item's visible name is sealed with its folder's key
+    want(m.ln, m.p === ROOT ? ROOT_LEVEL : (levels.get(m.p) ?? ROOT_LEVEL))
   }
   return todo
 }

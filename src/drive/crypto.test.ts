@@ -139,4 +139,27 @@ describe('locked folders in the tree', () => {
     purgeClosedSecrets()
     expect(buildDrive(records, keyView).items.get('doc')).toMatchObject({ concealed: true })
   })
+
+  it('show their own name while locked, readable with the folder they are in', SLOW, async () => {
+    const { config, keys } = await createAccount('account password')
+    setAccount(keys, config)
+    const { lock, key } = await newLock(keys.root, 'folder password')
+    const folder = decode(encode({
+      td: 1, t: 'd', id: 'secrets', p: ROOT, n: '', x: { enc: 1 }, e: await seal(key, { n: 'Secrets' }), l: lock,
+      ln: await seal(keys.root, { n: 'Secrets' }),
+    }))!
+    expect(folder).toMatchObject({ ln: expect.any(String) })
+    const inside: Meta = {
+      td: 1, t: 'f', id: 'note', p: 'secrets', n: '', s: 10, m: '', of: 1, ts: 1, x: { enc: 1 },
+      k: (await newFileKey(key)).wrapped, e: await seal(key, { n: 'diary.txt', m: 'text/plain' }),
+    }
+    const records: MessageRecord[] = [{ msgId: 1, meta: folder, date: 1 }, { msgId: 2, meta: inside, date: 1 }]
+
+    // Locked: its name shows (the folder it's in is open), what's inside doesn't
+    await resolveSecrets(unresolved(records))
+    const drive = buildDrive(records, keyView)
+    expect(drive.items.get('secrets')).toMatchObject({ name: 'Secrets', locked: true })
+    expect(drive.items.get('note')).toMatchObject({ concealed: true })
+    expect(drive.items.get('note')?.name).not.toBe('diary.txt')
+  })
 })

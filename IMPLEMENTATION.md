@@ -468,7 +468,12 @@ Locked file:  upload → encrypt (file key, protected by the TeleDrive password 
   optional **Re-encrypt** re-uploads them with a fresh file key.
 - **Unlocked state** lives in memory only: it ends when the item is locked again, the app closes, or after
   5 minutes of inactivity. Never remembered on the device.
-- **While locked:** shown as "Locked file/folder" with a lock; can be moved or trashed; can't be opened,
+- **Names while locked:** a locked item shows its own name with a closed lock icon (an open lock while unlocked);
+  the unlock dialog says "Unlock <name>". The name is stored a second time (`ln` in the caption), sealed with
+  the key of the folder it's in rather than its own lock key, so anyone with the TeleDrive password sees the
+  name; the contents (and the names of everything inside a locked folder) still need the lock password. Items
+  locked before this get `ln` the first time they're unlocked; until then they show "Locked file/folder".
+- **While locked:** shown with a lock; can be moved or trashed; can't be opened,
   previewed or downloaded. Locked items (and anything inside locked folders) **can't be sent** to Telegram chats,
   and can't be a camera backup destination.
 

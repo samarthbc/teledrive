@@ -48,7 +48,9 @@ export async function rename(drive: Drive, item: Item, name: string): Promise<vo
   if (item.locked) throw new Error('Unlock this item to rename it')
   const newName = uniqueName(drive, item.parent, name.trim(), item.id)
   if (newName === item.name) return
-  await updateItem(item, { n: newName })
+  // A locked item's visible name is sealed with its folder's key
+  const level = childLevel(drive, item.parent)
+  await updateItem(item, { n: newName }, undefined, item.lock ? { key: requireLevelKey(level), level } : undefined)
 }
 
 export async function move(drive: Drive, items: Item[], targetId: string): Promise<void> {
@@ -100,8 +102,11 @@ async function relevelTree(drive: Drive, item: Item, changes: Changes, relevel: 
   for (const child of drive.allChildren.get(item.id) ?? []) await relevelTree(drive, child, {}, relevel)
 }
 
-/** Rewrite an item's caption: new parent, name or flags, and, with `relevel`, new level keys. */
-async function updateItem(item: Item, changes: Changes, relevel?: Relevel): Promise<void> {
+/**
+ * Rewrite an item's caption: new parent, name or flags, and, with `relevel`, new level keys. Renaming a locked
+ * item needs `label`: its folder's key, for the name shown while it's locked.
+ */
+async function updateItem(item: Item, changes: Changes, relevel?: Relevel, label?: { key: CryptoKey; level: string }): Promise<void> {
   const current = currentMeta(item)
   const meta = { ...current }
   if (changes.p !== undefined) meta.p = changes.p
@@ -116,8 +121,13 @@ async function updateItem(item: Item, changes: Changes, relevel?: Relevel): Prom
     if (renamed) {
       const own = requireLevelKey(item.level)
       meta.e = await reseal(current.e, own, own, item.level, changes.n)
+      if (label) meta.ln = await sealLabel(changes.n!, label.key, label.level)
     }
-    if (relevel) meta.l = await moveLock(current.l, relevel.from, relevel.to)
+    if (relevel) {
+      meta.l = await moveLock(current.l, relevel.from, relevel.to)
+      // Its visible name goes with it to the new folder's key
+      if (meta.ln) meta.ln = await reseal(meta.ln, relevel.from, relevel.to, relevel.toLevel)
+    }
   } else {
     const own = relevel?.from ?? requireLevelKey(item.level)
     const target = relevel?.to ?? own
@@ -125,6 +135,14 @@ async function updateItem(item: Item, changes: Changes, relevel?: Relevel): Prom
     if (relevel && meta.t === 'f' && meta.k) meta.k = await rewrapFileKey(meta.k, relevel.from, relevel.to)
   }
   await writeMeta(item.msgId, meta)
+}
+
+/** A locked item's visible name (`ln`), sealed with its folder's key. */
+async function sealLabel(name: string, folderKey: CryptoKey, folderLevel: string): Promise<string> {
+  const secret: Secret = { n: name }
+  const out = await seal(folderKey, secret)
+  rememberSecret(out, folderLevel, secret)
+  return out
 }
 
 /** Decrypt sealed caption fields with one key and seal them (optionally renamed) with another. */
@@ -162,13 +180,15 @@ async function writeMeta(msgId: number, meta: Meta): Promise<void> {
 export async function lockItem(drive: Drive, item: Item, password: string, keepOpen = false): Promise<void> {
   if (item.lock) throw new Error('This item is already locked')
   if (item.locked) throw new Error('Unlock it first')
-  const parentKey = requireLevelKey(childLevel(drive, item.parent))
+  const parentLevel = childLevel(drive, item.parent)
+  const parentKey = requireLevelKey(parentLevel)
   const { lock, key } = await newLock(parentKey, password)
   const relevel: Relevel = { from: parentKey, to: key, toLevel: item.id }
 
-  // The item itself: sealed with its new lock key, with the lock written next to it
+  // The item itself: sealed with its new lock key, with the lock written next to it, and its name readable
+  // with the folder's key so it still shows while locked
   const current = currentMeta(item)
-  const meta = { ...current, l: lock, x: { ...current.x, enc: 1 as const } }
+  const meta = { ...current, l: lock, ln: await sealLabel(item.name, parentKey, parentLevel), x: { ...current.x, enc: 1 as const } }
   if (current.e) meta.e = await reseal(current.e, parentKey, key, item.id)
   if (meta.t === 'f' && meta.k) meta.k = await rewrapFileKey(meta.k, parentKey, key)
   // Its contents need the new key while they're re-wrapped
@@ -184,8 +204,19 @@ export async function lockItem(drive: Drive, item: Item, password: string, keepO
 /** Open a locked item for this session (WrongPasswordError if the password is wrong). */
 export async function unlockItem(drive: Drive, item: Item, password: string): Promise<void> {
   if (!item.lock) return
-  const parentKey = requireLevelKey(childLevel(drive, item.parent))
-  openLevel(item.id, await openLock(item.lock, parentKey, password))
+  const parentLevel = childLevel(drive, item.parent)
+  const parentKey = requireLevelKey(parentLevel)
+  const key = await openLock(item.lock, parentKey, password)
+  openLevel(item.id, key)
+  await addLabel(item, key, parentKey, parentLevel).catch((e) => console.warn('Could not save the name of a locked item', e))
+}
+
+/** Items locked before names showed while locked: add the visible name the first time they're unlocked. */
+async function addLabel(item: Item, ownKey: CryptoKey, parentKey: CryptoKey, parentLevel: string): Promise<void> {
+  const current = currentMeta(item)
+  if (current.ln || !current.e) return
+  const { n } = await unseal<Secret>(ownKey, current.e)
+  await writeMeta(item.msgId, { ...current, ln: await sealLabel(n, parentKey, parentLevel) })
 }
 
 /** Lock an unlocked item again (until its password is entered). */
@@ -202,7 +233,7 @@ export async function removeLock(drive: Drive, item: Item): Promise<void> {
   const relevel: Relevel = { from: key, to: parentKey, toLevel: parentLevel }
   // Contents first: if this stops halfway, the item is still locked and its contents still readable with it
   if (item.kind === 'folder') for (const child of drive.allChildren.get(item.id) ?? []) await relevelTree(drive, child, {}, relevel)
-  const { l: _, ...current } = currentMeta(item)
+  const { l: _, ln: _label, ...current } = currentMeta(item)
   const meta = { ...current }
   if (current.e) meta.e = await reseal(current.e, key, parentKey, parentLevel)
   if (meta.t === 'f' && meta.k) meta.k = await rewrapFileKey(meta.k, key, parentKey)

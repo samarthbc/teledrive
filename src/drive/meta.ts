@@ -34,6 +34,11 @@ export interface FolderMeta {
   e?: string
   /** Set when the folder is locked with its own password. */
   l?: LockInfo
+  /**
+   * A locked item's name, sealed with the key of the folder it's in (not its own lock key), so the name
+   * shows while it's locked. Contents stay behind the lock. Missing on items locked before this existed.
+   */
+  ln?: string
 }
 
 export interface FileMeta {
@@ -55,6 +60,11 @@ export interface FileMeta {
   k?: string
   /** Set when the file is locked with its own password. */
   l?: LockInfo
+  /**
+   * A locked item's name, sealed with the key of the folder it's in (not its own lock key), so the name
+   * shows while it's locked. Contents stay behind the lock. Missing on items locked before this existed.
+   */
+  ln?: string
 }
 
 export interface ChunkMeta {
@@ -112,7 +122,7 @@ export function decode(text: string | undefined | null): Meta | null {
   // Encrypted items carry their name in `e` instead of `n`
   const sealed = x?.enc === 1 && isStr(o.e) ? o.e : undefined
   const name = sealed ? '' : o.n
-  const lock = sealed && isLock(o.l) ? { l: o.l } : {}
+  const lock = sealed && isLock(o.l) ? { l: o.l, ...(isStr(o.ln) && { ln: o.ln }) } : {}
 
   switch (o.t) {
     case 'd':

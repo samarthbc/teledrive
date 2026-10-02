@@ -2,7 +2,7 @@ import { KeyRound, Loader2, Lock, LockOpen } from 'lucide-react'
 import { useState } from 'react'
 import { WrongPasswordError } from '../../drive/crypto'
 import { changeItemPassword, lockItem, removeLock, unlockItem } from '../../drive/ops'
-import type { Item } from '../../drive/tree'
+import { LOCKED_FILE_NAME, LOCKED_FOLDER_NAME, type Item } from '../../drive/tree'
 import { verifyPassword } from '../../drive/vault'
 import { MIN_PASSWORD } from '../../pages/Password'
 import { useDrive } from '../../store/useDrive'
@@ -34,6 +34,8 @@ export default function LockDialog(props: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const what = item.kind === 'folder' ? 'folder' : 'file'
+  // Items locked before names showed while locked have no name to show until they're unlocked once
+  const placeholderName = item.locked && (item.name === LOCKED_FOLDER_NAME || item.name === LOCKED_FILE_NAME)
   const needsAccount = action !== 'unlock'
   const needsNew = action === 'lock' || action === 'change'
 
@@ -69,7 +71,7 @@ export default function LockDialog(props: {
 
   const titles: Record<LockAction, string> = {
     lock: `Lock this ${what}`,
-    unlock: `Unlock “${item.locked ? `this ${what}` : item.name}”`,
+    unlock: placeholderName ? `Unlock this ${what}` : `Unlock ${item.name}`,
     remove: 'Remove the lock',
     change: `Change the ${what} password`,
   }

@@ -166,25 +166,21 @@ function details(item: Item): string {
   return item.kind === 'file' ? formatBytes(item.size) : 'Folder'
 }
 
-const LABEL = 'shrink-0 text-[11px] font-extrabold tracking-[0.08em] text-brand-ink'
-
 function Badges({ item, short }: { item: Item; short?: boolean }) {
+  const size = short ? 'size-3.5' : 'size-4'
   return (
     <>
       {item.x.fav && <Star className="size-3.5 shrink-0 text-brand-ink" strokeWidth={2.2} aria-label="Starred" />}
-      {item.lock &&
-        (short ? (
-          <span title={item.locked ? 'Locked' : 'Unlocked for now'} className="shrink-0 text-brand-ink">
-            {item.locked ? <Lock className="size-3.5" strokeWidth={2.2} /> : <LockOpen className="size-3.5" strokeWidth={2.2} />}
-          </span>
-        ) : (
-          <span
-            className={LABEL}
-            title={item.locked ? 'Locked: needs its password' : 'Unlocked for now (locks again after a few idle minutes)'}
-          >
-            {item.locked ? 'LOCKED' : 'OPEN'}
-          </span>
-        ))}
+      {/* Locked: a closed lock; unlocked for now: an open one (locks again after the auto-lock time) */}
+      {item.lock && (
+        <span
+          title={item.locked ? 'Locked: needs its password' : 'Unlocked for now (locks again after a few idle minutes)'}
+          aria-label={item.locked ? 'Locked' : 'Unlocked'}
+          className="shrink-0 text-brand-ink"
+        >
+          {item.locked ? <Lock className={size} strokeWidth={2.2} /> : <LockOpen className={size} strokeWidth={2.2} />}
+        </span>
+      )}
       {item.kind === 'file' && !item.complete && (
         <span title="Some parts of this file are missing" className="shrink-0 text-brand-ink">
           <AlertTriangle className="size-3.5" strokeWidth={2.2} />

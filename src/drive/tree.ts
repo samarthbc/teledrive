@@ -132,6 +132,8 @@ export function childLevel(drive: Drive, folderId: string): string {
 export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLAIN): Drive {
   const items = new Map<string, Item>()
   const sealedOf = new Map<string, string>()
+  /** Locked items' names readable with their folder's key (meta `ln`). */
+  const labelOf = new Map<string, string>()
   const chunks = new Map<string, Part[]>()
   let configMsgId: number | undefined
   let encryption: AccountConfig | undefined
@@ -151,6 +153,7 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
     } else if (!items.has(m.id)) {
       // On duplicate IDs the oldest message wins
       if (m.e) sealedOf.set(m.id, m.e)
+      if (m.ln) labelOf.set(m.id, m.ln)
       const protection = { level: ROOT_LEVEL, locked: false, concealed: false, ...(m.l && { lock: m.l }) }
       if (m.t === 'd') {
         items.set(m.id, {
@@ -201,7 +204,9 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
     item.locked = !!sealed && !secret
     item.concealed = !keys.isOpen(parentLevel)
     if (sealed) {
-      item.name = secret?.n ?? (item.kind === 'folder' ? LOCKED_FOLDER_NAME : LOCKED_FILE_NAME)
+      // Locked: its real name if it was saved readable for the folder it's in (items locked since names show)
+      const label = item.locked && labelOf.has(item.id) && keys.isOpen(parentLevel) ? keys.secretOf(labelOf.get(item.id)!)?.n : undefined
+      item.name = secret?.n ?? label ?? (item.kind === 'folder' ? LOCKED_FOLDER_NAME : LOCKED_FILE_NAME)
       if (item.kind === 'file') {
         item.mime = secret?.m ?? 'application/octet-stream'
         if (secret?.h) item.hash = secret.h

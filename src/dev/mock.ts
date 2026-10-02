@@ -16,7 +16,9 @@ const folders: [string, string, string, number, Record<string, unknown>?][] = [
   ['docs', 'root', 'Documents', 1],
   ['photos', 'root', 'Camera', 2],
   ['projects', 'root', 'Projects', 6],
-  ['locked', 'root', '', 3, { l: lock, x: { enc: 1 }, e: 'sealed' }],
+  ['locked', 'root', '', 3, { l: lock, x: { enc: 1 }, e: 'sealed', ln: 'label:Secrets' }],
+  // Unlocked for now
+  ['private', 'root', '', 2, { l: lock, x: { enc: 1 }, e: 'open:Private', ln: 'label:Private' }],
   ['taxes', 'docs', 'Taxes 2026', 9],
 ]
 const files: [string, string, string, number, string, number, Record<string, unknown>?][] = [
@@ -27,7 +29,7 @@ const files: [string, string, string, number, string, number, Record<string, unk
   ['img1', 'root', 'IMG_2041.jpg', 3_200_000, 'image/jpeg', 6],
   ['voice', 'root', 'Voice note 12.m4a', 2_100_000, 'audio/mp4', 7],
   ['notes', 'root', 'notes.txt', 4_000, 'text/plain', 8],
-  ['secret', 'root', '', 52_000, 'application/pdf', 4, { l: lock, x: { enc: 1 }, e: 'sealed' }],
+  ['secret', 'root', '', 52_000, 'application/pdf', 4, { l: lock, x: { enc: 1 }, e: 'sealed', ln: 'label:Passport.pdf' }],
   ['itr', 'docs', 'ITR acknowledgement.pdf', 240_000, 'application/pdf', 10],
   ['old', 'root', 'Old backup.zip', 210_000_000, 'application/zip', 20, { x: { tr: now - 2 * DAY } }],
   ['draft', 'root', 'Draft notes.txt', 3_000, 'text/plain', 12, { x: { tr: now - 5 * DAY } }],
@@ -59,7 +61,11 @@ useDrive.setState({
   phase,
   passwordMode: param.get('create') !== null ? 'create' : 'enter',
   // Only the root level is open, so the sample locked items show as locked
-  drive: buildDrive(records(), { isOpen: (level) => level === 'root', secretOf: () => undefined }),
+  // (their visible names are stand-ins "label:<name>" for the sealed `ln`)
+  drive: buildDrive(records(), {
+    isOpen: (level) => level === 'root' || level === 'private',
+    secretOf: (sealed) => (/^(label|open):/.test(sealed) ? { n: sealed.replace(/^\w+:/, '') } : undefined),
+  }),
   drives: [
     { id: '1', accessHash: '0', title: 'TeleDrive Storage' },
     { id: '2', accessHash: '0', title: 'TeleDrive · Work' },
