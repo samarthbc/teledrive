@@ -632,7 +632,7 @@ own `api_id` / `api_hash` once per device.
   buttons say **Coming soon** instead of linking to GitHub's "not found" page.
 - In the apps: **Version x.y.z** at the bottom of the side menu, with the update state next to it (9.7).
 - One version: `package.json` → `__APP_VERSION__` in the app, the installer, and the APK (`versionName`,
-  `versionCode` = major·10000 + minor·100 + patch) in `android/app/build.gradle`. Now **1.1.0** (10100).
+  `versionCode` = major·10000 + minor·100 + patch) in `android/app/build.gradle`. Now **1.1.1** (10101).
 
 ### 9.4 Release signing (Android) ✅
 - Keystore created at `~/.teledrive/teledrive-release.jks` (alias `teledrive`), passwords in

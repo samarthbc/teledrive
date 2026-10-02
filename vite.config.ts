@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => ({
     tailwindcss(),
     // GramJS expects Node built-ins (Buffer, crypto, os, ...)
     nodePolyfills({ globals: { Buffer: true, process: true, global: true }, exclude: ['vm'] }),
+    oneBuffer(),
     mode === 'website' && contentSecurityPolicy(),
   ],
   build: {
@@ -42,6 +43,23 @@ export default defineConfig(({ mode }) => ({
     environment: 'node',
   },
 }))
+
+/**
+ * One Buffer class for everything. The polyfill has an ES-module and a CommonJS copy of its Buffer shim, and the
+ * build took both: the global `Buffer` from one, GramJS's `require("buffer")` from the other. GramJS's
+ * `instanceof Buffer` checks then rejected the other copy's bytes, and the two-step password failed with
+ * "Bytes or str expected, not d".
+ */
+function oneBuffer(): Plugin {
+  const shim = fileURLToPath(new URL('node_modules/vite-plugin-node-polyfills/shims/buffer/dist/index.js', import.meta.url))
+  return {
+    name: 'teledrive-one-buffer',
+    enforce: 'pre',
+    resolveId(id) {
+      if (/^(buffer\/?|vite-plugin-node-polyfills\/shims\/buffer)$/.test(id)) return shim
+    },
+  }
+}
 
 /**
  * The website's Content-Security-Policy, as a <meta> tag so it can carry the hash of the document
