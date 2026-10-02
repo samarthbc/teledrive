@@ -163,8 +163,13 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Downloads, uploads, previews and video streaming work as in the browser
 - [x] Title bar follows the app's theme
 
-### 4.9 Later: put the website online
-- [ ] Deploy the website (Cloudflare Pages or GitHub Pages)
+### 4.9 Public release
+- [ ] Website online (Cloudflare Pages)
+- [ ] Download links on the website for the Windows app and the Android app (GitHub Releases)
+- [ ] No API keys in any public build; the website and both apps ask for them on a Setup screen
+- [ ] Setup: clear message for wrong keys, a way to change keys, a short explanation
+- [ ] Apps show their version and say when a newer one is available
+- [ ] Security headers (Content-Security-Policy) on the website
 
 ---
 
@@ -199,4 +204,4 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **6** | Security: TeleDrive password, locked files and folders |
 | **7** | UI redesign |
 | **8** | Windows desktop app (Electron) |
-| **9** | Deploy the website (later) |
+| **9** | Public release: website online, app downloads, Setup screen everywhere |

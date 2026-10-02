@@ -571,13 +571,85 @@ like the browser version, and keeps you logged in after a restart.
 
 ---
 
-## Phase 9: Deploy the Website (later)
-- `npm run build` → deploy `dist/` to Cloudflare Pages or GitHub Pages.
-- Decide then: build **with** keys (personal) or **without** (users enter their own on the Setup page).
+## Phase 9: Public Release (website online, app downloads, keys entered by the user) ⏳ Next
 
-**Done when:** the site is live and works like the local version.
+Put the website online, offer the Windows and Android apps for download from it, and ship every public
+build **without** API keys: the website and both apps show the Setup screen and each person enters their
+own `api_id` / `api_hash` once per device.
+
+### Decisions
+| Decision | Reason |
+|---|---|
+| **No API keys in any public build** (website, APK, Windows installer) | Anything in the website's JavaScript or an app file can be read by anyone. Keys built in would let others use your Telegram app ID; abuse can get it blocked, which would break your own apps too |
+| Builds made by **GitHub Actions**, not on the PC | CI has no `.env`, so keys can't slip in; a check also fails the build if a key appears in the output |
+| Website on **Cloudflare Pages** | Served at the root (`/`, no base path to change); a `_headers` file for security headers; free; deploys from GitHub |
+| App files on **GitHub Releases** | Cloudflare Pages allows 25 MB per file; the installer is ~100 MB. Releases are free, versioned, and have stable "latest" links |
+| Stable file names: `TeleDrive-Setup.exe`, `TeleDrive.apk` | The website links to `…/releases/latest/download/<name>`, so links never change between versions |
+| One version number (`package.json`) | Used for the installer, the APK (`versionName` / `versionCode`) and shown in the app |
+| Android release APK **signed with a release key** | Debug APKs can't be updated safely by others. The keystore stays off GitHub (an Actions secret + a local backup); losing it means users must uninstall to update |
+| Windows installer stays unsigned for now | A code-signing certificate costs money; the download page explains SmartScreen's "More info → Run anyway" |
+
+### 9.1 Builds without keys
+- A public build mode (e.g. `vite build --mode public`) that ignores `VITE_TG_API_ID` / `VITE_TG_API_HASH`
+  even if `.env` has them; local `npm run dev` keeps using `.env`.
+- `npm run check:keys`: fails if the api_hash (or any 32-hex string next to `apiHash`) is found in `dist/`,
+  the APK or the installer. Runs in CI after every build.
+- Personal builds with keys stay possible (`npm run desktop:build`, `npm run android:sync` as now) but are
+  never uploaded anywhere.
+
+### 9.2 Setup screen everywhere (website, Windows app, Android app)
+- Shown on first start when no keys are saved on this device (exists: `pages/Setup.tsx`).
+- Improvements:
+  - **Wrong keys:** when Telegram answers `API_ID_INVALID`, go back to Setup with a clear message instead of
+    a login error.
+  - **Change API keys:** a link on the login page (and in the side menu) to re-enter them; logs out first.
+  - **Paste help:** trim spaces, accept `api_id` and `api_hash` pasted together, show/hide the hash.
+  - A short "Why do I need this?" note: the keys identify your copy of the app to Telegram; they don't give
+    access to your account; they stay on this device.
+- Android: camera backup while the app is closed (`backup.html`, headless) must read the saved keys too.
+- Your current installs (built with keys): after updating to a public build, Setup appears once; entering
+  the same keys keeps you logged in (the Telegram session is still saved).
+
+### 9.3 Download links
+- **Website:** a "Get the app" section on the login/Setup screens and in the side menu: Windows (`.exe`) and
+  Android (`.apk`), with the version and size. The link for the visitor's own system is shown first.
+- Short install notes next to each link: Windows SmartScreen ("More info → Run anyway"); Android "Install
+  unknown apps" permission for the browser.
+- **Inside the apps:** no download links; instead "Version x.y.z" and a "New version available" note when
+  GitHub Releases has a newer one (checked at most once a day; opens the release page).
+
+### 9.4 Deploy
+- GitHub Actions workflow, run when a version tag (`v*`) is pushed:
+  1. Install, unit tests, typecheck.
+  2. Website: public build → key check → deploy to Cloudflare Pages (API token as a secret).
+  3. Android: public build → `cap sync` → `assembleRelease` signed with the release keystore (secret) →
+     key check.
+  4. Windows (Windows runner): public build → `electron-builder` → key check.
+  5. Create the GitHub Release with `TeleDrive-Setup.exe` and `TeleDrive.apk`.
+- The website also deploys on every push to `main` (website only, no release).
+
+### 9.5 Website hardening
+- `public/_headers` for Cloudflare: Content-Security-Policy (scripts and styles only from the site itself,
+  `wasm-unsafe-eval` for hash-wasm/pdf.js, `connect-src` only Telegram's `wss://*.web.telegram.org`, the
+  site and the GitHub API for the version check, `frame-src` for the sandboxed previews), plus
+  `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `frame-ancestors 'none'`.
+- Check that the streaming service worker, previews (PDF, Office, ZIP, text) and uploads all still work
+  under the policy.
+- Two-factor login on GitHub and Cloudflare: whoever controls them controls the code your browser runs.
+- Optional: create a fresh `api_hash` at my.telegram.org before going public.
+
+### 9.6 Docs
+- README: link to the website and the downloads; first-run steps (get your keys, enter them, log in).
+- A short privacy note on the website: no server, files encrypted on the device, keys and login stay on the
+  device.
+
+**Phase 9 done when:** the site is live; a fresh browser, a fresh Windows install and a fresh phone install
+each show Setup, accept keys, log in and work; the download links fetch the latest app files; and no API key
+is found in any published file.
 
 ---
+
+## Phase 10: Later
 
 ### Ideas (not planned yet)
 - **Free up space:** delete photos from the phone once they're confirmed in TeleDrive (uses Android's delete confirmation dialog).

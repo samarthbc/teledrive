@@ -166,7 +166,7 @@ electron/       Windows app (Electron): window, serving the app's files, preload
 | 6 | Security: TeleDrive password (every file encrypted), locked files and folders with their own passwords | ✅ Being tested |
 | 7 | UI redesign (Soft Swiss): light/dark themes and switch, every screen restyled | ✅ Being tested |
 | 8 | Windows desktop app (Electron): installer, no server needed | ✅ Being tested |
-| 9 | Deploy the website | ⏳ Later |
+| 9 | Public release: website online, downloads for the apps, everyone enters their own API keys | ⏳ Next |
 
 ## Tech stack
 
