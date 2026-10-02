@@ -66,11 +66,11 @@ export default function PasswordPage() {
             />
             {confirm.length > 0 && confirm !== password && <ErrorText>The passwords don't match</ErrorText>}
             <Note>
-              <Checkbox checked={understood} onChange={setUnderstood}>
-                I understand that this password <b>can't be changed or recovered</b>. If I forget it, every file in TeleDrive is
-                lost. I'll save it in a password manager.
-              </Checkbox>
+              This password <b>can't be changed or recovered</b>. If you forget it, every file in TeleDrive is lost.
             </Note>
+            <Checkbox checked={understood} onChange={setUnderstood}>
+              I understand, and I'll save it in a password manager.
+            </Checkbox>
           </>
         )}
         {!creating && <p className="text-muted">This device will remember it, so you only enter it once here.</p>}

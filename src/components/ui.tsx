@@ -125,8 +125,8 @@ export function Toggle(props: { checked: boolean; onChange: (v: boolean) => void
  */
 export function Note({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex gap-3 border-l-[3px] border-brand py-1 pl-3.5 text-[13px] leading-relaxed">
-      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-brand-ink" strokeWidth={2.2} />
+    <div className="flex items-center gap-3.5 border-l-[3px] border-brand py-1 pl-3.5 text-[13px] leading-relaxed">
+      <TriangleAlert className="size-5.5 shrink-0 text-brand-ink" strokeWidth={2} />
       <div className="min-w-0">{children}</div>
     </div>
   )
