@@ -23,85 +23,89 @@ export default function SettingsView({ onGetApps }: { onGetApps?: () => void }) 
   const lockNow = useDrive((s) => s.lockNow)
 
   return (
-    <div className="max-w-3xl space-y-8 pb-6">
-      <Section title="Appearance">
-        <Row name="Theme" hint="System follows your device's light or dark mode.">
-          <Segmented<ThemeMode>
-            label="Theme"
-            value={themeMode}
-            onChange={setThemeMode}
-            options={[
-              { value: 'system', label: 'System' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-          />
-        </Row>
-        <Row name="Density" hint="Compact fits more files on the screen.">
-          <Segmented
-            label="Density"
-            value={settings.density}
-            onChange={(v) => setSetting('density', v)}
-            options={[
-              { value: 'comfortable', label: 'Comfortable' },
-              { value: 'compact', label: 'Compact' },
-            ]}
-          />
-        </Row>
-        <Row inline name="Thumbnails" hint="Off: file-type icons only, nothing is downloaded for them. Saves data.">
-          <Toggle label="Thumbnails" checked={settings.thumbnails} onChange={(v) => setSetting('thumbnails', v)} />
-        </Row>
-      </Section>
+    // Full width; on very wide screens two columns (appearance and security | sessions and about)
+    <div className="grid items-start gap-8 pb-6 2xl:grid-cols-2">
+      <div className="space-y-8">
+        <Section title="Appearance">
+          <Row name="Theme" hint="System follows your device's light or dark mode.">
+            <Segmented<ThemeMode>
+              label="Theme"
+              value={themeMode}
+              onChange={setThemeMode}
+              options={[
+                { value: 'system', label: 'System' },
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' },
+              ]}
+            />
+          </Row>
+          <Row name="Density" hint="Compact fits more files on the screen.">
+            <Segmented
+              label="Density"
+              value={settings.density}
+              onChange={(v) => setSetting('density', v)}
+              options={[
+                { value: 'comfortable', label: 'Comfortable' },
+                { value: 'compact', label: 'Compact' },
+              ]}
+            />
+          </Row>
+          <Row inline name="Thumbnails" hint="Off: file-type icons only, nothing is downloaded for them. Saves data.">
+            <Toggle label="Thumbnails" checked={settings.thumbnails} onChange={(v) => setSetting('thumbnails', v)} />
+          </Row>
+        </Section>
 
-      <Section title="Security">
-        <Row name="Auto-lock" hint="Unlocked files and folders lock again after this long without activity.">
-          <Segmented
-            label="Auto-lock after"
-            value={settings.autoLockMinutes}
-            onChange={(v) => setSetting('autoLockMinutes', v)}
-            options={AUTO_LOCK_CHOICES.map((m) => ({ value: m, label: `${m} min` }))}
-          />
-        </Row>
-        <Row
-          inline
-          name="Lock TeleDrive when it closes"
-          hint="Ask for your TeleDrive password every time TeleDrive starts, instead of remembering it on this device."
-        >
-          <Toggle
-            label="Lock TeleDrive when it closes"
-            checked={settings.lockOnClose}
-            onChange={(v) => {
-              setSetting('lockOnClose', v)
-              void setRememberOnDevice(!v)
-            }}
-          />
-        </Row>
-        <Row
-          name="Lock everything now"
-          hint={
-            settings.lockOnClose
-              ? 'Locks every unlocked file and folder, and asks for your TeleDrive password again.'
-              : anyUnlocked
-                ? 'Locks every file and folder you have unlocked.'
-                : 'Nothing is unlocked right now.'
-          }
-        >
-          <button
-            className="btn-secondary"
-            disabled={!anyUnlocked && !settings.lockOnClose}
-            onClick={() => {
-              void lockNow()
-              if (!settings.lockOnClose) toast('Everything is locked')
-            }}
+        <Section title="Security">
+          <Row name="Auto-lock" hint="Unlocked files and folders lock again after this long without activity.">
+            <Segmented
+              label="Auto-lock after"
+              value={settings.autoLockMinutes}
+              onChange={(v) => setSetting('autoLockMinutes', v)}
+              options={AUTO_LOCK_CHOICES.map((m) => ({ value: m, label: `${m} min` }))}
+            />
+          </Row>
+          <Row
+            inline
+            name="Lock TeleDrive when it closes"
+            hint="Ask for your TeleDrive password every time TeleDrive starts, instead of remembering it on this device."
           >
-            <Lock /> Lock now
-          </button>
-        </Row>
-      </Section>
+            <Toggle
+              label="Lock TeleDrive when it closes"
+              checked={settings.lockOnClose}
+              onChange={(v) => {
+                setSetting('lockOnClose', v)
+                void setRememberOnDevice(!v)
+              }}
+            />
+          </Row>
+          <Row
+            name="Lock everything now"
+            hint={
+              settings.lockOnClose
+                ? 'Locks every unlocked file and folder, and asks for your TeleDrive password again.'
+                : anyUnlocked
+                  ? 'Locks every file and folder you have unlocked.'
+                  : 'Nothing is unlocked right now.'
+            }
+          >
+            <button
+              className="btn-secondary"
+              disabled={!anyUnlocked && !settings.lockOnClose}
+              onClick={() => {
+                void lockNow()
+                if (!settings.lockOnClose) toast('Everything is locked')
+              }}
+            >
+              <Lock /> Lock now
+            </button>
+          </Row>
+        </Section>
+      </div>
 
-      <ActiveSessions />
-
-      <About onGetApps={onGetApps} />
+      <div className="space-y-8">
+        <ActiveSessions />
+        <About onGetApps={onGetApps} />
+      </div>
     </div>
   )
 }
@@ -171,7 +175,7 @@ function ActiveSessions() {
     <Section
       title="Active sessions"
       action={
-        <button className="icon-btn-flat" onClick={() => void load()} aria-label="Refresh sessions" title="Refresh">
+        <button className="-my-2 icon-btn-flat" onClick={() => void load()} aria-label="Refresh sessions" title="Refresh">
           <RefreshCw className={loading ? 'animate-spin' : ''} />
         </button>
       }
