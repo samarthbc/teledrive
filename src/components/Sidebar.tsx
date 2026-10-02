@@ -1,5 +1,5 @@
 import {
-  Camera, Check, ChevronDown, Clock, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Star,
+  Camera, Check, ChevronDown, Clock, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Settings, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -122,6 +122,7 @@ export default function Sidebar(props: {
 
       <div className="mt-auto space-y-2 pt-6">
         <StorageCard drive={drive} onCameraBackup={onCameraBackup} onLockAll={onLockAll} />
+        <Link to="/settings" icon={Settings} label="Settings" />
         {onGetApps && !isApp && <Item icon={MonitorSmartphone} label="Get the app" onClick={onGetApps} />}
         <Item icon={LogOut} label="Log out" onClick={onLogout} />
         {isApp && <AppVersion />}

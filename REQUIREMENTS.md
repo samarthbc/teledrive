@@ -173,14 +173,14 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Security headers (Content-Security-Policy) on the website
 
 ### 4.10 Settings
-- [ ] A Settings page (side menu), per device, on the website and both apps
-- [ ] Density: comfortable / compact
-- [ ] Thumbnails on / off
-- [ ] Auto-lock time for unlocked items: 1 / 5 / 15 / 30 minutes
-- [ ] Lock TeleDrive when it closes (ask the TeleDrive password every start)
-- [ ] Lock everything now
-- [ ] Active sessions: see devices logged in to the Telegram account, log one or all others out
-- [ ] Check for updates (and the version)
+- [x] A Settings page (side menu), per device, on the website and both apps
+- [x] Density: comfortable / compact
+- [x] Thumbnails on / off
+- [x] Auto-lock time for unlocked items: 1 / 5 / 15 / 30 minutes
+- [x] Lock TeleDrive when it closes (ask the TeleDrive password every start)
+- [x] Lock everything now
+- [x] Active sessions: see devices logged in to the Telegram account, log one or all others out
+- [x] Check for updates (and the version)
 
 ---
 

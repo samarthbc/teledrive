@@ -62,6 +62,7 @@ app.whenReady().then(() => {
   // Updates: the page shows the state in the side menu and can ask to restart into the update
   ipcMain.handle('td-update-state', () => updates.getState())
   ipcMain.on('td-update-install', () => updates.installNow())
+  ipcMain.handle('td-update-check', () => updates.checkNow())
   updates.initUpdates((state) => win?.webContents.send('td-update', state))
 })
 

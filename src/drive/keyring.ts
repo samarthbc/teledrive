@@ -1,12 +1,14 @@
+import { getSettings, useSettings } from '../lib/settings'
 import { openFileKey, type AccountConfig, type AccountKeys } from './crypto'
 
 // Which keys are open right now (memory only):
 // - the account keys (TeleDrive password), also remembered on the device by vault.ts
-// - the lock keys of locked files/folders unlocked in this session; they close after AUTO_LOCK_MS idle
+// - the lock keys of locked files/folders unlocked in this session; they close after the idle time chosen in
+//   Settings (1-30 minutes, default 5)
 
 /** Level ID of everything that isn't locked. Other levels are the IDs of locked items. */
 export const ROOT_LEVEL = 'root'
-const AUTO_LOCK_MS = 5 * 60 * 1000
+const autoLockMs = () => getSettings().autoLockMinutes * 60 * 1000
 
 let account: { keys: AccountKeys; config: AccountConfig } | null = null
 const locks = new Map<string, CryptoKey>()
@@ -117,11 +119,13 @@ export function holdOpen(): () => void {
 /** User activity: postpones the automatic re-lock. */
 export function touch(): void {
   clearTimeout(idleTimer)
-  if (locks.size) idleTimer = setTimeout(() => (holds ? touch() : closeAllLocks()), AUTO_LOCK_MS)
+  if (locks.size) idleTimer = setTimeout(() => (holds ? touch() : closeAllLocks()), autoLockMs())
 }
 
 /** Re-lock unlocked items after a few minutes without activity. */
 export function initAutoLock(): void {
   for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart'])
     window.addEventListener(ev, touch, { passive: true, capture: true })
+  // A new idle time counts from now
+  useSettings.subscribe((s, prev) => s.autoLockMinutes !== prev.autoLockMinutes && touch())
 }

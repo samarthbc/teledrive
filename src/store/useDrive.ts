@@ -6,6 +6,7 @@ import { hasActiveTransfers, subscribeTransfers, type Transfer } from '../drive/
 import { initStreaming } from '../drive/stream'
 import { loadCache, subscribe, sync, syncIdle } from '../drive/sync'
 import { accountConfig, closeAllLocks, hasAccountKeys, onKeysChanged, setAccount } from '../drive/keyring'
+import { getSettings } from '../lib/settings'
 import { keyView, purgeClosedSecrets, resolveSecrets, unresolved } from '../drive/secrets'
 import { buildDrive, type Drive, type MessageRecord } from '../drive/tree'
 import * as vault from '../drive/vault'
@@ -48,6 +49,11 @@ interface State {
   afterLogin: () => Promise<void>
   refresh: () => Promise<void>
   logout: () => Promise<void>
+  /**
+   * Settings → Lock everything now: lock every unlocked item; with "Lock TeleDrive when it closes" on, also
+   * forget the TeleDrive password, which is then asked again.
+   */
+  lockNow: () => Promise<void>
   /** Forget the API keys entered on this device and show the Setup screen (not for built-in keys). */
   changeKeys: (notice?: string) => Promise<void>
   setView: (v: ViewMode) => void
@@ -280,6 +286,18 @@ export const useDrive = create<State>((set, get) => {
       await forgetKeys()
       set({ drives: [], currentDrive: null })
       set({ drive: buildDrive([]), phase: 'login', loginNotice: null })
+    },
+
+    lockNow: async () => {
+      closeAllLocks()
+      if (!getSettings().lockOnClose || !hasAccountKeys()) return
+      setAccount(null)
+      try {
+        await ensureAccount()
+        set({ phase: 'ready' })
+      } catch (e) {
+        fail(e)
+      }
     },
 
     changeKeys: async (notice) => {

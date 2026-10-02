@@ -2,6 +2,7 @@ import { AlertTriangle, Check, Lock, LockOpen, MoreVertical, Star } from 'lucide
 import { useRef } from 'react'
 import type { Item } from '../drive/tree'
 import { formatBytes, formatDate } from '../lib/format'
+import { useSettings } from '../lib/settings'
 import type { Sort, ViewMode } from '../store/useDrive'
 import Thumb from './Thumb'
 
@@ -39,6 +40,8 @@ interface Props {
 export default function FileView({ items, view, selected, onClick, onToggle, onMenu, subtitle }: Props) {
   const pointer = useRef<string>('mouse')
   const selecting = selected.size > 0
+  // Settings → Density: compact fits more on screen (shorter rows, smaller cards)
+  const compact = useSettings((s) => s.density === 'compact')
 
   const handlers = (item: Item) => ({
     onPointerDown: (e: React.PointerEvent) => (pointer.current = e.pointerType),
@@ -82,7 +85,7 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
 
   if (view === 'list')
     return (
-      <div className="panel flex flex-col gap-1 p-1.5 select-none sm:p-2">
+      <div className={`panel flex flex-col select-none ${compact ? 'gap-0.5 p-1 sm:p-1.5' : 'gap-1 p-1.5 sm:p-2'}`}>
         {items.map((item) => {
           const sub = subtitle?.(item)
           const isSel = selected.has(item.id)
@@ -90,21 +93,21 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
             <div
               key={item.id}
               {...handlers(item)}
-              className={`group flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 sm:gap-3.5 sm:px-3 sm:py-2.5 ${
+              className={`group flex cursor-pointer items-center gap-3 rounded-md px-2 sm:gap-3.5 sm:px-3 ${compact ? 'py-1' : 'py-2 sm:py-2.5'} ${
                 isSel ? 'pressed' : 'hover:bg-ink/[0.03]'
               }`}
             >
               {/* The checkbox takes the icon's place on hover and while selecting */}
-              <div className="relative size-11 shrink-0 overflow-hidden rounded-md bg-surface raised-sm">
-                <Thumb item={item} iconClass="size-5.5" />
+              <div className={`relative shrink-0 overflow-hidden rounded-md bg-surface raised-sm ${compact ? 'size-8.5' : 'size-11'}`}>
+                <Thumb item={item} iconClass={compact ? 'size-4.5' : 'size-5.5'} />
                 {checkbox(item, `absolute inset-0 m-auto ${selecting || isSel ? 'flex' : 'hidden group-hover:flex focus-visible:flex'}`)}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 text-[15px] font-bold">
+                <p className={`flex items-center gap-2 font-bold ${compact ? 'text-sm' : 'text-[15px]'}`}>
                   <span className="truncate">{item.name}</span>
                   <Badges item={item} />
                 </p>
-                <p className="mt-0.5 truncate text-[13px] text-muted">
+                <p className={`truncate text-muted ${compact ? 'text-xs' : 'mt-0.5 text-[13px]'}`}>
                   {sub ?? details(item)}
                   <span className="sm:hidden"> · {formatDate(item.ts)}</span>
                 </p>
@@ -118,7 +121,13 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
     )
 
   return (
-    <div className="grid grid-cols-2 gap-3 select-none sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] sm:gap-4.5">
+    <div
+      className={`grid select-none ${
+        compact
+          ? 'grid-cols-3 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] sm:gap-3'
+          : 'grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] sm:gap-4.5'
+      }`}
+    >
       {items.map((item) => {
         const sub = subtitle?.(item)
         const isSel = selected.has(item.id)
@@ -126,21 +135,23 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
           <div
             key={item.id}
             {...handlers(item)}
-            className={`group card relative cursor-pointer p-2 ${isSel ? 'outline-2 outline-offset-3 outline-brand' : ''}`}
+            className={`group card relative cursor-pointer ${compact ? 'p-1.5' : 'p-2'} ${isSel ? 'outline-2 outline-offset-3 outline-brand' : ''}`}
           >
             <div className="aspect-[4/3] overflow-hidden rounded-md pressed">
-              <Thumb item={item} iconClass="size-8.5" />
+              <Thumb item={item} iconClass={compact ? 'size-6.5' : 'size-8.5'} />
             </div>
-            {checkbox(item, `absolute top-3.5 left-3.5 flex ${selecting || isSel ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`)}
-            <div className="mt-2 flex items-center gap-1 pl-1">
+            {checkbox(item, `absolute ${compact ? 'top-2.5 left-2.5' : 'top-3.5 left-3.5'} flex ${selecting || isSel ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`)}
+            {/* Compact: the menu sits on the thumbnail's corner, so the name gets the card's full width */}
+            {compact && moreButton(item, 'absolute top-1.5 right-1.5 size-8')}
+            <div className={`flex items-center gap-1 ${compact ? 'mt-1 px-0.5' : 'mt-2 pl-1'}`}>
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 text-sm font-bold" title={item.name}>
+                <p className={`flex items-center gap-1.5 font-bold ${compact ? 'text-[13px]' : 'text-sm'}`} title={item.name}>
                   <span className="truncate">{item.name}</span>
                   <Badges item={item} short />
                 </p>
                 <p className="truncate text-xs text-muted">{sub ?? details(item)}</p>
               </div>
-              {moreButton(item, '-mr-1')}
+              {!compact && moreButton(item, '-mr-1')}
             </div>
           </div>
         )

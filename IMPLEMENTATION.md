@@ -693,59 +693,56 @@ is found in any published file.
 
 ---
 
-## Phase 10: Settings ⏳ Next
+## Phase 10: Settings ✅ (implemented; being tested)
 
 A **Settings** page for the things people want to adjust, on the website and in both apps. Settings are
 per device (like the theme): a phone and a PC can differ.
 
-### 10.1 The page
-- **Side menu → Settings** (gear icon, above Log out); route `#/settings`. Desktop: a page in the main area
-  with the sidebar still visible. Phone: a full screen with a back arrow (Android back button closes it).
-- Sections with Swiss labels (`label-swiss`), each setting a row: name, one-line explanation, control on the
-  right (switch, segmented control or button). Built from the existing `ui.tsx` controls.
-- Stored on the device: `lib/settings.ts`, a small Zustand store saved in IndexedDB (`db.kv`), with defaults,
-  read before the drive shows so nothing jumps after loading.
+### 10.1 The page ✅
+- **Side menu → Settings** (gear, above Get the app / Log out); route `#/settings`, shown by the drive page
+  (`mode="settings"`) so the sidebar, phone menu and bottom tabs stay. Code: `pages/Settings.tsx`.
+- Sections with Swiss labels, each a panel of rows: name, one-line explanation, control on the right. On phones
+  the control goes under the text, except switches, which stay beside it.
+- New shared control `Segmented` in `components/ui.tsx` (System / Light / Dark, Comfortable / Compact, 1-30 min).
+- Stored in `localStorage` (`teledrive.settings`, `lib/settings.ts`, a Zustand store): read synchronously before
+  the first render, so nothing jumps; invalid or missing values fall back to defaults one by one (unit-tested).
 
-### 10.2 Appearance
-- **Density** — Comfortable (today) / Compact. Compact: list rows 44 px instead of 56, smaller tiles, grid cards
-  ~8.5 rem wide instead of 10.5, tighter gaps. Done with a `data-density` attribute on `<html>` and CSS
-  variables, so components don't need two versions.
-- **Thumbnails** — on (today) / off. Off: files show their type icon only and no thumbnails are downloaded
-  (saves data and is faster on slow connections). Preview and streaming still work when a file is opened.
-  `Thumb.tsx` and the thumbnail loader check the setting; already-cached thumbnails stay cached.
+### 10.2 Appearance ✅
+- **Theme** — System / Light / Dark (the same choice as the top-bar button).
+- **Density** — Comfortable / Compact. Compact (`FileView.tsx`): list rows with a 34 px tile and smaller text
+  (all 12 sample files fit on one desktop screen), grid cards from 8 rem (three columns on phones) with the ⋮
+  button on the thumbnail's corner so names get the full width.
+- **Thumbnails** — on / off. Off: `Thumb.tsx` shows the type icon and never asks for the thumbnail. Opening a
+  file still previews and streams it.
 
-### 10.3 Security
-- **Auto-lock after** — 1 / 5 / 15 / 30 minutes without activity (5 today, `AUTO_LOCK_MS` in
-  `drive/keyring.ts` becomes the setting). Applies to locked files and folders that were unlocked.
-- **Lock TeleDrive when it closes** — off (today) / on. Today the TeleDrive password's keys are remembered on
-  the device (`accountKeys` in `drive/vault.ts`), so it's asked only once per device. On: the keys are kept in
-  memory only and the TeleDrive password is asked every time TeleDrive starts. Turning it on removes the
-  remembered keys from the device at once. (Locked items already lock when TeleDrive closes.)
-- **Lock everything now** — a button: closes every unlocked file and folder (`closeAllLocks`) and, if "Lock
-  TeleDrive when it closes" is on, also forgets the TeleDrive password, returning to its screen.
-- **Active sessions** — every device logged in to this Telegram account (`account.getAuthorizations`): device,
-  app name and version, place (country/region) and last active; this device marked **This device**.
-  - **Log out** on any other session (`account.resetAuthorization`) and **Log out all other devices**
-    (`auth.resetAuthorizations`), both with a confirmation.
-  - Telegram refuses this from a session less than 24 hours old (`FRESH_RESET_AUTHORISATION_FORBIDDEN`):
-    explain it ("Try again tomorrow, or use the Telegram app") instead of showing an error code.
-  - The list includes the person's other Telegram apps (phone, desktop); the confirmation says so.
+### 10.3 Security ✅
+- **Auto-lock** — 1 / 5 / 15 / 30 min (default 5). `drive/keyring.ts` reads the setting for every idle timer;
+  changing it restarts the count. Unit-tested with fake timers.
+- **Lock TeleDrive when it closes** — on: `vault.ts` stops saving the account keys on the device (and removes the
+  saved ones at once), so the TeleDrive password is asked at every start; off: saves the keys held in memory.
+- **Lock everything now** — `lockNow` in the store: closes every unlocked item; with lock-on-close on, also
+  forgets the TeleDrive password and shows its screen. Disabled when nothing is unlocked (and lock-on-close off).
+- **Active sessions** — `telegram/sessions.ts`: `account.getAuthorizations` (this device first, then by last
+  activity), **Log out** one (`account.resetAuthorization`) or **Log out all other devices**
+  (`auth.resetAuthorizations`), each confirmed. `FRESH_RESET_AUTHORISATION_FORBIDDEN` (session under 24 h) is
+  explained in words. On phones the Log out buttons are icons.
 
-### 10.4 About and updates
-- **Version** of this app or website.
-- **Check for updates** — a button that asks GitHub now (skipping the once-a-day cache in `lib/releases.ts`):
-  - Windows app: starts the background download (`electron/updates.cjs`, a new `td-update-check` message);
-    the status shows here and in the side menu, then **Restart to update**.
-  - Android app: **Update to x.y.z** as in the side menu (download, then Android's installer).
-  - Website: "The website updates by itself"; shows the latest app version for download.
-  - "You're up to date" when nothing is newer.
+### 10.4 About and updates ✅
+- **TeleDrive x.y.z** and where it runs (Website / Windows app / Android app).
+- **Check for updates** (`checkForUpdates` in `lib/updates.ts`, skipping the once-a-day cache):
+  - Windows: `td-update-check` → `electron/updates.cjs` `checkNow()` → "latest", "offline" or "update" (starts the
+    background download; then **Restart to update**).
+  - Android: offers **Update** (download, then Android's installer).
+  - Website: "The website updates by itself" and the latest app version.
+  - Status line: up to date / downloading x% / ready / failed (Try again) / couldn't reach GitHub.
+- Website only: **Get the app** row.
 
-### 10.5 Tests and checks
-- Unit tests: settings defaults and saving; auto-lock timer uses the chosen time; density/thumbnail settings
-  applied to `<html>`.
-- On this PC (mock mode): screenshots of Settings (desktop and phone, light and dark), compact vs comfortable,
-  thumbnails off.
-- Needs a real account (you): active sessions list and logging out another device; lock on close.
+### 10.5 Checked
+- Unit tests (43 in all): settings defaults and validation; auto-lock after the chosen time and postponed by activity.
+- Screenshots (mock mode): Settings on desktop and phone, light and dark; compact grid and list.
+- Windows app (packaged, local stand-in for GitHub): Check for updates → "latest" for the same version,
+  "update" plus a finished download for a newer one.
+- Needs a real account (you): the active sessions list and logging out another device; lock on close; lock now.
 
 **Phase 10 done when:** every setting above can be changed, takes effect without reloading, is still set after
 restarting, and works on the website, the Windows app and the Android app.

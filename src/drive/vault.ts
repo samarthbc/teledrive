@@ -5,7 +5,8 @@ import { getClient } from '../telegram/client'
 import { messagesFromUpdates } from '../telegram/messages'
 import bigInt from 'big-integer'
 import { checkAccountPassword, createAccount, unlockAccount, type AccountConfig, type AccountKeys } from './crypto'
-import { accountConfig, setAccount } from './keyring'
+import { getSettings } from '../lib/settings'
+import { accountConfig, accountKeys, setAccount } from './keyring'
 import { decode, encode, type ConfigMeta } from './meta'
 import { applyMessages } from './sync'
 import { randomLong } from './transfer'
@@ -72,8 +73,20 @@ export async function enterPassword(config: AccountConfig, password: string): Pr
 
 async function remember(config: AccountConfig, keys: AccountKeys) {
   setAccount(keys, config)
-  await setKV(DEVICE_KEY, { config, keys } satisfies Remembered)
+  // "Lock TeleDrive when it closes" (Settings): the keys stay in memory only
+  if (!getSettings().lockOnClose) await setKV(DEVICE_KEY, { config, keys } satisfies Remembered)
   await setKV(CONFIG_KEY, config)
+}
+
+/**
+ * Settings → "Lock TeleDrive when it closes". On: remove the keys remembered on this device (the password is
+ * asked at the next start). Off: remember the keys in memory again, so it isn't.
+ */
+export async function setRememberOnDevice(rememberKeys: boolean): Promise<void> {
+  const keys = accountKeys()
+  const config = accountConfig()
+  if (!rememberKeys) await delKV(DEVICE_KEY)
+  else if (keys && config) await setKV(DEVICE_KEY, { config, keys } satisfies Remembered)
 }
 
 /** Forget the keys in memory (logging out also deletes the remembered ones). */

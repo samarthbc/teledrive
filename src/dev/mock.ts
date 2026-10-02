@@ -6,6 +6,7 @@ import type { Transfer } from '../drive/queue'
 import { buildDrive, type MessageRecord } from '../drive/tree'
 import { useBackup } from '../native/backup'
 import { useDrive, type Phase } from '../store/useDrive'
+import { sessions } from '../telegram/sessions'
 
 const DAY = 86_400
 const now = Math.floor(Date.now() / 1000)
@@ -71,3 +72,16 @@ useDrive.setState({
 })
 // `&app` shows the Android-only parts (camera backup); see DrivePage
 useBackup.setState({ settings: { enabled: true, wifiOnly: true, since: 0 }, status: param.get('backup') ?? 'Up to date' })
+
+// Settings → Active sessions
+const nowSec = Math.floor(Date.now() / 1000)
+Object.assign(sessions, {
+  list: async () => [
+    { hash: '1', current: true, device: 'Chrome 141 · Windows 11', app: 'TeleDrive 1.0.0', place: 'Karnataka, India', lastActive: nowSec },
+    { hash: '2', current: false, device: 'Redmi 23124RN87I · Android 14', app: 'Telegram Android 11.14', place: 'Karnataka, India', lastActive: nowSec - 3600 },
+    { hash: '3', current: false, device: 'Redmi 23124RN87I · Android 14', app: 'TeleDrive 1.0.0', place: 'Karnataka, India', lastActive: nowSec - 86400 * 2 },
+    { hash: '4', current: false, device: 'Desktop · Windows 11', app: 'Telegram Desktop 5.9', place: 'Karnataka, India', lastActive: nowSec - 86400 * 20 },
+  ],
+  end: async () => {},
+  endOthers: async () => {},
+})

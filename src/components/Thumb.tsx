@@ -3,12 +3,17 @@ import { useEffect, useRef, useState } from 'react'
 import { hasThumbnail, thumbnailUrl } from '../drive/thumbs'
 import type { Item } from '../drive/tree'
 import { category, fileIcon } from '../lib/format'
+import { useSettings } from '../lib/settings'
 
-/** Thumbnail if the file has one (loaded when scrolled into view), otherwise a file-type icon. */
+/**
+ * Thumbnail if the file has one (loaded when scrolled into view), otherwise a file-type icon. With thumbnails
+ * off in Settings, always the icon (nothing is downloaded).
+ */
 export default function Thumb({ item, iconClass }: { item: Item; iconClass: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [url, setUrl] = useState<string | null>(null)
-  const canLoad = item.kind === 'file' && hasThumbnail(item)
+  const enabled = useSettings((s) => s.thumbnails)
+  const canLoad = enabled && item.kind === 'file' && hasThumbnail(item)
 
   useEffect(() => {
     setUrl(null)

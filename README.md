@@ -29,6 +29,8 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - **Send to Telegram**: send a (decrypted) copy of a file to any chat or contact
 - **Multiple drives** (e.g. Personal, Work), each its own private channel, with a switcher
 - **Get the app** on the website: download links for the Windows and Android apps
+- **Settings:** theme, compact density, thumbnails on/off, auto-lock time, lock on close, lock everything,
+  active sessions (log other devices out), check for updates
 - **Soft Swiss design** ([DESIGN.md](DESIGN.md)): light and dark themes with a System / Light / Dark switch;
   works at phone width with bottom tabs, a + button and slide-up action sheets
 
@@ -191,7 +193,7 @@ electron/       Windows app (Electron): window, serving the app's files, preload
 | 7 | UI redesign (Soft Swiss): light/dark themes and switch, every screen restyled | ✅ Being tested |
 | 8 | Windows desktop app (Electron): installer, no server needed | ✅ Being tested |
 | 9 | Public release: website on Vercel, downloads for the apps, everyone enters their own API keys | ✅ Website live; app release needs the GitHub secrets |
-| 10 | Settings: density, thumbnails, auto-lock time, lock on close, lock everything, active sessions, check for updates | ⏳ Next |
+| 10 | Settings: density, thumbnails, auto-lock time, lock on close, lock everything, active sessions, check for updates | ✅ Being tested |
 
 ## Tech stack
 

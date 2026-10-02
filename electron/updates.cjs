@@ -45,21 +45,29 @@ function isNewer(a, b) {
 // The app's own https handler (main.cjs) is skipped: these requests go straight to GitHub
 const get = (url, init = {}) => net.fetch(url, { ...init, bypassCustomProtocolHandlers: true })
 
+/** Returns what it found: 'latest' (nothing newer), 'offline' (GitHub couldn't be asked), or 'update'. */
 async function check() {
-  if (state.status === 'downloading' || state.status === 'ready') return
+  if (state.status === 'downloading' || state.status === 'ready') return 'update'
+  let release
   try {
     const res = await get(API, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'TeleDrive' } })
-    if (!res.ok) return // no release yet, rate limit or offline: try again later
-    const release = await res.json()
-    const version = String(release.tag_name || '').replace(/^v/, '')
-    if (!/^\d+\.\d+\.\d+$/.test(version) || !isNewer(version, app.getVersion())) return
-    const asset = (release.assets || []).find((a) => a.name === FILE)
-    if (!asset) return
-    const sha256 = typeof asset.digest === 'string' && asset.digest.startsWith('sha256:') ? asset.digest.slice(7).toLowerCase() : null
+    if (res.status === 404) return 'latest' // nothing released yet
+    if (!res.ok) return 'offline' // rate limit or outage: try again later
+    release = await res.json()
+  } catch {
+    return 'offline'
+  }
+  const version = String(release.tag_name || '').replace(/^v/, '')
+  if (!/^\d+\.\d+\.\d+$/.test(version) || !isNewer(version, app.getVersion())) return 'latest'
+  const asset = (release.assets || []).find((a) => a.name === FILE)
+  if (!asset) return 'latest'
+  const sha256 = typeof asset.digest === 'string' && asset.digest.startsWith('sha256:') ? asset.digest.slice(7).toLowerCase() : null
+  try {
     await download(version, asset.size, sha256)
   } catch (e) {
-    set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+    set({ status: 'error', version, error: e instanceof Error ? e.message : String(e) })
   }
+  return 'update'
 }
 
 async function download(version, size, sha256) {
@@ -143,9 +151,15 @@ function initUpdates(notify) {
   })
 }
 
+/** Settings → Check for updates (also from `npm run desktop`, where it only reports). */
+async function checkNow() {
+  if (!app.isPackaged) return 'latest'
+  return check()
+}
+
 /** "Restart to update". */
 function installNow() {
   if (runInstaller(true)) app.quit()
 }
 
-module.exports = { initUpdates, installNow, getState: () => state }
+module.exports = { initUpdates, installNow, checkNow, getState: () => state }

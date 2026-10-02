@@ -35,6 +35,8 @@ import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
 import Dialog from '../components/Dialog'
 import GetApps from '../components/GetApps'
 import ThemeButton from '../components/ThemeButton'
+import { isDesktop } from '../native/desktop'
+import SettingsView from './Settings'
 import LockDialog, { type LockAction } from '../components/dialogs/LockDialog'
 import DuplicatesDialog, { type Duplicate } from '../components/dialogs/DuplicatesDialog'
 import SendDialog from '../components/dialogs/SendDialog'
@@ -47,7 +49,7 @@ import { FILTERS, formatBytes, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, useRootName, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
 
-export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash'
+export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash' | 'settings'
 
 type Modal =
   | { type: 'newFolder' }
@@ -72,11 +74,13 @@ interface UploadJob {
 }
 
 const SORT_LABELS: Record<SortKey, string> = { name: 'Name', date: 'Date', size: 'Size', type: 'Type' }
-const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash' }
+const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash', settings: 'Settings' }
 
 const act = (p: Promise<unknown>) => p.catch(toastError)
 
 /** The app's own features (camera backup). In development, `?mock&app` shows them in the browser too. */
+/** The website (not the Windows or Android app): offers the apps for download. */
+const isWebsite = !isAndroid && !isDesktop
 const appUi = isAndroid || (import.meta.env.DEV && new URLSearchParams(location.search).has('app'))
 
 /** The folder being browsed before a search started, so leaving the search goes back there. */
@@ -125,6 +129,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         return sortItems(starredItems(drive), sort)
       case 'trash':
         return [...trashedItems(drive)].sort((a, b) => (b.x.tr ?? 0) - (a.x.tr ?? 0))
+      case 'settings':
+        return []
     }
   }, [drive, mode, current, query, filter, sort])
 
@@ -606,6 +612,20 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
+        {mode === 'settings' ? (
+          <>
+            <header className="flex min-h-11 items-center gap-2.5 px-4 pt-4 md:hidden">
+              <button className="icon-btn" onClick={() => setDrawer(true)} aria-label="Menu">
+                <MenuIcon />
+              </button>
+            </header>
+            <div className="flex-1 overflow-y-auto px-4 pt-5 pb-28 md:-mx-4.5 md:-mb-4.5 md:px-4.5 md:pt-6 md:pb-8">
+              <h1 className="h-display mb-6 md:mb-8">Settings</h1>
+              <SettingsView onGetApps={isWebsite ? () => setModal({ type: 'getApps' }) : undefined} />
+            </div>
+          </>
+        ) : (
+          <>
         <header className="flex min-h-11 items-center gap-2.5 px-4 pt-4 md:gap-3 md:px-0 md:pt-0">
           {selection.length ? (
             <SelectionBar
@@ -770,11 +790,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             <TransferPanel className="sticky top-0 hidden w-72 shrink-0 lg:block" />
           </div>
         </div>
+          </>
+        )}
       </main>
 
       {/* Phone: + button and transfers above the tabs; tablet: transfers in the corner */}
       <div className="pointer-events-none fixed inset-x-3 bottom-[96px] z-30 flex flex-col items-end gap-3 md:inset-x-auto md:right-4.5 md:bottom-4.5 md:w-80 lg:hidden">
-        {!selection.length && (
+        {!selection.length && mode !== 'settings' && (
           <button
             className="pointer-events-auto mr-3 flex size-15 items-center justify-center rounded-[10px] bg-brand text-white raised-md active:pressed md:hidden"
             onClick={(e) => {
@@ -1034,7 +1056,7 @@ function SelectionBar(props: {
 }
 
 function EmptyState(props: {
-  mode: Mode
+  mode: Exclude<Mode, 'settings'>
   filtered: boolean
   searched: boolean
   isRoot: boolean
@@ -1042,7 +1064,7 @@ function EmptyState(props: {
   onNewFolder: () => void
 }) {
   const { mode, filtered, searched, isRoot, onUpload, onNewFolder } = props
-  const content: Record<Mode, { icon: typeof Search; title: string; text: string }> = {
+  const content: Record<Exclude<Mode, 'settings'>, { icon: typeof Search; title: string; text: string }> = {
     folder: { icon: CloudUpload, title: isRoot ? 'Your drive is empty' : 'Nothing here yet', text: 'Drop files or folders here, or use Upload.' },
     search: searched || filtered
       ? { icon: Search, title: 'No results', text: 'Try a different name or filter.' }

@@ -26,11 +26,14 @@ export interface Release {
 const CACHE_KEY = 'teledrive.release'
 const CACHE_FOR = 24 * 60 * 60 * 1000
 
-/** The newest release (checked at most once a day per device); null if there's none or GitHub can't be reached. */
-export async function latestRelease(): Promise<Release | null> {
+/**
+ * The newest release (checked at most once a day per device, or now with `fresh`); null if there's none, or
+ * undefined if GitHub can't be reached.
+ */
+export async function latestRelease(fresh = false): Promise<Release | null | undefined> {
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null') as { at: number; release: Release | null } | null
-    if (cached && Date.now() - cached.at < CACHE_FOR) return cached.release
+    if (!fresh && cached && Date.now() - cached.at < CACHE_FOR) return cached.release
   } catch {
     // Storage blocked or bad data: just ask GitHub
   }
@@ -38,7 +41,7 @@ export async function latestRelease(): Promise<Release | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
     if (res.status === 404) release = null // nothing released yet
-    else if (!res.ok) return null // rate limit or outage: don't remember it
+    else if (!res.ok) return undefined // rate limit or outage: don't remember it
     else {
       const body = (await res.json()) as { tag_name: string; assets: { name: string; size: number; digest?: string | null }[] }
       release = {
@@ -50,7 +53,7 @@ export async function latestRelease(): Promise<Release | null> {
       }
     }
   } catch {
-    return null
+    return undefined
   }
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), release }))
@@ -64,7 +67,7 @@ export function useLatestRelease(): Release | null {
   const [release, setRelease] = useState<Release | null>(null)
   useEffect(() => {
     let live = true
-    void latestRelease().then((r) => live && setRelease(r))
+    void latestRelease().then((r) => live && setRelease(r ?? null))
     return () => {
       live = false
     }

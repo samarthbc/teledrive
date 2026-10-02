@@ -9,6 +9,8 @@ interface DesktopBridge {
   onUpdate(fn: (s: UpdateState) => void): () => void
   /** Quit, install the downloaded update and start again. */
   installUpdate(): void
+  /** Ask GitHub now (Settings → Check for updates); downloads a newer version. */
+  checkUpdate(): Promise<'latest' | 'offline' | 'update'>
 }
 
 export const desktop = (window as unknown as { teledriveDesktop?: DesktopBridge }).teledriveDesktop

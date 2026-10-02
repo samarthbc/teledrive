@@ -74,6 +74,8 @@ export function describeError(e: unknown): string {
     API_ID_INVALID: 'The API keys are invalid. Check api_id and api_hash.',
     AUTH_KEY_UNREGISTERED: 'You have been logged out. Please log in again.',
     SESSION_REVOKED: 'This session was terminated from another device. Please log in again.',
+    FRESH_RESET_AUTHORISATION_FORBIDDEN:
+      'Telegram only allows this from a device that has been logged in for at least 24 hours. Try again tomorrow, or use the Telegram app.',
   }
   if (code === 'FLOOD' || code.startsWith('FLOOD_WAIT') || seconds)
     return `Too many attempts. Please wait ${formatWait(seconds ?? 60)} and try again.`

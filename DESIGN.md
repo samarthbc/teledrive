@@ -334,6 +334,11 @@ Map each component to its existing file and restyle it; don't create parallel ve
 
 ---
 
+### Settings page
+- Big `h-display` title, then sections: a `label-swiss` heading over a `panel` of rows divided by 2 px `line`.
+- A row: bold name, 13 px muted explanation, control on the right; on phones the control drops below the text,
+  except switches. Choices of 2-4 options use `Segmented` (a pressed track, the chosen option raised in red).
+
 ### Scrollbars
 - A slim pill (12 px bar, 6 px thumb inset by 3 px) on a clear track: `--scroll-thumb` (ink at 26 % in light,
   light at 20 % in dark), `--scroll-thumb-hover` on hover, red (`--red`) while dragged. In `src/index.css`:

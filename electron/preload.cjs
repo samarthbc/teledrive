@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('teledriveDesktop', {
     return () => ipcRenderer.removeListener('td-update', listener)
   },
   installUpdate: () => ipcRenderer.send('td-update-install'),
+  checkUpdate: () => ipcRenderer.invoke('td-update-check'),
 })

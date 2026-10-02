@@ -40,6 +40,27 @@ export function initUpdates(): void {
   })
 }
 
+export type CheckResult = { result: 'latest' | 'offline' | 'update'; latest: string | null }
+
+/**
+ * Settings → Check for updates: ask GitHub now. Windows starts downloading a newer version (then "Restart to
+ * update"); Android offers "Update to x.y.z"; the website just reports the latest app version.
+ */
+export async function checkForUpdates(): Promise<CheckResult> {
+  if (desktop) {
+    const result = await desktop.checkUpdate()
+    return { result, latest: useUpdate.getState().version }
+  }
+  const release = await latestRelease(true)
+  if (release === undefined) return { result: 'offline', latest: null }
+  const latest = release?.version ?? null
+  if (isAndroid && release && isNewer(release.version, APP_VERSION) && release.sizes[DOWNLOADS.android.file]) {
+    if (useUpdate.getState().status === 'none') useUpdate.setState({ status: 'available', version: release.version })
+    return { result: 'update', latest }
+  }
+  return { result: 'latest', latest }
+}
+
 /** The Update button: Windows restarts into the downloaded update; Android downloads (if needed) and installs. */
 export async function updateNow(): Promise<void> {
   if (desktop) return desktop.installUpdate()
