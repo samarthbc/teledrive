@@ -6,3 +6,5 @@ dist/
 *.tsbuildinfo
 src/viewer/generated/
 .screens/
+.vercel
+.env.local
