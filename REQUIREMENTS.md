@@ -135,7 +135,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Download a folder as a ZIP
 - [x] Share with Telegram users by sending to a chat
 - [x] Multiple storage channels (e.g. Personal, Work)
-- [x] Installable PWA for desktop
+- [x] Installable PWA for desktop (button removed in Phase 9; replaced by downloads of the real apps)
 
 ### 4.5 Later: camera backup upgrades (Android)
 - [x] Automatic backup while the app is closed (Android runs it in the background when new photos appear)

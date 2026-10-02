@@ -335,7 +335,7 @@ and reloading exposes `window.__td` (GramJS `Api`, `Buffer`, `getClient`) for ex
   IndexedDB (`teledrive-drive-<channelId>`); account data stays in `teledrive`. Old data is moved into
   the first drive's database on first start. Switching requires no running transfers. Camera backup
   belongs to the drive it was turned on in.
-- **PWA:** `manifest.webmanifest`, icons, and an "Install app" button when the browser offers it.
+- **PWA:** `manifest.webmanifest` and icons. (The "Install app" button was removed in Phase 9: the website offers the real Windows and Android apps under **Get the app** instead.)
 
 **Phase 4 done when:** every item under REQUIREMENTS §4.4 is checked.
 

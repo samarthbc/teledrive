@@ -1,11 +1,10 @@
 import {
-  Camera, Check, ChevronDown, Clock, Download, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Star,
+  Camera, Check, ChevronDown, Clock, FolderPlus, FolderUp, HardDrive, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { driveName } from '../telegram/channel'
-import { installApp, useInstall } from '../lib/install'
 import { APP_VERSION } from '../lib/releases'
 import { updateNow, useUpdate, type UpdateStatus } from '../lib/updates'
 import { isAndroid } from '../native/android'
@@ -41,7 +40,6 @@ export default function Sidebar(props: {
   const isApp = isAndroid || isDesktop
   const current = drives.find((d) => d.id === currentDrive)
   const rootName = useRootName()
-  const canInstall = useInstall((s) => !!s.event)
   const drive = useDrive((s) => s.drive)
   const { pathname } = useLocation()
   const counts = useMemo(() => ({ starred: starredItems(drive).length, trash: trashedItems(drive).length }), [drive])
@@ -125,7 +123,6 @@ export default function Sidebar(props: {
       <div className="mt-auto space-y-2 pt-6">
         <StorageCard drive={drive} onCameraBackup={onCameraBackup} onLockAll={onLockAll} />
         {onGetApps && !isApp && <Item icon={MonitorSmartphone} label="Get the app" onClick={onGetApps} />}
-        {canInstall && <Item icon={Download} label="Install app" onClick={() => void installApp()} />}
         <Item icon={LogOut} label="Log out" onClick={onLogout} />
         {isApp && <AppVersion />}
       </div>

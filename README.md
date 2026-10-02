@@ -28,7 +28,7 @@ A personal cloud drive that stores your files in **Telegram**: unlimited storage
 - **Folder upload** (button or drag-and-drop) keeps the folder structure; **folders download as ZIP**
 - **Send to Telegram**: send a (decrypted) copy of a file to any chat or contact
 - **Multiple drives** (e.g. Personal, Work), each its own private channel, with a switcher
-- Installable as an app from the browser (PWA)
+- **Get the app** on the website: download links for the Windows and Android apps
 - **Soft Swiss design** ([DESIGN.md](DESIGN.md)): light and dark themes with a System / Light / Dark switch;
   works at phone width with bottom tabs, a + button and slide-up action sheets
 
@@ -160,7 +160,7 @@ src/
 ├── store/      app state (Zustand)
 ├── pages/      Setup, Login, TeleDrive password, Drive
 ├── components/ file views, preview, dialogs, menus, transfer panel, shared form controls (ui.tsx)
-├── lib/        formatting, theme switch, PWA install
+├── lib/        formatting, theme switch, releases and app updates
 ├── dev/        sample files for design work (`?mock`, development only, never shipped)
 └── native/     Android bridge (downloads, share-to-app, camera backup, notification, back button); desktop bridge
 public/sw.js    service worker for video/audio streaming
