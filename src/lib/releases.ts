@@ -19,6 +19,8 @@ export interface Release {
   version: string
   /** File name → size in bytes. */
   sizes: Record<string, number>
+  /** File name → SHA-256 (hex), when GitHub provides it. */
+  sha256: Record<string, string>
 }
 
 const CACHE_KEY = 'teledrive.release'
@@ -38,8 +40,14 @@ export async function latestRelease(): Promise<Release | null> {
     if (res.status === 404) release = null // nothing released yet
     else if (!res.ok) return null // rate limit or outage: don't remember it
     else {
-      const body = (await res.json()) as { tag_name: string; assets: { name: string; size: number }[] }
-      release = { version: body.tag_name.replace(/^v/, ''), sizes: Object.fromEntries(body.assets.map((a) => [a.name, a.size])) }
+      const body = (await res.json()) as { tag_name: string; assets: { name: string; size: number; digest?: string | null }[] }
+      release = {
+        version: body.tag_name.replace(/^v/, ''),
+        sizes: Object.fromEntries(body.assets.map((a) => [a.name, a.size])),
+        sha256: Object.fromEntries(
+          body.assets.filter((a) => a.digest?.startsWith('sha256:')).map((a) => [a.name, a.digest!.slice('sha256:'.length)]),
+        ),
+      }
     }
   } catch {
     return null

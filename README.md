@@ -113,6 +113,9 @@ Every public build runs `scripts/check-keys.mjs`, which fails if your api_hash i
 - **Apps:** pushing a tag `v<version>` runs `.github/workflows/release.yml`, which builds the signed APK and
   the Windows installer and publishes them as a GitHub Release. The website's **Get the app** links always
   point to the latest one.
+- **Updates:** the Windows app downloads new versions by itself and installs them when it closes (or via
+  **Restart to update**); the Android app shows **Update** in the side menu, then Android's installer.
+  Nobody reinstalls, and logins and files are kept.
 
 Details and first-time setup (Vercel, GitHub secrets, the Android signing key): IMPLEMENTATION.md Phase 9.
 

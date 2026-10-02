@@ -12,6 +12,7 @@ import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Base64;
 import android.view.Window;
 
@@ -35,7 +36,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +56,7 @@ import java.util.concurrent.TimeUnit;
  * - reading files shared to the app ("Share → TeleDrive") and camera media, in pieces
  * - listing new camera photos/videos for camera backup
  * - a foreground service that keeps transfers running while the app is in the background
+ * - downloading and installing app updates from GitHub Releases
  */
 @CapacitorPlugin(
     name = "TeleDriveNative",
@@ -470,6 +476,114 @@ public class TeleDriveNativePlugin extends Plugin {
     @PluginMethod
     public void stopKeepAlive(PluginCall call) {
         getContext().stopService(new Intent(getContext(), TransferService.class));
+        call.resolve();
+    }
+
+    // ---- App updates (IMPLEMENTATION.md Phase 9) ----
+
+    /** Releases are only ever downloaded from the project's own GitHub releases. */
+    private static final String UPDATE_URL = "https://github.com/samarthbc/teledrive/releases/download/v%s/TeleDrive.apk";
+
+    private File updateFile() {
+        return new File(new File(getContext().getCacheDir(), "updates"), "TeleDrive.apk");
+    }
+
+    /**
+     * Download a release's APK into the app's cache, checking its size and SHA-256 (from GitHub's release
+     * info). Reports "updateProgress" events (0-100). Android itself refuses the APK unless it's signed with
+     * the same key as this app.
+     */
+    @PluginMethod
+    public void downloadUpdate(PluginCall call) {
+        String version = call.getString("version", "");
+        long size = longArg(call, "size", 0L);
+        String sha256 = call.getString("sha256", "");
+        if (!version.matches("\\d+\\.\\d+\\.\\d+")) {
+            call.reject("Not a version: " + version);
+            return;
+        }
+        new Thread(() -> {
+            File apk = updateFile();
+            File part = new File(apk.getParentFile(), "TeleDrive.apk.part");
+            //noinspection ResultOfMethodCallIgnored
+            apk.getParentFile().mkdirs();
+            HttpURLConnection c = null;
+            try {
+                c = (HttpURLConnection) new URL(String.format(UPDATE_URL, version)).openConnection();
+                c.setInstanceFollowRedirects(true);
+                c.setConnectTimeout(20_000);
+                c.setReadTimeout(30_000);
+                if (c.getResponseCode() != 200) throw new IOException("Download failed (HTTP " + c.getResponseCode() + ")");
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                long done = 0;
+                int shown = -1;
+                try (InputStream in = c.getInputStream(); OutputStream out = new FileOutputStream(part)) {
+                    byte[] buf = new byte[64 * 1024];
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
+                        out.write(buf, 0, n);
+                        digest.update(buf, 0, n);
+                        done += n;
+                        int pct = size > 0 ? (int) Math.min(100, done * 100 / size) : -1;
+                        if (pct != shown) {
+                            shown = pct;
+                            JSObject p = new JSObject();
+                            p.put("progress", pct);
+                            notifyListeners("updateProgress", p);
+                        }
+                    }
+                }
+                if (size > 0 && done != size) throw new IOException("The download was incomplete");
+                StringBuilder hex = new StringBuilder();
+                for (byte b : digest.digest()) hex.append(String.format("%02x", b));
+                if (!sha256.isEmpty() && !sha256.equalsIgnoreCase(hex.toString())) throw new IOException("The download was damaged");
+                //noinspection ResultOfMethodCallIgnored
+                apk.delete();
+                if (!part.renameTo(apk)) throw new IOException("Couldn't save the update");
+                call.resolve();
+            } catch (Exception e) {
+                //noinspection ResultOfMethodCallIgnored
+                part.delete();
+                call.reject(e.getMessage() != null ? e.getMessage() : "Download failed", e);
+            } finally {
+                if (c != null) c.disconnect();
+            }
+        }).start();
+    }
+
+    /**
+     * Open Android's installer for the downloaded update. The first time, Android needs "Install unknown apps"
+     * allowed for TeleDrive: this opens that setting instead and returns needsPermission.
+     */
+    @PluginMethod
+    public void installUpdate(PluginCall call) {
+        File apk = updateFile();
+        if (!apk.exists()) {
+            call.reject("No update has been downloaded");
+            return;
+        }
+        JSObject ret = new JSObject();
+        if (!getContext().getPackageManager().canRequestPackageInstalls()) {
+            Intent settings = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+            getActivity().startActivity(settings);
+            ret.put("needsPermission", true);
+            call.resolve(ret);
+            return;
+        }
+        Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", apk);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "application/vnd.android.package-archive");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        getActivity().startActivity(intent);
+        ret.put("needsPermission", false);
+        call.resolve(ret);
+    }
+
+    /** Remove a downloaded update (after it's installed, or when it's outdated). */
+    @PluginMethod
+    public void clearUpdate(PluginCall call) {
+        //noinspection ResultOfMethodCallIgnored
+        updateFile().delete();
         call.resolve();
     }
 

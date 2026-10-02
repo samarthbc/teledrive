@@ -6,7 +6,8 @@ import { useMemo, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { driveName } from '../telegram/channel'
 import { installApp, useInstall } from '../lib/install'
-import { APP_VERSION, isNewer, RELEASES_PAGE, useLatestRelease } from '../lib/releases'
+import { APP_VERSION } from '../lib/releases'
+import { updateNow, useUpdate, type UpdateStatus } from '../lib/updates'
 import { isAndroid } from '../native/android'
 import { isDesktop } from '../native/desktop'
 
@@ -135,18 +136,38 @@ export default function Sidebar(props: {
   )
 }
 
-/** The app's version, and a link when a newer one is on GitHub (Windows and Android apps). */
+/** The app's version and its update state (Windows and Android apps). */
 function AppVersion() {
-  const release = useLatestRelease()
-  const update = release && isNewer(release.version, APP_VERSION) ? release.version : null
+  const { status, version, progress, error } = useUpdate()
+  const button = 'font-bold text-brand-ink hover:underline'
+  const action: Record<UpdateStatus, React.ReactNode> = {
+    none: null,
+    available: (
+      <button className={button} onClick={() => void updateNow()}>
+        Update to {version}
+      </button>
+    ),
+    downloading: <span>Downloading {version}{progress >= 0 ? ` · ${progress}%` : '…'}</span>,
+    ready: (
+      <button className={button} onClick={() => void updateNow()} title={isDesktop ? 'Installs now; otherwise when you close TeleDrive' : undefined}>
+        {isDesktop ? `Restart to update to ${version}` : `Install ${version}`}
+      </button>
+    ),
+    needsPermission: (
+      <button className={button} onClick={() => void updateNow()} title="Allow TeleDrive to install updates in the settings that opened, then come back">
+        Allow installing, then tap here
+      </button>
+    ),
+    error: (
+      <button className={button} onClick={() => void updateNow()} title={error ?? undefined}>
+        Update failed · Try again
+      </button>
+    ),
+  }
   return (
-    <p className="flex items-center justify-between gap-2 px-3.5 pt-1 text-[11px] text-muted">
+    <p className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 px-3.5 pt-1 text-[11px] text-muted">
       <span>Version {APP_VERSION}</span>
-      {update && (
-        <a href={RELEASES_PAGE} target="_blank" rel="noreferrer" className="font-bold text-brand-ink hover:underline">
-          Update to {update}
-        </a>
-      )}
+      {action[status]}
     </p>
   )
 }

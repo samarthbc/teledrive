@@ -4,6 +4,7 @@
 const { app, BrowserWindow, Menu, ipcMain, nativeTheme, net, protocol, screen, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
+const updates = require('./updates.cjs')
 
 // The app answers https://teledrive.invalid itself; nothing goes to the network (.invalid is a
 // reserved name that never exists online). A fixed origin keeps the login session and drive cache
@@ -58,6 +59,10 @@ app.whenReady().then(() => {
     win?.setBackgroundColor(BACKGROUND[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'])
   })
   createWindow()
+  // Updates: the page shows the state in the side menu and can ask to restart into the update
+  ipcMain.handle('td-update-state', () => updates.getState())
+  ipcMain.on('td-update-install', () => updates.installNow())
+  updates.initUpdates((state) => win?.webContents.send('td-update', state))
 })
 
 app.on('window-all-closed', () => app.quit())

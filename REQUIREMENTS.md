@@ -169,6 +169,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] No API keys in any public build; the website and both apps ask for them on a Setup screen
 - [x] Setup: clear message for wrong keys, a way to change keys, a short explanation
 - [x] Apps show their version and say when a newer one is available
+- [x] Updates install over the existing apps (no reinstall, data kept): automatic on Windows, one tap on Android
 - [x] Security headers (Content-Security-Policy) on the website
 
 ---

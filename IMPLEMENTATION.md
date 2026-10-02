@@ -623,8 +623,7 @@ own `api_id` / `api_hash` once per device.
   **Get the app** in the side menu (a dialog).
 - Links: `https://github.com/samarthbc/teledrive/releases/latest/download/TeleDrive-Setup.exe` and
   `…/TeleDrive.apk` (`lib/releases.ts`). They work once the first release exists.
-- In the apps: **Version x.y.z** at the bottom of the side menu, and **Update to x.y.z** when GitHub has a
-  newer release (checked at most once a day, cached on the device).
+- In the apps: **Version x.y.z** at the bottom of the side menu, with the update state next to it (9.7).
 - One version: `package.json` → `__APP_VERSION__` in the app, the installer, and the APK (`versionName`,
   `versionCode` = major·10000 + minor·100 + patch) in `android/app/build.gradle`. Now **1.0.0**.
 
@@ -651,6 +650,24 @@ own `api_id` / `api_hash` once per device.
   2. GitHub: turn on two-factor login; add the two secrets above.
   3. `git tag v1.0.0 && git push origin v1.0.0` → the release appears under Releases; the website's
      download links start working.
+
+### 9.7 Updating the apps without reinstalling ✅
+Nobody uninstalls: each release installs over the previous one and keeps the login, keys and files.
+
+| | How | The person |
+|---|---|---|
+| Website | Vercel deploys every push to `main`; `index.html` and `sw.js` aren't cached | nothing to do |
+| Windows | `electron/updates.cjs`: 15 s after start and every 6 h, asks GitHub for the latest release; if newer, downloads `TeleDrive-Setup.exe` into `%APPDATA%\TeleDrive\updates`, checks its size and SHA-256 (GitHub's asset `digest`), then installs it silently (`/S --updated`) **when the app closes**. **Restart to update to x.y.z** in the side menu installs now and reopens the app (`--force-run`). Old installers are removed. | nothing, or one click |
+| Android | **Update to x.y.z** in the side menu (`lib/updates.ts`): the native plugin downloads the APK from the release (`downloadUpdate`), checks size and SHA-256, and opens Android's installer (`installUpdate`). The first time, Android asks to allow "Install unknown apps" for TeleDrive (`REQUEST_INSTALL_PACKAGES`); coming back continues the install. Android only accepts it because it's signed with the same key as the installed app. | tap **Update**, then **Install** |
+
+- Only the project's own release URLs are ever downloaded; the version must look like `1.2.3` and be newer
+  than the running app.
+- Every app change, even a small UI fix, needs a release: bump `version` in `package.json`, commit, push a
+  `v<version>` tag. The workflow refuses a tag that doesn't match.
+- A sideloaded Android app can't update with no tap at all (only app stores can); one tap on Install is the
+  minimum.
+- Tested on this PC: the Windows updater against a local stand-in for GitHub (download with progress, check,
+  ready; a damaged download is rejected and deleted). The Android update needs a real release to try.
 
 ### 9.6 Website hardening ✅
 - Content-Security-Policy (`<meta>`, built by the `website` mode): scripts only from the site plus the

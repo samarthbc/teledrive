@@ -61,6 +61,11 @@ interface TeleDriveNativePlugin {
   keepAlive(o: { title: string; text: string; progress: number }): Promise<void>
   stopKeepAlive(): Promise<void>
   addListener(event: 'shared' | 'backgroundBackup', fn: () => void): Promise<PluginListenerHandle>
+  /** App updates from GitHub Releases. */
+  downloadUpdate(o: { version: string; size: number; sha256?: string }): Promise<void>
+  installUpdate(): Promise<{ needsPermission: boolean }>
+  clearUpdate(): Promise<void>
+  addListener(event: 'updateProgress', fn: (e: { progress: number }) => void): Promise<PluginListenerHandle>
 }
 
 /** In the background backup page, the same calls go through a plain WebView bridge. */
