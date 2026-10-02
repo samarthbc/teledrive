@@ -162,7 +162,7 @@ export default function FileView({ items, view, selected, onClick, onToggle, onM
 
 /** Size for files; for locked items, why there's nothing to show. */
 function details(item: Item): string {
-  if (item.lock && item.locked) return item.kind === 'folder' ? 'Protected with its own password' : 'Locked'
+  if (item.lock && item.locked) return item.kind === 'folder' ? 'Locked folder' : 'Locked file'
   return item.kind === 'file' ? formatBytes(item.size) : 'Folder'
 }
 
