@@ -83,7 +83,7 @@ export default function CameraBackupSettings() {
           {running ? <Loader2 className="size-4.5 animate-spin" /> : upToDate ? <Check className="size-4.5" strokeWidth={3} /> : <Info className="size-4.5" />}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-extrabold">{status}</p>
+          <p className="text-base leading-snug font-extrabold break-words">{status}</p>
           <p className="mt-0.5 text-[13px] text-muted">
             {backedUp} backed up
             {lastCheck && ` · checked ${new Date(lastCheck).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}

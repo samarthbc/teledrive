@@ -324,14 +324,12 @@ export async function runBackup(scope: BackupScope = 'instant'): Promise<number>
     // What the "overnight" folders have waiting (an overnight run takes them all)
     void countTonight(scope)
     const net = await network()
-    if (!net.connected) {
-      useBackup.setState({ status: 'Waiting for internet' })
+    if (!net.connected || (settings.wifiOnly && !net.wifi)) {
+      useBackup.setState({ status: net.connected ? 'Waiting for Wi-Fi' : 'Waiting for internet' })
+      retryForNetwork()
       return 0
     }
-    if (settings.wifiOnly && !net.wifi) {
-      useBackup.setState({ status: 'Waiting for Wi-Fi' })
-      return 0
-    }
+    networkRetried = false
 
     const rootId = await ensureRootFolder()
     const jobs: { item: CameraItem; folderId: string }[] = []
@@ -577,6 +575,23 @@ async function openBackupDrive(scope: BackupScope): Promise<boolean> {
 const AUTO_CHECK_GAP = 30_000
 let lastAutoCheck = 0
 
+/** Waiting for Wi-Fi or internet: the status that says so. */
+const waitingForNetwork = () => /^Waiting for (Wi-Fi|internet)$/.test(useBackup.getState().status)
+
+let networkRetried = false
+
+/**
+ * Waiting for the network: look once more in a while. Right after the phone wakes, Android can still report mobile
+ * data for a moment while Wi-Fi reconnects, and no "network changed" event may follow. After that, the event does it.
+ */
+function retryForNetwork() {
+  if (isHeadless || networkRetried) return
+  networkRetried = true
+  setTimeout(() => {
+    if (waitingForNetwork()) void runBackup()
+  }, AUTO_CHECK_GAP)
+}
+
 /** Automatic checks are spaced out; "Back up now" calls runBackup() directly. */
 function autoCheck() {
   if (Date.now() - lastAutoCheck < AUTO_CHECK_GAP) return
@@ -603,7 +618,10 @@ export function initCameraBackup(h: BackupHost): void {
     const type = s.connected ? s.connectionType : 'none'
     if (type === lastType) return
     lastType = type
-    if (s.connected) autoCheck()
+    if (!s.connected) return
+    // Waiting for this connection: back up now, however recent the last check was
+    if (waitingForNetwork()) void runBackup()
+    else autoCheck()
   })
   // Android's background job, while the app is still running in the background
   void Native.addListener('backgroundBackup', (data) => {
