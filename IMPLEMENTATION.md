@@ -856,13 +856,50 @@ the same pause when My Drive was open. Only a fully closed app (the headless pag
   opened TelePhotos and uploaded the photo at once.
 - Not checked: the duplicate check (needs a second device), coming back to the app in the middle of a round.
 
-## Phase 13: Photo screens
-- File metadata gets `dt` (date taken; MediaStore `DATE_TAKEN` for backups, EXIF via a small reader for uploads,
-  else upload time) and `wh` (width×height). Encrypted files keep them in `Secret`. Older files are filled in
-  lazily (one caption edit each).
-- TelePhotos replaces the file browser with: a **timeline** grouped by day/month with a year/month scrubber,
-  justified rows (from `wh`), multi-select by dragging; the existing full-screen viewer; source filters
-  (Camera, Screenshots, WhatsApp…, from the backup folders); Favorites (starred), Trash and Locked as today.
+## Phase 13: Photo screens ✅ (implemented; being tested)
+
+### 13.1 Date taken and size (`drive/media.ts`)
+- `Secret` (the encrypted part of a file's caption) gets `dt` (date taken, unix seconds) and `wh` ([width, height]),
+  for photos and videos only. The tree exposes them as `FileItem.taken` / `FileItem.wh`.
+- Where they come from, first that knows wins:
+  1. Camera backup: Android's photo library (`DATE_TAKEN`, `WIDTH`/`HEIGHT`, `ORIENTATION` added to
+     `MediaAccess.listMedia`; `PhoneFile` swaps width/height for 90°/270°).
+  2. JPEGs: the EXIF block in the first 256 KB (`readExif`: `DateTimeOriginal`, else `DateTime`, as the camera's local
+     time; `PixelX/YDimension` with orientation 5-8 swapped). Unit-tested (both byte orders, rotation, empty dates).
+  3. Width/height: the picture or video decoded for the thumbnail (`makeThumbnail(…, onSize)`).
+  4. Date: the file's last-modified time.
+- Worked out once per upload and kept in the upload's saved state (`UploadState.dt/wh`), so a resumed upload stores
+  the same values.
+- Older files have neither: the timeline uses their upload time. (Filling them in later would mean downloading the
+  start of each file; not done.)
+
+### 13.2 Timeline (`components/PhotoTimeline.tsx`)
+- TelePhotos' top level and Starred show a **timeline** instead of the file list: every photo and video not in the
+  trash or a locked folder (`timelineItems` in `Drive.tsx`), newest first by date taken, in day groups ("Today",
+  "Yesterday", "Sat, 15 Jul, 2023"), as square tiles (4 per row on phones, ~9 rem on desktop).
+- **Chips:** All, one per top-level folder (Camera, Screenshots, WhatsApp Images…), Videos (`?src=` in the URL).
+- Big libraries: whole days are rendered until ~240 photos, then 240 more each time the end comes within 1,500 px;
+  thumbnails load as they come into view (as before).
+- **Scrubber:** a rail on the right edge (shown while scrolling or on hover) with the years; dragging maps the position
+  to a place in the list (not pixels, since not everything is rendered), renders up to there and jumps, with a
+  "Aug 2025" bubble.
+- Selection like the file list: tap with something selected, long-press on phones, Ctrl/Shift-click on desktop,
+  Ctrl+A; plus a check button on each day to select or unselect that day. The selection bar and menus are the usual
+  ones. Starred photos show a star.
+- Tap opens the existing viewer, in timeline order. The view and sort switches are hidden there (always by date).
+- Details shows **Dimensions** and **Taken**.
+- Not done (yet): justified rows by aspect ratio (Google Photos' desktop look); drag-to-select across tiles.
+- Dev mock: `?mock&photos` opens a TelePhotos with 1,500 photos over three years.
+
+### 13.3 Checked
+- Phone: two JPEGs with EXIF dates (2023, 2024) put in the camera folder (the photo library had no date for them)
+  were backed up and shown under **Wed, 25 Dec, 2024** and **Sat, 15 Jul, 2023**; Details showed 1200 × 900 and the
+  EXIF time. Long-press selection, select-a-day, starring from the selection bar, the Starred timeline, opening the
+  viewer, 4 tiles per row.
+- Browser (mock, 1,500 photos): loading more while scrolling (268 → 587 tiles), the scrubber with 2026–2023 and a
+  drag to the middle jumping to Aug 2025.
+- Bug found and fixed: the scrubber measured the scrolling area in a layout effect, before React had set the
+  parent's ref, so it never appeared.
 
 ## Phase 14: Moving existing backups
 - If My Drive (or another drive) has a *Camera Backup* folder, offer **Move to TelePhotos** once.

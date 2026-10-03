@@ -26,6 +26,8 @@ export default function DetailsDialog(props: { drive: Drive; item: Item; onDownl
   ])
   if (item.kind === 'file') {
     rows.unshift(['Size', `${formatBytes(item.size)} (${item.size.toLocaleString()} bytes)`], ['Type', item.mime])
+    if (item.wh) rows.splice(2, 0, ['Dimensions', `${item.wh[0]} × ${item.wh[1]}`])
+    if (item.taken) rows.splice(item.wh ? 3 : 2, 0, ['Taken', new Date(item.taken * 1000).toLocaleString()])
     rows.push(['Stored as', item.partsTotal === 1 ? '1 Telegram message' : `${item.partsTotal} Telegram messages`])
     if (!item.complete) rows.push(['Status', `Incomplete: ${item.parts.length} of ${item.partsTotal} parts found`])
   } else if (item.locked) {

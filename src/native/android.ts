@@ -21,6 +21,12 @@ export interface CameraItem extends PhoneFileInfo {
   id: string
   /** Unix seconds. */
   dateAdded: number
+  /** When it was taken (unix ms), if the photo library knows. */
+  dateTaken?: number
+  /** Size in pixels as stored, and the rotation to show it with (0/90/180/270). */
+  width?: number
+  height?: number
+  orientation?: number
   /** Folder (MediaStore relative path, e.g. "DCIM/Camera/"). */
   path: string
 }
@@ -130,12 +136,21 @@ export class PhoneFile extends PhoneSlice implements UploadSource {
   readonly name: string
   readonly type: string
   readonly lastModified: number
+  readonly taken?: number
+  readonly width?: number
+  readonly height?: number
 
-  constructor(info: PhoneFileInfo) {
+  constructor(info: PhoneFileInfo | CameraItem) {
     super(info.uri, 0, info.size)
     this.name = info.name
     this.type = info.mime
     this.lastModified = info.lastModified
+    if ('dateTaken' in info && info.dateTaken) this.taken = Math.floor(info.dateTaken / 1000)
+    if ('width' in info && info.width && info.height) {
+      const turned = info.orientation === 90 || info.orientation === 270
+      this.width = turned ? info.height : info.width
+      this.height = turned ? info.width : info.height
+    }
   }
 
   async thumbnail(): Promise<Blob | null> {

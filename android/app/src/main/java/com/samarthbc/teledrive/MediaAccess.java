@@ -88,6 +88,10 @@ public class MediaAccess {
             MediaStore.Files.FileColumns.DATE_MODIFIED,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
             MediaStore.Files.FileColumns.RELATIVE_PATH,
+            MediaStore.MediaColumns.DATE_TAKEN,
+            MediaStore.MediaColumns.WIDTH,
+            MediaStore.MediaColumns.HEIGHT,
+            MediaStore.MediaColumns.ORIENTATION,
         };
         StringBuilder where = new StringBuilder(MEDIA_ONLY + " AND " + MediaStore.Files.FileColumns.DATE_ADDED + ">=? AND (");
         List<String> args = mediaArgs();
@@ -113,6 +117,13 @@ public class MediaAccess {
                 o.put("dateAdded", c.getLong(4));
                 o.put("lastModified", c.getLong(5) * 1000);
                 o.put("path", c.getString(7));
+                // For TelePhotos' timeline (missing on some files)
+                if (!c.isNull(8) && c.getLong(8) > 0) o.put("dateTaken", c.getLong(8));
+                if (!c.isNull(9) && !c.isNull(10) && c.getInt(9) > 0 && c.getInt(10) > 0) {
+                    o.put("width", c.getInt(9));
+                    o.put("height", c.getInt(10));
+                    o.put("orientation", c.isNull(11) ? 0 : c.getInt(11));
+                }
                 items.put(o);
             }
         }

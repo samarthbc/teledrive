@@ -15,6 +15,9 @@ export interface UploadState {
   level?: string
   /** SHA-256 of the content (hex). */
   hash?: string
+  /** Photos and videos: date taken (unix seconds) and size, stored with the file. */
+  dt?: number
+  wh?: [number, number]
 }
 
 export interface ChunkState {

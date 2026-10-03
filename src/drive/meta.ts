@@ -19,6 +19,10 @@ export interface Secret {
   m?: string
   /** SHA-256 of the content (hex). */
   h?: string
+  /** Photos and videos: date taken (unix seconds). */
+  dt?: number
+  /** Photos and videos: width and height in pixels. */
+  wh?: [number, number]
 }
 
 export interface FolderMeta {

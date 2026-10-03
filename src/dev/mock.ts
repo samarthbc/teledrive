@@ -1,5 +1,6 @@
 // Development only: `?mock` shows the app with sample files and no Telegram connection, for
 // working on the design and taking screenshots. `?mock=password|login|setup` shows that screen.
+// `&photos` opens a TelePhotos with ~1,500 photos over three years (for the timeline and its scrubber).
 // Loaded from main.tsx only when import.meta.env.DEV, so it never ships.
 import type { Meta } from '../drive/meta'
 import type { Transfer } from '../drive/queue'
@@ -48,6 +49,29 @@ function records(): MessageRecord[] {
   return out
 }
 
+/** TelePhotos: Camera, Screenshots and WhatsApp folders, photos spread over three years (more recently). */
+function photoRecords(): MessageRecord[] {
+  let msgId = 1
+  let seed = 7
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const out: MessageRecord[] = []
+  const sources = [['cam', 'Camera'], ['shots', 'Screenshots'], ['wa', 'WhatsApp Images']]
+  for (const [id, n] of sources) out.push({ msgId: msgId++, date: now, meta: { td: 1, t: 'd', id, p: 'root', n, ts: now } as Meta })
+  for (let i = 0; i < 1500; i++) {
+    const age = Math.floor(random() ** 2 * 3 * 365 * DAY)
+    const [p] = sources[i % 7 === 0 ? 1 : i % 5 === 0 ? 2 : 0]
+    const video = i % 11 === 0
+    out.push({
+      msgId: msgId++, date: now - age,
+      meta: {
+        td: 1, t: 'f', id: `ph${i}`, p, n: video ? `VID_${i}.mp4` : `IMG_${i}.jpg`, s: 2_000_000 + i, m: video ? 'video/mp4' : 'image/jpeg',
+        of: 1, ts: now - age, ...(i % 37 === 0 && { x: { fav: 1 } }),
+      } as Meta,
+    })
+  }
+  return out
+}
+
 const transfers: Transfer[] = [
   { id: 't1', kind: 'upload', name: 'Trip to Coorg.mp4', size: 1_400_000_000, done: 612_000_000, status: 'running', speed: 3_100_000 },
   { id: 't2', kind: 'upload', name: 'Budget.xlsx', size: 48_000, done: 0, status: 'running', speed: 0, note: 'Checking file…' },
@@ -62,15 +86,16 @@ useDrive.setState({
   passwordMode: param.get('create') !== null ? 'create' : 'enter',
   // Only the root level is open, so the sample locked items show as locked
   // (their visible names are stand-ins "label:<name>" for the sealed `ln`)
-  drive: buildDrive(records(), {
+  drive: buildDrive(param.has('photos') ? photoRecords() : records(), {
     isOpen: (level) => level === 'root' || level === 'private',
     secretOf: (sealed) => (/^(label|open):/.test(sealed) ? { n: sealed.replace(/^\w+:/, '') } : undefined),
   }),
   drives: [
     { id: '1', accessHash: '0', title: 'TeleDrive Storage' },
+    ...(param.has('photos') ? [{ id: '3', accessHash: '0', title: 'TeleDrive Photos' }] : []),
     { id: '2', accessHash: '0', title: 'TeleDrive · Work' },
   ] as never,
-  currentDrive: '1',
+  currentDrive: param.has('photos') ? '3' : '1',
   transfers: param.has('transfers') ? transfers : [],
   boot: async () => {},
   refresh: async () => {},

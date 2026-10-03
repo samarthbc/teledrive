@@ -4,19 +4,23 @@ const MAX_BYTES = 200 * 1024
 const MAX_IMAGE_SOURCE = 60 * 1024 * 1024
 const VIDEO_TIMEOUT = 8000
 
-/** Make a small JPEG preview for images and videos. Returns null if the browser can't decode the file. */
-export async function makeThumbnail(file: Blob, mime: string): Promise<Blob | null> {
+/**
+ * Make a small JPEG preview for images and videos. Returns null if the browser can't decode the file.
+ * `onSize` gets the full picture's width and height.
+ */
+export async function makeThumbnail(file: Blob, mime: string, onSize?: (w: number, h: number) => void): Promise<Blob | null> {
   try {
-    if (mime.startsWith('image/') && file.size <= MAX_IMAGE_SOURCE) return await imageThumb(file)
-    if (mime.startsWith('video/')) return await videoThumb(file)
+    if (mime.startsWith('image/') && file.size <= MAX_IMAGE_SOURCE) return await imageThumb(file, onSize)
+    if (mime.startsWith('video/')) return await videoThumb(file, onSize)
   } catch {
     // Unsupported format (e.g. HEIC in most browsers): upload without a thumbnail
   }
   return null
 }
 
-async function imageThumb(file: Blob): Promise<Blob | null> {
+async function imageThumb(file: Blob, onSize?: (w: number, h: number) => void): Promise<Blob | null> {
   const bitmap = await createImageBitmap(file)
+  onSize?.(bitmap.width, bitmap.height)
   try {
     return await toJpeg(bitmap, bitmap.width, bitmap.height)
   } finally {
@@ -24,7 +28,7 @@ async function imageThumb(file: Blob): Promise<Blob | null> {
   }
 }
 
-function videoThumb(file: Blob): Promise<Blob | null> {
+function videoThumb(file: Blob, onSize?: (w: number, h: number) => void): Promise<Blob | null> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file)
     const video = document.createElement('video')
@@ -39,6 +43,7 @@ function videoThumb(file: Blob): Promise<Blob | null> {
     video.muted = true
     video.preload = 'metadata'
     video.onloadedmetadata = () => {
+      if (video.videoWidth && video.videoHeight) onSize?.(video.videoWidth, video.videoHeight)
       // A frame a little way in is usually more representative than the first (often black) one
       video.currentTime = Math.min(1, (video.duration || 0) / 3)
     }

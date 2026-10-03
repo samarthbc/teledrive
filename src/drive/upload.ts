@@ -13,6 +13,7 @@ import { encode, type ChunkMeta, type FileMeta, type Flags, type Secret } from '
 import { rememberSecret } from './secrets'
 import { applyMessages, getRecord } from './sync'
 import { makeThumbnail } from './thumbnail'
+import { isMediaType, mediaInfo } from './media'
 import { CanceledError, randomLong, TransferControl, withRetry } from './transfer'
 
 /** Upload request size (Telegram maximum). */
@@ -38,6 +39,10 @@ export interface UploadSource extends ByteSource {
   readonly lastModified: number
   /** Custom thumbnail (e.g. made by Android); otherwise one is generated in the browser. */
   thumbnail?(): Promise<Blob | null>
+  /** Photos and videos, when known (e.g. from Android's photo library): date taken (unix seconds) and size. */
+  readonly taken?: number
+  readonly width?: number
+  readonly height?: number
 }
 
 export class EmptyFileError extends Error {
@@ -101,8 +106,16 @@ export async function uploadFile(
   const src: ByteSource = new EncryptedSource(file, cryptoKey)
   const total = Math.ceil(src.size / CHUNK_SIZE)
   const mime = file.type || 'application/octet-stream'
+  // Photos and videos: date taken and size (for TelePhotos' timeline)
+  if (isMediaType(mime) && state.dt === undefined) {
+    const info = await mediaInfo(file, mime)
+    state.dt = info.dt ?? 0
+    if (info.wh) state.wh = info.wh
+  }
   const caption = async () => {
-    const secret: Secret = { n: state.name, m: mime, ...(state.hash && { h: state.hash }) }
+    const secret: Secret = {
+      n: state.name, m: mime, ...(state.hash && { h: state.hash }), ...(state.dt && { dt: state.dt }), ...(state.wh && { wh: state.wh }),
+    }
     const e = await seal(levelKey, secret)
     rememberSecret(e, level, secret)
     return encode({
@@ -134,7 +147,7 @@ export async function uploadFile(
     const order = [...Array.from({ length: total - 1 }, (_, i) => i + 2), 0, 1]
     for (const pt of order) {
       if (pt === 0) {
-        await sendEncryptedThumb(file, mime, cryptoKey, state.id, (state.chunks[0] ??= {}), ctl)
+        await sendEncryptedThumb(file, mime, cryptoKey, state.id, (state.chunks[0] ??= {}), ctl, (w, h) => (state.wh ??= [w, h]))
         await save(true)
         continue
       }
@@ -172,9 +185,10 @@ export async function uploadFile(
 /** Encrypted files: send the thumbnail, encrypted, as its own message (part 0). */
 async function sendEncryptedThumb(
   file: UploadSource, mime: string, key: CryptoKey, id: string, cs: ChunkState, ctl: TransferControl,
+  onSize: (w: number, h: number) => void,
 ): Promise<void> {
   if (cs.msgId) return
-  const thumb = await thumbnailFor(file, mime)
+  const thumb = await thumbnailFor(file, mime, onSize)
   if (!thumb) return
   const inputFile = await uploadSmall(await encryptThumb(key, thumb), `${id}.thumb`)
   const msgs = await sendDocument(
@@ -185,9 +199,9 @@ async function sendEncryptedThumb(
   await applyMessages(msgs)
 }
 
-async function thumbnailFor(file: UploadSource, mime: string): Promise<Blob | null> {
+async function thumbnailFor(file: UploadSource, mime: string, onSize: (w: number, h: number) => void): Promise<Blob | null> {
   if (file.thumbnail) return file.thumbnail().catch(() => null)
-  return file instanceof Blob ? makeThumbnail(file, mime) : null
+  return file instanceof Blob ? makeThumbnail(file, mime, onSize) : null
 }
 
 /** Delete an unfinished upload's saved progress and any chunks it already sent. */

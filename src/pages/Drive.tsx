@@ -24,9 +24,10 @@ import {
 } from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import {
-  breadcrumbs, childLevel, collectTree, containsLocked, messageIds, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
-  type FileItem, type Item,
+  breadcrumbs, childLevel, collectTree, containsLocked, messageIds, findDuplicate, hasFileOfSize, isHidden, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
+  type Drive, type FileItem, type Item,
 } from '../drive/tree'
+import PhotoTimeline, { sortPhotos } from '../components/PhotoTimeline'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
 import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } from '../native/android'
 import { useBackHandler } from '../native/backButton'
@@ -108,6 +109,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
+  const scroller = useRef<HTMLDivElement>(null)
   const shares = useIncomingShares((s) => s.files)
   const clearShares = useIncomingShares((s) => s.clear)
 
@@ -118,9 +120,18 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const folderExists = folderId === ROOT || drive.items.get(folderId)?.kind === 'folder'
   const current = mode === 'folder' && folderExists ? folderId : ROOT
   const crumbs = mode === 'folder' ? breadcrumbs(drive, current) : []
+  // TelePhotos: its top and Starred are a timeline of every photo and video (by date taken), not folders
+  const timeline = inPhotos && ((mode === 'folder' && current === ROOT) || mode === 'starred')
+  /** Timeline chip: a source folder's ID (Camera, Screenshots…), or "videos". */
+  const source = timeline && mode === 'folder' ? params.get('src') : null
+  const sources = useMemo(
+    () => (timeline && mode === 'folder' ? listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked) : []),
+    [drive, timeline, mode],
+  )
 
   const items = useMemo(() => {
     const match = filter && FILTERS[filter] ? FILTERS[filter].match : undefined
+    if (timeline) return timelineItems(drive, { starred: mode === 'starred', source })
     switch (mode) {
       case 'folder':
         return sortItems(listFolder(drive, current), sort)
@@ -135,7 +146,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       case 'settings':
         return []
     }
-  }, [drive, mode, current, query, filter, sort])
+  }, [drive, mode, current, query, filter, sort, timeline, source])
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const selection = [...selected].flatMap((id) => byId.get(id) ?? [])
@@ -380,6 +391,15 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   // ---- Selection ----
 
+  const selectMany = (ids: string[], on: boolean) => {
+    const next = new Set(selected)
+    for (const id of ids) {
+      if (on) next.add(id)
+      else next.delete(id)
+    }
+    setSelected(next)
+  }
+
   const toggle = (item: Item) => {
     const next = new Set(selected)
     if (next.has(item.id)) next.delete(item.id)
@@ -595,7 +615,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           ? 'first 500 results'
           : `${items.length} result${items.length === 1 ? '' : 's'}`
         : ''
-      : `${items.length} item${items.length === 1 ? '' : 's'}`
+      : timeline
+        ? `${items.length} photo${items.length === 1 ? '' : 's'}`
+        : `${items.length} item${items.length === 1 ? '' : 's'}`
 
   return (
     <div className="flex h-full md:gap-4.5 md:p-4.5" {...dropHandlers}>
@@ -705,7 +727,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   <TriangleAlert className="size-5" />
                 </span>
               )}
-              <div className="hidden h-11 shrink-0 gap-1 rounded-md p-1 pressed md:flex" role="group" aria-label="View">
+              <div className={`hidden h-11 shrink-0 gap-1 rounded-md p-1 pressed ${timeline ? '' : 'md:flex'}`} role="group" aria-label="View">
                 {(['list', 'grid'] as const).map((v) => {
                   const Icon = v === 'list' ? List : LayoutGrid
                   return (
@@ -723,13 +745,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                 })}
               </div>
               <button
-                className="icon-btn md:hidden"
+                className={`icon-btn md:hidden ${timeline ? 'hidden' : ''}`}
                 onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
                 aria-label={view === 'grid' ? 'List view' : 'Grid view'}
               >
                 {view === 'grid' ? <List /> : <LayoutGrid />}
               </button>
-              {mode !== 'recent' && mode !== 'trash' && (
+              {mode !== 'recent' && mode !== 'trash' && !timeline && (
                 <button className="icon-btn" onClick={sortMenu} aria-label="Sort" title={`Sort by ${SORT_LABELS[sort.key]}`}>
                   {sort.dir === 'asc' ? <ArrowDownAZ /> : <ArrowUpAZ />}
                 </button>
@@ -744,6 +766,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
         {/* Scrolls under the header; the negative margins leave room for the panels' shadows */}
         <div
+          ref={scroller}
           className="flex-1 overflow-y-auto px-4 pt-5 pb-44 md:-mx-4.5 md:-mb-4.5 md:px-4.5 md:pt-6 md:pb-8"
           onClick={(e) => e.target === e.currentTarget && clearSelection()}
         >
@@ -774,7 +797,20 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             )}
             {appUi && <BackupNotice inPhotos={inPhotos} onOpenPhotos={openPhotos} />}
           </div>
-          {(mode === 'folder' || mode === 'search') && (
+          {timeline && mode === 'folder' && (
+            <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
+              {[{ id: null, name: 'All' }, ...sources.map((f) => ({ id: f.id, name: f.name })), { id: 'videos', name: 'Videos' }].map((c) => (
+                <button
+                  key={c.id ?? 'all'}
+                  className={source === c.id ? 'chip-active' : 'chip'}
+                  onClick={() => setParams(c.id ? { src: c.id } : {}, { replace: true })}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {(mode === 'folder' || mode === 'search') && !timeline && (
             <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
               <button className={mode === 'search' && filter ? 'chip' : 'chip-active'} onClick={() => setFilter(null)}>
                 All
@@ -789,7 +825,18 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
           <div className="flex items-start gap-4.5">
             <div className="min-w-0 flex-1">
-              {items.length ? (
+              {timeline && items.length ? (
+                <PhotoTimeline
+                  key={`${mode}|${source ?? ''}`}
+                  items={items as FileItem[]}
+                  selected={selected}
+                  scroller={scroller}
+                  onClick={onItemClick}
+                  onToggle={toggle}
+                  onSelectMany={selectMany}
+                  onMenu={(item, x, y) => setMenu({ x, y, entries: itemMenu(item), header: itemHeader(item) })}
+                />
+              ) : items.length ? (
                 <FileView
                   items={items}
                   view={view}
@@ -1246,4 +1293,28 @@ function BackupNotice({ inPhotos, onOpenPhotos }: { inPhotos: boolean; onOpenPho
       </button>
     </p>
   )
+}
+
+/** TelePhotos' timeline: every photo and video not in the trash or a locked folder, newest first by date taken. */
+function timelineItems(drive: Drive, opts: { starred: boolean; source: string | null }): FileItem[] {
+  const out: FileItem[] = []
+  for (const i of drive.items.values()) {
+    if (i.kind !== 'file' || i.locked || !/^(image|video)\//.test(i.mime)) continue
+    if (opts.starred && !i.x.fav) continue
+    if (opts.source === 'videos' ? !i.mime.startsWith('video/') : opts.source && topFolder(drive, i) !== opts.source) continue
+    if (isHidden(drive, i)) continue
+    out.push(i)
+  }
+  return sortPhotos(out)
+}
+
+/** The folder at the top of the drive an item is in (its own ID if it's at the top). */
+function topFolder(drive: Drive, item: Item): string {
+  let cur = item
+  for (let n = 0; n < 100 && cur.parent !== ROOT; n++) {
+    const up = drive.items.get(cur.parent)
+    if (!up) break
+    cur = up
+  }
+  return cur.id
 }

@@ -71,6 +71,10 @@ export interface FileItem extends Protection {
   fileKey?: string
   /** SHA-256 of the content (hex), if known. */
   hash?: string
+  /** Photos and videos: date taken (unix seconds), if known. */
+  taken?: number
+  /** Photos and videos: width and height in pixels, if known. */
+  wh?: [number, number]
   /** Encrypted thumbnail (encrypted files only). */
   thumbPart?: Part
 }
@@ -210,6 +214,8 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
       if (item.kind === 'file') {
         item.mime = secret?.m ?? 'application/octet-stream'
         if (secret?.h) item.hash = secret.h
+        if (secret?.dt) item.taken = secret.dt
+        if (secret?.wh) item.wh = secret.wh
       }
     }
     if (item.kind === 'file') {
