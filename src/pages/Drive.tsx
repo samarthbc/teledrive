@@ -631,6 +631,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       // Android's file picker can't pick folders
       onUploadFolder={isAndroid ? undefined : () => folderInput.current?.click()}
       onNewFolder={newFolder}
+      onNewAlbum={() => setModal({ type: 'newAlbum' })}
       onLogout={() => setModal({ type: 'logout' })}
       onLockAll={anyUnlocked ? closeAllLocks : undefined}
       onSwitchDrive={switchDrive}
@@ -649,12 +650,14 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ? (i: Item) => `Deleted ${formatDate(i.x.tr ?? 0)} · from ${locationOf(drive, i, rootName)}`
         : (i: Item) => locationOf(drive, i, rootName)
 
+  const newAlbumEntry: MenuEntry = { label: 'New album', icon: AlbumIcon, onClick: () => setModal({ type: 'newAlbum' }) }
+  const uploadPhotosEntry: MenuEntry = { label: 'Upload photos', icon: Upload, onClick: () => fileInput.current?.click() }
   const fabEntries: MenuEntry[] = mode === 'albums'
-    ? [{ label: 'New album', icon: Plus, onClick: () => setModal({ type: 'newAlbum' }) }]
+    ? [newAlbumEntry, uploadPhotosEntry]
     : album
-      ? [{ label: 'Add photos', icon: ImagePlus, onClick: () => navigate(`/?addTo=${album.id}`) }]
+      ? [{ label: 'Add photos', icon: ImagePlus, onClick: () => navigate(`/?addTo=${album.id}`) }, newAlbumEntry]
       : inPhotos
-    ? [{ label: 'Upload photos', icon: Upload, onClick: () => fileInput.current?.click() }]
+    ? [uploadPhotosEntry, newAlbumEntry]
     : [
         { label: 'Upload files', icon: Upload, onClick: () => fileInput.current?.click() },
         ...(isAndroid ? [] : [{ label: 'Upload folder', icon: FolderUp, onClick: () => folderInput.current?.click() }]),

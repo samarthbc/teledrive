@@ -22,6 +22,8 @@ export default function Sidebar(props: {
   /** Not in the Android app (its file picker can't pick folders). */
   onUploadFolder?: () => void
   onNewFolder: () => void
+  /** TelePhotos: create an album. */
+  onNewAlbum: () => void
   onLogout: () => void
   /** Shown while some locked items are unlocked. */
   onLockAll?: () => void
@@ -34,7 +36,7 @@ export default function Sidebar(props: {
   /** Only on the website: download links for the apps. */
   onGetApps?: () => void
 }) {
-  const { onUpload, onUploadFolder, onNewFolder, onLogout, onLockAll, onSwitchDrive, onOpenPhotos, onNewDrive, onCameraBackup, onGetApps } = props
+  const { onUpload, onUploadFolder, onNewFolder, onNewAlbum, onLogout, onLockAll, onSwitchDrive, onOpenPhotos, onNewDrive, onCameraBackup, onGetApps } = props
   const drives = useDrive((s) => s.drives)
   const currentDrive = useDrive((s) => s.currentDrive)
   const [picking, setPicking] = useState(false)
@@ -51,7 +53,10 @@ export default function Sidebar(props: {
   const hasPhotos = drives.some(isPhotosDrive)
 
   const newEntries: MenuEntry[] = inPhotos
-    ? [{ label: 'Upload photos', icon: Upload, onClick: onUpload }]
+    ? [
+        { label: 'Upload photos', icon: Upload, onClick: onUpload },
+        { label: 'New album', icon: Album, onClick: onNewAlbum },
+      ]
     : [
         { label: 'Upload files', icon: Upload, onClick: onUpload },
         ...(onUploadFolder ? [{ label: 'Upload folder', icon: FolderUp, onClick: onUploadFolder }] : []),
