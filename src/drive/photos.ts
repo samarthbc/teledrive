@@ -29,26 +29,38 @@ export function timelineItems(
     if (opts.starred && !i.x.fav) continue
     if (opts.album && !i.albums?.includes(opts.album)) continue
     if (opts.notInAlbum && i.albums?.includes(opts.notInAlbum)) continue
-    if (opts.source === 'videos' ? !i.mime.startsWith('video/') : opts.source && topFolder(drive, i) !== opts.source) continue
+    if (opts.source && !inSource(drive, i, opts.source)) continue
     if (isHidden(drive, i)) continue
     out.push(i)
   }
   return sortPhotos(out)
 }
 
+/** The timeline's chips that are always there, by kind of file. */
+export const KIND_CHIPS = [
+  { id: 'photos', name: 'Photos' },
+  { id: 'videos', name: 'Videos' },
+  { id: 'gifs', name: 'GIFs' },
+] as const
+
+const isGif = (i: FileItem) => i.mime === 'image/gif'
+
+/** Is the photo in a chip: a kind ("photos", "videos", "gifs") or a top folder's ID. */
+function inSource(drive: Drive, i: FileItem, source: string): boolean {
+  if (source === 'photos') return i.mime.startsWith('image/') && !isGif(i)
+  if (source === 'videos') return i.mime.startsWith('video/')
+  if (source === 'gifs') return isGif(i)
+  return topFolder(drive, i) === source
+}
+
 /**
- * The timeline's chips: the folders at the top (Camera, Screenshots…) that have photos or videos in the timeline, and
- * whether it has any videos. A folder that's been emptied (all its photos deleted) gets no chip.
+ * The timeline's folder chips: the folders at the top (Camera, Screenshots…) that have photos or videos in the
+ * timeline. A folder that's been emptied (all its photos deleted) gets no chip.
  */
-export function photoSources(drive: Drive): { folders: Item[]; videos: boolean } {
+export function photoSources(drive: Drive): Item[] {
   const used = new Set<string>()
-  let videos = false
-  for (const i of timelineItems(drive, {})) {
-    used.add(topFolder(drive, i))
-    if (i.mime.startsWith('video/')) videos = true
-  }
-  const folders = listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked && !i.x.lp && used.has(i.id))
-  return { folders, videos }
+  for (const i of timelineItems(drive, {})) used.add(topFolder(drive, i))
+  return listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked && !i.x.lp && used.has(i.id))
 }
 
 /** The folder at the top of the drive an item is in (its own ID if it's at the top). */

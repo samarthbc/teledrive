@@ -33,7 +33,7 @@ import { verifyPassword } from '../drive/vault'
 import { AddToAlbumDialog, AlbumGrid } from '../components/Albums'
 import { createAlbum, deleteAlbum, renameAlbum, setInAlbum } from '../drive/ops'
 import PhotoTimeline, { timelineItems } from '../components/PhotoTimeline'
-import { photoSources } from '../drive/photos'
+import { KIND_CHIPS, photoSources } from '../drive/photos'
 import { searchPhotos } from '../drive/photoSearch'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
 import { isAndroid, openWithOtherApp, phoneSaveTarget, type CameraItem, type PhoneSaveTarget } from '../native/android'
@@ -144,15 +144,11 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const album = mode === 'album' && albumId ? drive.albums.get(albumId) : undefined
   /** Picking photos to add to an album: the timeline without that album's photos; tapping selects. */
   const addTo = timeline && mode === 'folder' ? (drive.albums.get(params.get('addTo') ?? '') ?? null) : null
-  /** Timeline chips: the source folders that have photos (Camera, Screenshots…), and Videos if there are any. */
-  const chips = useMemo(
-    () => (timeline && mode === 'folder' ? photoSources(drive) : { folders: [], videos: false }),
-    [drive, timeline, mode],
-  )
-  const sources = chips.folders
-  /** The chosen chip: a source folder's ID, or "videos" (All if its chip is gone, e.g. the folder was emptied). */
+  /** Timeline chips: All, Photos, Videos, GIFs, then the source folders that have photos (Camera, Screenshots…). */
+  const sources = useMemo(() => (timeline && mode === 'folder' ? photoSources(drive) : []), [drive, timeline, mode])
+  /** The chosen chip: a kind or a source folder's ID (All if its folder chip is gone, e.g. the folder was emptied). */
   const picked = timeline && mode === 'folder' ? params.get('src') : null
-  const source = picked === 'videos' ? (chips.videos ? picked : null) : sources.some((f) => f.id === picked) ? picked : null
+  const source = KIND_CHIPS.some((c) => c.id === picked) || sources.some((f) => f.id === picked) ? picked : null
 
   const items = useMemo(() => {
     const match = filter && FILTERS[filter] ? FILTERS[filter].match : undefined
@@ -183,7 +179,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   /** TelePhotos search: suggestions under the search box. */
   const photoSuggestions = useMemo(() => {
     if (!(timeline && mode === 'search')) return []
-    const folders = photoSources(drive).folders.map((f) => f.name)
+    const folders = photoSources(drive).map((f) => f.name)
     const albums = [...drive.albums.values()].sort((a, b) => b.ts - a.ts).slice(0, 5).map((a) => a.name)
     return [...new Set(['Videos', 'Starred', 'This month', 'Last month', 'This year', 'Last year', ...folders, ...albums, 'Large videos'])]
   }, [drive, timeline, mode])
@@ -1071,9 +1067,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             {appUi && <BackupNotice inPhotos={inPhotos} onOpenPhotos={openPhotos} />}
           </div>
           {addTo && <p className="-mt-2 mb-4 text-sm text-muted">To “{addTo.name}”: photos that aren't in it yet.</p>}
-          {timeline && mode === 'folder' && (sources.length > 0 || chips.videos) && (
+          {timeline && mode === 'folder' && (
             <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
-              {[{ id: null, name: 'All' }, ...sources.map((f) => ({ id: f.id, name: f.name })), ...(chips.videos ? [{ id: 'videos', name: 'Videos' }] : [])].map((c) => (
+              {[{ id: null, name: 'All' }, ...KIND_CHIPS, ...sources.map((f) => ({ id: f.id, name: f.name }))].map((c) => (
                 <button
                   key={c.id ?? 'all'}
                   className={source === c.id ? 'chip-active' : 'chip'}
@@ -1155,6 +1151,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   searched={!!query}
                   isRoot={current === ROOT}
                   photos={inPhotos}
+                  chip={source ? (KIND_CHIPS.find((c) => c.id === source)?.name ?? sources.find((f) => f.id === source)?.name) : undefined}
                   onUpload={() => pickFiles()}
                   onNewFolder={newFolder}
                   onNewAlbum={() => setModal({ type: 'newAlbum' })}
@@ -1560,15 +1557,20 @@ function EmptyState(props: {
   isRoot: boolean
   /** In TelePhotos. */
   photos: boolean
+  /** TelePhotos: the chip picked ("Videos", "GIFs", "Camera"…), if not All. */
+  chip?: string
   onUpload: () => void
   onNewFolder: () => void
   onNewAlbum: () => void
   /** In an album. */
   onAddPhotos?: () => void
 }) {
-  const { mode, filtered, searched, isRoot, photos, onUpload, onNewFolder, onNewAlbum, onAddPhotos } = props
+  const { mode, filtered, searched, isRoot, photos, chip, onUpload, onNewFolder, onNewAlbum, onAddPhotos } = props
+  const kind = chip && ['Photos', 'Videos', 'GIFs'].includes(chip)
   const content: Record<Exclude<Mode, 'settings'>, { icon: typeof Search; title: string; text: string }> = {
-    folder: photos
+    folder: chip
+      ? { icon: Images, title: kind ? `No ${chip === 'GIFs' ? chip : chip.toLowerCase()}` : `Nothing in ${chip}`, text: 'Pick All to see every photo and video.' }
+      : photos
       ? {
           icon: Images,
           title: isRoot ? 'No photos yet' : 'Nothing here yet',
@@ -1601,7 +1603,7 @@ function EmptyState(props: {
       </div>
       <p className="text-[22px] font-black tracking-[-0.02em]">{title}</p>
       <p className="max-w-80 text-sm text-muted">{text}</p>
-      {mode === 'folder' && (
+      {mode === 'folder' && !chip && (
         <div className="mt-2 flex flex-wrap justify-center gap-3">
           <button className="btn-primary" onClick={onUpload}>
             <Upload /> {photos ? 'Upload photos' : 'Upload files'}

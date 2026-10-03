@@ -45,19 +45,31 @@ describe('locked photos', () => {
 })
 
 describe('timeline chips', () => {
-  it('only folders that still have photos, and Videos only if there are videos', () => {
-    const d = buildDrive([
+  const file = (id: string, p: string, n: string, m: string) => ({ ...photo(id, p, n), m }) as Meta
+  const d = () =>
+    buildDrive([
       rec({ td: 1, t: 'd', id: 'cam', p: ROOT, n: 'Camera' }),
       rec({ td: 1, t: 'd', id: 'shots', p: ROOT, n: 'Screenshots' }),
       rec({ td: 1, t: 'd', id: 'lp', p: ROOT, n: 'Locked photos', x: { lp: 1 } }),
       rec(photo('a', 'cam', 'a.jpg')),
+      rec(file('v', 'cam', 'v.mp4', 'video/mp4')),
+      rec(file('g', ROOT, 'g.gif', 'image/gif')),
       rec(photo('s', 'shots', 's.jpg')),
       rec(photo('secret', 'lp', 'secret.jpg')),
     ])
-    expect(photoSources(d).folders.map((f) => f.id).sort()).toEqual(['cam', 'shots'])
-    expect(photoSources(d).videos).toBe(false)
+
+  it('only folders that still have photos', () => {
+    const drive = d()
+    expect(photoSources(drive).map((f) => f.id).sort()).toEqual(['cam', 'shots'])
     // Every screenshot deleted (in the trash): no Screenshots chip
-    d.items.get('s')!.x.tr = 1
-    expect(photoSources(d).folders.map((f) => f.id)).toEqual(['cam'])
+    drive.items.get('s')!.x.tr = 1
+    expect(photoSources(drive).map((f) => f.id)).toEqual(['cam'])
+  })
+
+  it('Photos, Videos and GIFs', () => {
+    expect(ids(timelineItems(d(), { source: 'photos' }))).toEqual(['a', 's'])
+    expect(ids(timelineItems(d(), { source: 'videos' }))).toEqual(['v'])
+    expect(ids(timelineItems(d(), { source: 'gifs' }))).toEqual(['g'])
+    expect(ids(timelineItems(d(), { source: 'cam' }))).toEqual(['a', 'v'])
   })
 })
