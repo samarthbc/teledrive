@@ -1,9 +1,9 @@
-import { Loader2 } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { countRange } from '../native/backup'
 import { dayRange, quickRanges, toDay } from '../native/backupRange'
-import { formatBytes } from '../lib/format'
 
+/** Camera backup from a date range: the dates being picked (local "YYYY-MM-DD", both days included). */
 export interface Days {
   from: string
   to: string
@@ -20,13 +20,11 @@ export function validDays(d: Days): boolean {
 }
 
 /**
- * Camera backup from a date range: From and To (both days included, none in the future), quick picks, and how many
- * photos and videos in the folder that is (not counting what's already backed up).
+ * How many photos and videos in a phone folder were taken in the dates and aren't backed up yet, and their size.
+ * Null while counting (or while the dates aren't valid).
  */
-export default function DateRangePicker(props: { path: string; value: Days; onChange: (d: Days) => void }) {
-  const { path, value, onChange } = props
-  const today = toDay(new Date())
-  const valid = validDays(value)
+export function useRangeCount(path: string, days: Days): { count: { count: number; bytes: number } | null; error: string | null } {
+  const valid = validDays(days)
   const [count, setCount] = useState<{ count: number; bytes: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,7 +34,7 @@ export default function DateRangePicker(props: { path: string; value: Days; onCh
     if (!valid) return
     let alive = true
     const t = setTimeout(() => {
-      countRange(path, dayRange(value.from, value.to)).then(
+      countRange(path, dayRange(days.from, days.to)).then(
         (c) => alive && setCount(c),
         (e) => alive && setError(e instanceof Error ? e.message : String(e)),
       )
@@ -45,62 +43,32 @@ export default function DateRangePicker(props: { path: string; value: Days; onCh
       alive = false
       clearTimeout(t)
     }
-  }, [path, value.from, value.to, valid])
+  }, [path, days.from, days.to, valid])
 
+  return { count, error }
+}
+
+/** A date as "30 Sept 2026" with a calendar icon; tapping it opens the phone's date picker. */
+export function DateField(props: { label: string; value: string; min?: string; max?: string; onChange: (v: string) => void }) {
+  const { label, value, min, max, onChange } = props
+  const [y, m, d] = value.split('-').map(Number)
+  const shown = value ? new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'Pick a date'
   return (
-    <div className="space-y-2.5">
-      <div className="space-y-2">
-        <label className="flex items-center gap-3">
-          <span className="w-10 shrink-0 text-[13px] font-bold">From</span>
-          <input
-            type="date"
-            className="input min-w-0 flex-1"
-            value={value.from}
-            max={value.to || today}
-            onChange={(e) => onChange({ ...value, from: e.target.value })}
-          />
-        </label>
-        <label className="flex items-center gap-3">
-          <span className="w-10 shrink-0 text-[13px] font-bold">To</span>
-          <input
-            type="date"
-            className="input min-w-0 flex-1"
-            value={value.to}
-            min={value.from}
-            max={today}
-            onChange={(e) => onChange({ ...value, to: e.target.value })}
-          />
-        </label>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {quickRanges().map((q) => (
-          <button
-            key={q.label}
-            type="button"
-            className={`btn-ghost h-8 px-2.5 text-xs ${q.from === value.from && q.to === value.to ? 'font-bold text-brand-ink' : ''}`}
-            onClick={() => onChange({ from: q.from, to: q.to })}
-          >
-            {q.label}
-          </button>
-        ))}
-      </div>
-      <p className="flex items-center gap-1.5 text-xs text-muted">
-        {!valid ? (
-          'Pick a From date on or before the To date, neither in the future.'
-        ) : error ? (
-          error
-        ) : count ? (
-          count.count ? (
-            `${count.count.toLocaleString()} ${count.count === 1 ? 'photo or video' : 'photos and videos'} to back up · ${formatBytes(count.bytes)}`
-          ) : (
-            'Nothing to back up in these dates (or it’s all backed up already)'
-          )
-        ) : (
-          <>
-            <Loader2 className="size-3.5 animate-spin" /> Counting…
-          </>
-        )}
-      </p>
-    </div>
+    <label className="block min-w-0">
+      <span className="field-label">{label}</span>
+      <span className="relative flex h-13 items-center gap-2.5 rounded-md px-3.5 text-[15px] font-semibold pressed has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand">
+        <Calendar className="size-4.5 shrink-0 text-muted" />
+        <span className="truncate">{shown}</span>
+        <input
+          type="date"
+          aria-label={label}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          value={value}
+          min={min}
+          max={max}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </span>
+    </label>
   )
 }

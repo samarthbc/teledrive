@@ -1,19 +1,18 @@
-import { Eraser, Loader2, Lock, LogOut, Monitor, RefreshCw, Smartphone } from 'lucide-react'
+import { Loader2, Lock, LogOut, Monitor, RefreshCw, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import CameraBackupSettings from '../components/CameraBackupSettings'
 import ConfirmDialog from '../components/dialogs/ConfirmDialog'
 import { Segmented, Toggle } from '../components/ui'
 import { setRememberOnDevice } from '../drive/vault'
-import { formatBytes, formatDate } from '../lib/format'
+import { formatDate } from '../lib/format'
 import { APP_VERSION } from '../lib/releases'
 import { AUTO_LOCK_CHOICES, setSetting, useSettings } from '../lib/settings'
 import { setThemeMode, useTheme, type ThemeMode } from '../lib/theme'
 import { checkForUpdates, updateNow, useUpdate, type CheckResult } from '../lib/updates'
-import { isAndroid, type CameraItem } from '../native/android'
-import { findFreeable, freeUpSpace } from '../native/backup'
+import { isAndroid } from '../native/android'
 import { isDesktop } from '../native/desktop'
 import { useDrive, useInPhotos } from '../store/useDrive'
-import { toast, toastError } from '../store/useToast'
+import { toast } from '../store/useToast'
 import { describeError } from '../telegram/auth'
 import { sessions, type Session } from '../telegram/sessions'
 
@@ -32,11 +31,13 @@ export default function SettingsView({ onGetApps, cameraBackup }: { onGetApps?: 
       <div className="min-w-0 space-y-8">
         {/* Camera backup belongs to TelePhotos: only in its settings */}
         {cameraBackup && inPhotos && (
-          <Section title="Camera backup">
+          <section aria-label="Camera backup">
+            <div className="mb-3 flex">
+              <h2 className="label-swiss">Camera backup</h2>
+            </div>
             <CameraBackupSettings />
-          </Section>
+          </section>
         )}
-        {cameraBackup && inPhotos && <FreeUpSpace />}
         <Section title="Appearance">
           <Row name="Theme" hint="System follows your device's light or dark mode.">
             <Segmented<ThemeMode>
@@ -307,62 +308,6 @@ function About({ onGetApps }: { onGetApps?: () => void }) {
             Download
           </button>
         </Row>
-      )}
-    </Section>
-  )
-}
-
-/** TelePhotos → Free up space (Android app): remove photos and videos from the phone that are safely in TelePhotos. */
-function FreeUpSpace() {
-  const [busy, setBusy] = useState(false)
-  const [found, setFound] = useState<{ items: CameraItem[]; bytes: number } | null>(null)
-
-  const check = async () => {
-    setBusy(true)
-    try {
-      const f = await findFreeable()
-      if (f.items.length) setFound(f)
-      else toast('Nothing to free up: no backed-up photos or videos are left on this phone')
-    } catch (e) {
-      toastError(e)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // "3 photos and 1 video"
-  const videos = found?.items.filter((i) => i.mime.startsWith('video/')).length ?? 0
-  const count = (k: number, word: string) => (k ? [`${k} ${word}${k === 1 ? '' : 's'}`] : [])
-  const what = [...count((found?.items.length ?? 0) - videos, 'photo'), ...count(videos, 'video')].join(' and ')
-  return (
-    <Section title="Free up space">
-      <Row name="Remove backed-up photos from this phone">
-        <button className="btn-secondary shrink-0" disabled={busy} onClick={() => void check()}>
-          {busy ? <Loader2 className="animate-spin" /> : <Eraser />} Free up space
-        </button>
-      </Row>
-      {found && (
-        <ConfirmDialog
-          title="Are you sure?"
-          danger
-          icon={Eraser}
-          message={
-            <>
-              <p>
-                <b className="text-ink">{what}</b> ({formatBytes(found.bytes)}) will be removed from this phone. Your
-                backed-up copies stay in TelePhotos.
-              </p>
-              <p className="mt-2">
-                They go to the phone's bin first and are deleted for good after 30 days. Android will ask you once more.
-              </p>
-            </>
-          }
-          confirmLabel={`Free up ${formatBytes(found.bytes)}`}
-          onConfirm={async () => {
-            if (await freeUpSpace(found.items)) toast(`Freed up ${formatBytes(found.bytes)}`)
-          }}
-          onClose={() => setFound(null)}
-        />
       )}
     </Section>
   )

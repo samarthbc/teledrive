@@ -1131,19 +1131,22 @@ This phase adds a third: **every photo and video taken between two dates**, for 
 photos without uploading the whole folder).
 
 ### 18.1 What the user sees
-- **Turning camera backup on:** three choices: *Only new photos and videos*, *Everything in the camera folder*, and
-  *From a date range* (**From** and **To** date pickers, both days included). Below the dates: "N photos and videos,
-  X GB" counted live, so the user knows how much will upload before starting. **Also back up new photos** (on by
-  default) keeps backing up photos taken from now on; turned off, only the range is backed up.
-- **Adding a folder** (the *Back up:* row under a folder): *Only new*, *All N items*, and **Date range…** (the
-  same pickers and count).
-- **A folder that's already on:** **Back up older photos…** in its row opens the same pickers. The range is added to
-  what the folder already backs up, so new photos keep coming either way.
-- Quick picks next to the pickers: *Last 30 days*, *This year*, *Last year*. The **To** date can't be before
-  **From**, and neither can be in the future.
-- The status line counts the range like any other waiting photos. Under the folder, "Also photos from 1 Jan – 31 Dec
-  2025" (or "Only photos from …" without new photos) while a range is being backed up; when it's done, the range is
-  dropped from the settings and the line goes away (a range-only folder is switched off).
+Settings → Camera backup was redesigned at the same time (canvas "Camera backup redesign", Idea 1: a short summary,
+details one tap deeper).
+- **Backup off:** one row, "Back up this phone's photos" and **Turn on** (the camera, new photos only, Wi-Fi only);
+  everything else is chosen once it's on. Below it, Free up space.
+- **Backup on:** a status card (Up to date / Backing up…, "11 backed up · checked 9:20 pm", **Back up now**); then
+  *Camera backup* (switch), *Folders >* ("Camera, Screenshots"), *Only on Wi-Fi*, *Only while charging* (when some
+  folder is overnight); then *Free up space* and *Notice* (folds open).
+- **Folders** (a screen of its own): *On* (each with "1,783 items · As taken" and a switch) and *On this phone*
+  (switches). Switching one on starts it with new photos only and opens its options.
+- **A folder's options** (bottom sheet): *When* As taken / Overnight; *What* New only / Everything; the older ranges
+  still uploading; **Back up older photos…**; Stop backing up / Done.
+- **Back up older photos** (a screen of its own): the folder, **From** and **To** (both days included, none in the
+  future), quick picks (*Last 30 days*, *This year*, *Last year*), "50 photos and videos · 472 MB · ones already backed
+  up are skipped", and **Back up 50 items**. New photos keep backing up as usual.
+- The phone's back button goes up one level (older photos → options → folders → Settings).
+- A range is dropped from the settings once everything in it is backed up.
 
 ### 18.2 Which date
 - The **date taken** (`dateTaken`, from the photo library/EXIF), falling back to the date it was added to the phone
