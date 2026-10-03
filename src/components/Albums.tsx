@@ -1,4 +1,4 @@
-import { Album as AlbumIcon, Loader2, Plus } from 'lucide-react'
+import { Album as AlbumIcon, Loader2, Lock, Plus } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { createAlbum, setInAlbum } from '../drive/ops'
 import type { Album, Drive, FileItem } from '../drive/tree'
@@ -36,13 +36,29 @@ export function sortedAlbums(drive: Drive): Album[] {
 
 const photos = (n: number) => `${n} photo${n === 1 ? '' : 's'}`
 
-/** TelePhotos → Albums: a card per album (cover, name, count). Long-press or right-click for its menu. */
-export function AlbumGrid(props: { drive: Drive; onOpen: (a: Album) => void; onMenu: (a: Album, x: number, y: number) => void }) {
-  const { drive, onOpen, onMenu } = props
+/**
+ * TelePhotos → Albums: Locked photos first (always there, no cover or count), then a card per album (cover, name,
+ * count). Long-press or right-click an album for its menu. With no albums yet, a New album card.
+ */
+export function AlbumGrid(props: {
+  drive: Drive
+  onOpen: (a: Album) => void
+  onMenu: (a: Album, x: number, y: number) => void
+  onOpenLocked: () => void
+  onNew: () => void
+}) {
+  const { drive, onOpen, onMenu, onOpenLocked, onNew } = props
   const stats = useMemo(() => albumStats(drive), [drive])
   const pointer = useRef('mouse')
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] md:gap-x-4.5">
+      <button className="min-w-0 text-left" onClick={onOpenLocked}>
+        <span className="flex aspect-square items-center justify-center rounded-md bg-surface text-brand-ink pressed">
+          <Lock className="size-9" strokeWidth={1.5} />
+        </span>
+        <span className="mt-2 block truncate text-[15px] font-extrabold">Locked photos</span>
+        <span className="block text-xs text-muted">Needs your password</span>
+      </button>
       {sortedAlbums(drive).map((a) => {
         const s = stats.get(a.id) ?? { count: 0 }
         return (
@@ -64,6 +80,15 @@ export function AlbumGrid(props: { drive: Drive; onOpen: (a: Album) => void; onM
           </button>
         )
       })}
+      {drive.albums.size === 0 && (
+        <button className="min-w-0 text-left" onClick={onNew}>
+          <span className="flex aspect-square items-center justify-center rounded-md bg-surface text-muted raised-sm">
+            <Plus className="size-9" strokeWidth={1.5} />
+          </span>
+          <span className="mt-2 block truncate text-[15px] font-extrabold">New album</span>
+          <span className="block text-xs text-muted">A photo can be in several</span>
+        </button>
+      )}
     </div>
   )
 }

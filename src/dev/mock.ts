@@ -1,6 +1,7 @@
 // Development only: `?mock` shows the app with sample files and no Telegram connection, for
 // working on the design and taking screenshots. `?mock=password|login|setup` shows that screen.
-// `&photos` opens a TelePhotos with ~1,500 photos over three years (for the timeline and its scrubber).
+// `&photos` opens a TelePhotos with ~1,500 photos over three years (for the timeline and its scrubber); its Locked
+// photos hold 12 more (`&photos&unlocked` shows them unlocked).
 // Loaded from main.tsx only when import.meta.env.DEV, so it never ships.
 import type { Meta } from '../drive/meta'
 import type { Transfer } from '../drive/queue'
@@ -57,6 +58,15 @@ function photoRecords(): MessageRecord[] {
   const out: MessageRecord[] = []
   const sources = [['cam', 'Camera'], ['shots', 'Screenshots'], ['wa', 'WhatsApp Images']]
   for (const [id, n] of sources) out.push({ msgId: msgId++, date: now, meta: { td: 1, t: 'd', id, p: 'root', n, ts: now } as Meta })
+  out.push({
+    msgId: msgId++, date: now,
+    meta: { td: 1, t: 'd', id: 'lp', p: 'root', n: '', ts: now, l: lock, x: { enc: 1, lp: 1 }, e: 'open:Locked photos', ln: 'label:Locked photos' } as unknown as Meta,
+  })
+  for (let i = 0; i < 12; i++)
+    out.push({
+      msgId: msgId++, date: now - i * DAY * 9,
+      meta: { td: 1, t: 'f', id: `lk${i}`, p: 'lp', n: `PRIVATE_${i}.jpg`, s: 3_000_000 + i, m: 'image/jpeg', of: 1, ts: now - i * DAY * 9 } as Meta,
+    })
   for (let i = 0; i < 1500; i++) {
     const age = Math.floor(random() ** 2 * 3 * 365 * DAY)
     const [p] = sources[i % 7 === 0 ? 1 : i % 5 === 0 ? 2 : 0]
@@ -87,7 +97,7 @@ useDrive.setState({
   // Only the root level is open, so the sample locked items show as locked
   // (their visible names are stand-ins "label:<name>" for the sealed `ln`)
   drive: buildDrive(param.has('photos') ? photoRecords() : records(), {
-    isOpen: (level) => level === 'root' || level === 'private',
+    isOpen: (level) => level === 'root' || level === 'private' || (level === 'lp' && param.has('unlocked')),
     secretOf: (sealed) => (/^(label|open):/.test(sealed) ? { n: sealed.replace(/^\w+:/, '') } : undefined),
   }),
   drives: [

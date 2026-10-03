@@ -11,6 +11,8 @@ export interface Flags {
   tr?: number // trashed at (unix seconds)
   fav?: 1
   enc?: 1
+  /** TelePhotos' Locked photos folder. */
+  lp?: 1
 }
 
 /** Encrypted fields of a folder or file caption (see `e`). */
@@ -25,6 +27,8 @@ export interface Secret {
   wh?: [number, number]
   /** TelePhotos: the albums the photo is in (album IDs). */
   al?: string[]
+  /** TelePhotos, in Locked photos: the folder it was moved from (to go back there). */
+  op?: string
 }
 
 export interface FolderMeta {

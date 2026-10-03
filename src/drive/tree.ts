@@ -346,6 +346,12 @@ export function driveStats(drive: Drive): { files: number; folders: number; byte
 }
 
 /** True if the item or any folder above it is in the trash. */
+/** TelePhotos' Locked photos folder: a locked folder at the top marked `x.lp` (made the first time a photo is locked). */
+export function lockedPhotosFolder(drive: Drive): FolderItem | undefined {
+  for (const i of drive.allChildren.get(ROOT) ?? []) if (i.kind === 'folder' && i.x.lp && !i.x.tr) return i
+  return undefined
+}
+
 export function isHidden(drive: Drive, item: Item): boolean {
   const seen = new Set<string>()
   let cur: Item | undefined = item

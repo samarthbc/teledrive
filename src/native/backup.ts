@@ -5,7 +5,7 @@ import { getKV, setKV } from '../db/db'
 import { ROOT } from '../drive/meta'
 import { createFolder } from '../drive/ops'
 import { enqueue, subscribeTransfers, type Transfer } from '../drive/queue'
-import { isHidden, listFolder, uniqueName, type Drive } from '../drive/tree'
+import { isHidden, listFolder, lockedPhotosFolder, uniqueName, type Drive } from '../drive/tree'
 import { uploadFile } from '../drive/upload'
 import { hasAccountKeys, ROOT_LEVEL } from '../drive/keyring'
 import { currentDrive, currentDriveId, isPhotosDrive } from '../telegram/channel'
@@ -349,8 +349,10 @@ export async function findFreeable(): Promise<{ items: CameraItem[]; bytes: numb
   if (!(await Native.mediaPermission({})).granted) throw new Error('TeleDrive needs permission to read photos and videos')
   const inPhotos = new Set<string>()
   const drive = host.drive()
+  // Locked photos are taken off the phone when they're locked
+  const lockedId = lockedPhotosFolder(drive)?.id
   for (const i of drive.items.values()) {
-    if (i.kind === 'file' && !isHidden(drive, i)) inPhotos.add(`${plainName(i.name)}|${i.size}`)
+    if (i.kind === 'file' && i.parent !== lockedId && !isHidden(drive, i)) inPhotos.add(`${plainName(i.name)}|${i.size}`)
   }
   const found = new Map<string, CameraItem>()
   for (const source of sourcesOf(useBackup.getState().settings)) {
@@ -359,6 +361,27 @@ export async function findFreeable(): Promise<{ items: CameraItem[]; bytes: numb
   }
   const items = [...found.values()]
   return { items, bytes: items.reduce((n, i) => n + i.size, 0) }
+}
+
+/**
+ * Locked photos: the phone's own copies of photos camera backup uploaded (same name and size), so they can be
+ * removed from the phone too. Empty if there are none or the photos can't be read.
+ */
+export async function findPhoneCopies(files: { name: string; size: number }[]): Promise<CameraItem[]> {
+  if (!isAndroid || !files.length) return []
+  try {
+    await load()
+    if (!(await Native.mediaPermission({})).granted) return []
+    const wanted = new Set(files.map((f) => `${plainName(f.name)}|${f.size}`))
+    const found = new Map<string, CameraItem>()
+    for (const source of sourcesOf(useBackup.getState().settings)) {
+      for (const i of await listSince(source, (i) => done.has(i.id) && wanted.has(`${plainName(i.name)}|${i.size}`))) found.set(i.id, i)
+    }
+    return [...found.values()]
+  } catch (e) {
+    console.warn('Could not look for the phone copies', e)
+    return []
+  }
 }
 
 /** Move them to the phone's trash (Android asks first). False if the user said no there. */

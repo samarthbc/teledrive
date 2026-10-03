@@ -1052,7 +1052,7 @@ WhatsApp media once a night, for example).
 
 ---
 
-## Phase 17: Locked photos
+## Phase 17: Locked photos 🚧 (implemented; the password steps still need testing)
 
 Secret photos in TelePhotos, behind the TeleDrive password. A simpler version of My Drive's locked folders: one place,
 no separate password to set.
@@ -1107,6 +1107,20 @@ no separate password to set.
 5. Android: "Also remove from this phone?" after locking (match by name and size, as Free up space; `trashMedia`).
 6. Check on the phone and the website: lock, survive a restart, wrong password, move out (back to Camera), albums
    dropped, nothing leaks into the timeline/search/albums while open, relock on leaving, + Add, remove from phone.
+
+### 17.6 Done so far
+- Code: `lockedPhotosFolder` (`drive/tree.ts`); `createLockedPhotos`, `lockPhotos`, `unlockPhotos` (`drive/ops.ts`);
+  timeline logic moved to `drive/photos.ts` (`timelineItems(…, { locked })` leaves Locked photos out of everything
+  else, even while open); `findPhoneCopies` (`native/backup.ts`); `components/LockedPhotos.tsx` (the password screen
+  and the Move to Locked photos dialog); route `/locked`; the Locked photos and New album cards in `AlbumGrid`.
+  Unit tests: `drive/lockedPhotos.test.ts` (the folder; kept out of the timeline, Starred, albums and search; listed
+  only in Locked photos). Dev mock: `?mock&photos` has a Locked photos folder with 12 photos (`&unlocked` opens it).
+- Checked in the browser (mock): the Albums cards; the empty Locked photos; the password screen; "Move to Locked
+  photos" in the photo menu and the selection bar; the first-time dialog; while open: the timeline (1,500, not
+  1,512), its chips and search show none of them; inside: 12 photos, the Lock button, the menu (Preview, Download,
+  Move out, Details, Delete forever) and the selection bar (Download, Move out, Delete forever).
+- Still to check with the real password (on the phone): making the folder, moving photos in and out, relocking,
+  + Add, Also remove from this phone.
 
 
 ## Later (ideas, not planned yet)

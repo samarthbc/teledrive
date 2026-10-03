@@ -16,7 +16,7 @@ import { randomLong } from './transfer'
 import { discard } from './upload'
 import {
   childLevel, collectTree, isDescendant, isHidden, messageIds, trashedItems, uniqueName, type Album, type Drive, type FileItem,
-  type Item,
+  type FolderItem, type Item,
 } from './tree'
 
 const DELETE_BATCH = 100
@@ -403,4 +403,99 @@ export async function setInAlbum(files: FileItem[], albumId: string, inAlbum: bo
     rememberSecret(e, file.level, secret)
     await writeMeta(file.msgId, { ...current, e })
   }
+}
+
+// ---- TelePhotos: Locked photos ----
+// One locked folder at the top of TelePhotos (x.lp), locked with the TeleDrive password. Moving photos in or out
+// re-wraps their keys like any move into a locked folder; nothing is uploaded again.
+
+export const LOCKED_PHOTOS_NAME = 'Locked photos'
+
+/** Make the Locked photos folder, locked with the TeleDrive password (checked by the caller). It's left open. */
+export async function createLockedPhotos(password: string): Promise<string> {
+  const topKey = requireLevelKey(ROOT_LEVEL)
+  const { lock, key } = await newLock(topKey, password)
+  const id = nanoid(10)
+  const n = LOCKED_PHOTOS_NAME
+  const e = await seal(key, { n } satisfies Secret)
+  rememberSecret(e, id, { n })
+  const meta: FolderMeta = {
+    td: 1, t: 'd', id, p: ROOT, n: '', ts: now(), x: { enc: 1, lp: 1 }, e, l: lock, ln: await sealLabel(n, topKey, ROOT_LEVEL),
+  }
+  openLevel(id, key)
+  const client = await getClient()
+  const res = await client.invoke(
+    new Api.messages.SendMessage({ peer: storagePeer(), message: encode(meta), randomId: randomLong(), silent: true }),
+  )
+  const msgs = messagesFromUpdates(res)
+  if (msgs.length) await applyMessages(msgs)
+  else if (res instanceof Api.UpdateShortSentMessage) await refetch([res.id])
+  return id
+}
+
+/** The folder at the top of the drive an item is in (ROOT if it's at the top). */
+function topFolderOf(drive: Drive, item: Item): string {
+  let cur = item
+  for (let n = 0; n < 100 && cur.parent !== ROOT; n++) {
+    const up = drive.items.get(cur.parent)
+    if (!up) return ROOT
+    cur = up
+  }
+  return cur.id === item.id ? ROOT : cur.id
+}
+
+/**
+ * Move photos into Locked photos (it must be open). They leave every album and Starred, and remember the folder
+ * they came from. Returns how many were moved.
+ */
+export async function lockPhotos(drive: Drive, files: FileItem[], folder: FolderItem): Promise<number> {
+  const to = requireLevelKey(folder.id)
+  const taken = new Set<string>()
+  let moved = 0
+  for (const file of files) {
+    if (file.locked || file.parent === folder.id) continue
+    const current = currentMeta(file)
+    // From before everything was encrypted: its contents aren't encrypted, so locking it wouldn't hide anything
+    if (current.t !== 'f' || !current.e || !current.k) throw new Error(`“${file.name}” is from an older version and can’t be locked`)
+    const from = requireLevelKey(file.level)
+    const secret = await unseal<Secret>(from, current.e)
+    delete secret.al
+    const back = topFolderOf(drive, file)
+    if (back !== ROOT) secret.op = back
+    let name = uniqueName(drive, folder.id, file.name, file.id)
+    for (let n = 1; taken.has(name.toLowerCase()); n++) name = numbered(file.name, n)
+    taken.add(name.toLowerCase())
+    secret.n = name
+    const e = await seal(to, secret)
+    rememberSecret(e, folder.id, secret)
+    const { fav: _, ...x } = current.x ?? {}
+    await writeMeta(file.msgId, { ...current, p: folder.id, x, e, k: await rewrapFileKey(current.k, from, to) })
+    moved++
+  }
+  return moved
+}
+
+/** Move photos out of Locked photos (it must be open), back to the folder each came from (or the top). */
+export async function unlockPhotos(drive: Drive, files: FileItem[], folder: FolderItem): Promise<void> {
+  const from = requireLevelKey(folder.id)
+  for (const file of files) {
+    if (file.parent !== folder.id) continue
+    const current = currentMeta(file)
+    if (current.t !== 'f' || !current.e || !current.k) continue
+    const secret = await unseal<Secret>(from, current.e)
+    const back = secret.op ? drive.items.get(secret.op) : undefined
+    const target = back?.kind === 'folder' && back.parent === ROOT && !back.x.tr && !back.lock ? back.id : ROOT
+    delete secret.op
+    secret.n = uniqueName(drive, target, file.name, file.id)
+    const level = childLevel(drive, target)
+    const to = requireLevelKey(level)
+    const e = await seal(to, secret)
+    rememberSecret(e, level, secret)
+    await writeMeta(file.msgId, { ...current, p: target, e, k: await rewrapFileKey(current.k, from, to) })
+  }
+}
+
+function numbered(name: string, n: number): string {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? `${name.slice(0, dot)} (${n})${name.slice(dot)}` : `${name} (${n})`
 }

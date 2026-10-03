@@ -133,7 +133,7 @@ export default function Sidebar(props: {
 
       <nav className="space-y-1">
         <Link to="/" icon={inPhotos ? Images : HardDrive} label={rootName} active={inDrive} />
-        {inPhotos && <Link to="/albums" icon={Album} label="Albums" active={pathname === '/albums' || pathname.startsWith('/album/')} />}
+        {inPhotos && <Link to="/albums" icon={Album} label="Albums" active={pathname === '/albums' || pathname.startsWith('/album/') || pathname === '/locked'} />}
         {/* TelePhotos' timeline is already newest first */}
         {!inPhotos && <Link to="/recent" icon={Clock} label="Recent" />}
         <Link to="/starred" icon={Star} label="Starred" count={counts.starred} />

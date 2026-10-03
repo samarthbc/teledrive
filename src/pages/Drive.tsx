@@ -19,20 +19,23 @@ import TransferPanel from '../components/TransferPanel'
 import { downloadFile, downloadZip, pickSaveTarget, pickSaveTargets } from '../drive/download'
 import { ROOT } from '../drive/meta'
 import {
-  createFolder, deleteMessages, emptyTrash, filesToReencrypt, move, relockItem, remove, rename, restore, setStarred, trash,
-  TRASH_DAYS,
+  createFolder, createLockedPhotos, deleteMessages, emptyTrash, filesToReencrypt, lockPhotos, move, relockItem, remove, rename,
+  restore, setStarred, trash, TRASH_DAYS, unlockItem, unlockPhotos,
 } from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import {
   breadcrumbs, childLevel, collectTree, containsLocked, messageIds, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
-  type Album, type FileItem, type Item,
+  lockedPhotosFolder, type Album, type FileItem, type FolderItem, type Item,
 } from '../drive/tree'
+import { LockedGate, LockPhotosDialog } from '../components/LockedPhotos'
+import { WrongPasswordError } from '../drive/crypto'
+import { verifyPassword } from '../drive/vault'
 import { AddToAlbumDialog, AlbumGrid } from '../components/Albums'
 import { createAlbum, deleteAlbum, renameAlbum, setInAlbum } from '../drive/ops'
 import PhotoTimeline, { timelineItems } from '../components/PhotoTimeline'
 import { searchPhotos } from '../drive/photoSearch'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
-import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } from '../native/android'
+import { isAndroid, openWithOtherApp, phoneSaveTarget, type CameraItem, type PhoneSaveTarget } from '../native/android'
 import { useBackHandler } from '../native/backButton'
 import { useIncomingShares } from '../native/share'
 import Dialog from '../components/Dialog'
@@ -50,11 +53,11 @@ import { closeAllLocks, holdOpen } from '../drive/keyring'
 import { DriveFileUpload } from '../drive/stream'
 import { FILTERS, formatBytes, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, useInPhotos, useRootName, type SortKey } from '../store/useDrive'
-import { useBackup } from '../native/backup'
+import { findPhoneCopies, freeUpSpace, transfersIdle, useBackup } from '../native/backup'
 import { driveName } from '../telegram/channel'
 import { toast, toastError } from '../store/useToast'
 
-export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash' | 'settings' | 'albums' | 'album'
+export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash' | 'settings' | 'albums' | 'album' | 'locked'
 
 type Modal =
   | { type: 'newFolder' }
@@ -73,6 +76,9 @@ type Modal =
   | { type: 'newAlbum' }
   | { type: 'renameAlbum'; album: Album }
   | { type: 'deleteAlbum'; album: Album }
+  /** Moving photos to Locked photos while it's locked or doesn't exist yet. */
+  | { type: 'lockPhotos'; files: FileItem[]; first: boolean }
+  | { type: 'removeFromPhone'; items: CameraItem[]; bytes: number }
   | { type: 'duplicates'; duplicates: Duplicate[]; total: number; onSkip: () => void; onUploadAll: () => void }
 
 /** A file to upload and the folder it goes into. */
@@ -84,6 +90,7 @@ interface UploadJob {
 const SORT_LABELS: Record<SortKey, string> = { name: 'Name', date: 'Date', size: 'Size', type: 'Type' }
 const TITLES: Record<Mode, string> = {
   folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash', settings: 'Settings', albums: 'Albums', album: 'Album',
+  locked: 'Locked photos',
 }
 
 const act = (p: Promise<unknown>) => p.catch(toastError)
@@ -128,26 +135,31 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const current = mode === 'folder' && folderExists ? folderId : ROOT
   const crumbs = mode === 'folder' ? breadcrumbs(drive, current) : []
   // TelePhotos: its top and Starred are a timeline of every photo and video (by date taken), not folders
+  /** TelePhotos' Locked photos folder (none until a photo is first locked), and whether it's open now. */
+  const lockedFolder = useMemo(() => (inPhotos ? lockedPhotosFolder(drive) : undefined), [drive, inPhotos])
+  const lockedOpen = !!lockedFolder && !lockedFolder.locked
   // Search in TelePhotos finds photos by date, kind, folder, album or name, shown as a timeline too
-  const timeline = inPhotos && ((mode === 'folder' && current === ROOT) || mode === 'starred' || mode === 'album' || mode === 'search')
+  const timeline = inPhotos && ((mode === 'folder' && current === ROOT) || mode === 'starred' || mode === 'album' || mode === 'search' || (mode === 'locked' && lockedOpen))
   const album = mode === 'album' && albumId ? drive.albums.get(albumId) : undefined
   /** Picking photos to add to an album: the timeline without that album's photos; tapping selects. */
   const addTo = timeline && mode === 'folder' ? (drive.albums.get(params.get('addTo') ?? '') ?? null) : null
   /** Timeline chip: a source folder's ID (Camera, Screenshots…), or "videos". */
   const source = timeline && mode === 'folder' ? params.get('src') : null
   const sources = useMemo(
-    () => (timeline && mode === 'folder' ? listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked) : []),
+    () => (timeline && mode === 'folder' ? listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked && !i.x.lp) : []),
     [drive, timeline, mode],
   )
 
   const items = useMemo(() => {
     const match = filter && FILTERS[filter] ? FILTERS[filter].match : undefined
+    if (timeline && mode === 'locked') return timelineItems(drive, { locked: true })
     if (timeline && mode === 'search') return query ? searchPhotos(drive, timelineItems(drive, {}), query) : []
     if (timeline)
       return timelineItems(drive, { starred: mode === 'starred', source, album: album?.id ?? (mode === 'album' ? '-' : undefined), notInAlbum: addTo?.id })
     switch (mode) {
       case 'albums':
       case 'album':
+      case 'locked':
         return []
       case 'folder':
         return sortItems(listFolder(drive, current), sort)
@@ -167,7 +179,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   /** TelePhotos search: suggestions under the search box. */
   const photoSuggestions = useMemo(() => {
     if (!(timeline && mode === 'search')) return []
-    const folders = listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked).map((f) => f.name)
+    const folders = listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked && !i.x.lp).map((f) => f.name)
     const albums = [...drive.albums.values()].sort((a, b) => b.ts - a.ts).slice(0, 5).map((a) => a.name)
     return [...new Set(['Videos', 'Starred', 'This month', 'Last month', 'This year', 'Last year', ...folders, ...albums, 'Large videos'])]
   }, [drive, timeline, mode])
@@ -219,6 +231,17 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   // ---- Actions ----
 
   const newFolder = () => setModal({ type: 'newFolder' })
+
+  /** Where picked files go: Locked photos while it's open and shown, otherwise the usual place. */
+  const pickInto = useRef<string | undefined>(undefined)
+  /** Picking files takes the app to the background; Locked photos stays open for it. */
+  const picking = useRef(false)
+  const pickFiles = () => {
+    pickInto.current = mode === 'locked' && lockedFolder && !lockedFolder.locked ? lockedFolder.id : undefined
+    picking.current = !!pickInto.current
+    const input = fileInput.current
+    input?.click()
+  }
 
   const upload = async (all: UploadSource[], into?: string) => {
     // TelePhotos only takes photos and videos
@@ -477,7 +500,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         setSelected(new Set(items.map((i) => i.id)))
       } else if (e.key === 'Escape') clearSelection()
       else if (e.key === 'Delete' && selection.length) {
-        if (mode === 'trash') setModal({ type: 'deleteForever', items: selection })
+        if (mode === 'trash' || mode === 'locked') setModal({ type: 'deleteForever', items: selection })
         else void act(moveToTrash(selection))
       }
     }
@@ -505,6 +528,87 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     navigate(`/album/${addTo.id}`)
   }
 
+  // ---- Locked photos ----
+
+  /** Uploads went into Locked photos during this visit: it stays open until they're done. */
+  const uploadedToLocked = useRef(false)
+  const viewingLocked = useRef(false)
+
+  /** Lock Locked photos again (once uploads into it are done, if there were any). */
+  const relockLocked = useCallback((now = false) => {
+    const close = () => {
+      const f = lockedPhotosFolder(useDrive.getState().drive)
+      if (f) relockItem(f)
+    }
+    if (now || !uploadedToLocked.current) return close()
+    void transfersIdle().then(() => {
+      uploadedToLocked.current = false
+      if (!viewingLocked.current || document.visibilityState === 'hidden') close()
+    })
+  }, [])
+
+  // It locks again on leaving it and when the app goes to the background (not while picking photos to add)
+  useEffect(() => {
+    if (mode !== 'locked') return
+    viewingLocked.current = true
+    const onVisibility = () => document.visibilityState === 'hidden' && !picking.current && relockLocked()
+    const onFocus = () => setTimeout(() => (picking.current = false), 1000)
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      viewingLocked.current = false
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', onFocus)
+      relockLocked()
+    }
+  }, [mode, relockLocked])
+
+  /** Open Locked photos with the TeleDrive password, making it the first time. */
+  const openLocked = async (password: string): Promise<FolderItem> => {
+    const existing = lockedPhotosFolder(useDrive.getState().drive)
+    let id: string
+    if (existing) {
+      if (existing.locked) await unlockItem(useDrive.getState().drive, existing, password)
+      id = existing.id
+    } else {
+      if (!(await verifyPassword(password))) throw new WrongPasswordError()
+      id = await createLockedPhotos(password)
+    }
+    const fresh = await waitForItem(id, (x) => !x.locked)
+    if (fresh?.kind !== 'folder') throw new Error('Locked photos didn’t open. Try again.')
+    return fresh
+  }
+
+  /** Move photos to Locked photos: asks for the TeleDrive password when it's locked (or doesn't exist yet). */
+  const moveToLocked = (list: Item[]) => {
+    const files = list.filter((i): i is FileItem => i.kind === 'file')
+    if (!files.length) return
+    if (lockedFolder && !lockedFolder.locked) return void act(finishLocking(files, lockedFolder))
+    setModal({ type: 'lockPhotos', files, first: !lockedFolder })
+  }
+
+  const finishLocking = async (files: FileItem[], folder: FolderItem) => {
+    const moving = files.map((f) => ({ name: f.name, size: f.size }))
+    const n = await lockPhotos(useDrive.getState().drive, files, folder)
+    // Opened just for this: lock it again straight away
+    if (!viewingLocked.current) relockLocked(true)
+    clearSelection()
+    setPreview(null)
+    toast(`Moved ${n} photo${n === 1 ? '' : 's'} to Locked photos`)
+    // Android: the phone's own copies would still be in its Gallery
+    const copies = await findPhoneCopies(moving)
+    if (copies.length) setModal({ type: 'removeFromPhone', items: copies, bytes: copies.reduce((b, c) => b + c.size, 0) })
+  }
+
+  const moveOutOfLocked = async (list: Item[]) => {
+    if (!lockedFolder) return
+    const files = list.filter((i): i is FileItem => i.kind === 'file')
+    await unlockPhotos(useDrive.getState().drive, files, lockedFolder)
+    clearSelection()
+    setPreview(null)
+    toast(`Moved ${files.length} photo${files.length === 1 ? '' : 's'} out of Locked photos`)
+  }
+
   const albumMenu = (a: Album): MenuEntry[] => [
     { label: 'Share album…', icon: Send, onClick: () => shareAlbum(a) },
     {
@@ -517,6 +621,15 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   ]
 
   const itemMenu = (item: Item): MenuEntry[] => {
+    if (mode === 'locked' && item.kind === 'file')
+      return [
+        { label: 'Preview', icon: Eye, onClick: () => open(item) },
+        { label: 'Download', icon: Download, onClick: () => void download([item]), disabled: !item.complete },
+        ...(isAndroid ? [{ label: 'Open with…', icon: ExternalLink, onClick: () => openWith(item), disabled: !item.complete }] : []),
+        { label: 'Move out of Locked photos', icon: LockOpen, onClick: () => void act(moveOutOfLocked([item])) },
+        { label: 'Details', icon: Info, onClick: () => setModal({ type: 'details', item }) },
+        { label: 'Delete forever', icon: Trash2, danger: true, onClick: () => setModal({ type: 'deleteForever', items: [item] }) },
+      ]
     if (mode === 'trash')
       return [
         { label: 'Restore', icon: ArchiveRestore, onClick: () => void act(restoreItems([item])) },
@@ -562,7 +675,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             { label: 'Re-encrypt', icon: RefreshCcwDot, onClick: () => void act(reencrypt(item)) },
             { label: 'Remove lock…', icon: LockOpen, onClick: () => setModal({ type: 'lock', item, action: 'remove' }) },
           ]
-        : [{ label: 'Lock…', icon: Lock, onClick: () => setModal({ type: 'lock', item, action: 'lock' }) }]),
+        : inPhotos && item.kind === 'file'
+          ? [{ label: 'Move to Locked photos', icon: Lock, onClick: () => moveToLocked([item]) }]
+          : [{ label: 'Lock…', icon: Lock, onClick: () => setModal({ type: 'lock', item, action: 'lock' }) }]),
       { label: 'Details', icon: Info, onClick: () => setModal({ type: 'details', item }) },
       { label: 'Move to trash', icon: Trash2, danger: true, onClick: () => void act(moveToTrash([item])) },
     ]
@@ -660,7 +775,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const sidebar = (
     <Sidebar
-      onUpload={() => fileInput.current?.click()}
+      onUpload={() => pickFiles()}
       // Android's file picker can't pick folders
       onUploadFolder={isAndroid ? undefined : () => folderInput.current?.click()}
       onNewFolder={newFolder}
@@ -684,15 +799,17 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         : (i: Item) => locationOf(drive, i, rootName)
 
   const newAlbumEntry: MenuEntry = { label: 'New album', icon: AlbumIcon, onClick: () => setModal({ type: 'newAlbum' }) }
-  const uploadPhotosEntry: MenuEntry = { label: 'Upload photos', icon: Upload, onClick: () => fileInput.current?.click() }
-  const fabEntries: MenuEntry[] = mode === 'albums'
+  const uploadPhotosEntry: MenuEntry = { label: 'Upload photos', icon: Upload, onClick: () => pickFiles() }
+  const fabEntries: MenuEntry[] = mode === 'locked'
+    ? lockedOpen ? [{ label: 'Add photos', icon: Upload, onClick: pickFiles }] : []
+    : mode === 'albums'
     ? [newAlbumEntry, uploadPhotosEntry]
     : album
       ? [{ label: 'Add photos', icon: ImagePlus, onClick: () => navigate(`/?addTo=${album.id}`) }, newAlbumEntry]
       : inPhotos
     ? [uploadPhotosEntry, newAlbumEntry]
     : [
-        { label: 'Upload files', icon: Upload, onClick: () => fileInput.current?.click() },
+        { label: 'Upload files', icon: Upload, onClick: () => pickFiles() },
         ...(isAndroid ? [] : [{ label: 'Upload folder', icon: FolderUp, onClick: () => folderInput.current?.click() }]),
         { label: 'New folder', icon: FolderPlus, onClick: newFolder },
       ]
@@ -704,7 +821,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ? (album?.name ?? '')
         : TITLES[mode]
   const count =
-    mode === 'search'
+    mode === 'locked' && !lockedOpen
+      ? ''
+      : mode === 'search'
       ? query || filter
         ? items.length === 500
           ? 'first 500 results'
@@ -725,7 +844,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         accept={inPhotos ? 'image/*,video/*' : undefined}
         hidden
         onChange={(e) => {
-          if (e.target.files?.length) void upload(Array.from(e.target.files))
+          const into = pickInto.current
+          picking.current = false
+          if (into) uploadedToLocked.current = true
+          if (e.target.files?.length) void upload(Array.from(e.target.files), into)
           e.target.value = ''
         }}
       />
@@ -784,8 +906,11 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             <SelectionBar
               count={selection.length}
               trashMode={mode === 'trash'}
+              lockedMode={mode === 'locked'}
+              onMoveOut={() => void act(moveOutOfLocked(selection))}
+              onLock={inPhotos && mode !== 'trash' && mode !== 'locked' ? () => moveToLocked(selection) : undefined}
               onAddToAlbum={
-                inPhotos && mode !== 'trash'
+                inPhotos && mode !== 'trash' && mode !== 'locked'
                   ? () => setModal({ type: 'addToAlbum', files: selection.filter((i): i is FileItem => i.kind === 'file') })
                   : undefined
               }
@@ -843,7 +968,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   <TriangleAlert className="size-5" />
                 </span>
               )}
-              <div className={`hidden h-11 shrink-0 gap-1 rounded-md p-1 pressed ${timeline || mode === 'albums' ? '' : 'md:flex'}`} role="group" aria-label="View">
+              <div className={`hidden h-11 shrink-0 gap-1 rounded-md p-1 pressed ${timeline || mode === 'albums' || mode === 'locked' ? '' : 'md:flex'}`} role="group" aria-label="View">
                 {(['list', 'grid'] as const).map((v) => {
                   const Icon = v === 'list' ? List : LayoutGrid
                   return (
@@ -861,15 +986,20 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                 })}
               </div>
               <button
-                className={`icon-btn md:hidden ${timeline || mode === 'albums' ? 'hidden' : ''}`}
+                className={`icon-btn md:hidden ${timeline || mode === 'albums' || mode === 'locked' ? 'hidden' : ''}`}
                 onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
                 aria-label={view === 'grid' ? 'List view' : 'Grid view'}
               >
                 {view === 'grid' ? <List /> : <LayoutGrid />}
               </button>
-              {mode !== 'recent' && mode !== 'trash' && mode !== 'albums' && !timeline && (
+              {mode !== 'recent' && mode !== 'trash' && mode !== 'albums' && mode !== 'locked' && !timeline && (
                 <button className="icon-btn" onClick={sortMenu} aria-label="Sort" title={`Sort by ${SORT_LABELS[sort.key]}`}>
                   {sort.dir === 'asc' ? <ArrowDownAZ /> : <ArrowUpAZ />}
+                </button>
+              )}
+              {mode === 'locked' && lockedOpen && (
+                <button className="icon-btn text-brand-ink" onClick={() => relockLocked(true)} aria-label="Lock" title="Lock">
+                  <Lock />
                 </button>
               )}
               {album && (
@@ -982,12 +1112,16 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
           <div className="flex items-start gap-4.5">
             <div className="min-w-0 flex-1">
-              {mode === 'albums' && drive.albums.size ? (
+              {mode === 'albums' ? (
                 <AlbumGrid
                   drive={drive}
                   onOpen={(a) => navigate(`/album/${a.id}`)}
                   onMenu={(a, x, y) => setMenu({ x, y, entries: albumMenu(a), header: { title: a.name } })}
+                  onOpenLocked={() => navigate('/locked')}
+                  onNew={() => setModal({ type: 'newAlbum' })}
                 />
+              ) : mode === 'locked' && lockedFolder && !lockedOpen ? (
+                <LockedGate onUnlock={async (password) => void (await openLocked(password))} />
               ) : timeline && items.length ? (
                 <PhotoTimeline
                   key={`${mode}|${source ?? ''}|${album?.id ?? ''}|${addTo?.id ?? ''}`}
@@ -1017,7 +1151,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   searched={!!query}
                   isRoot={current === ROOT}
                   photos={inPhotos}
-                  onUpload={() => fileInput.current?.click()}
+                  onUpload={() => pickFiles()}
                   onNewFolder={newFolder}
                   onNewAlbum={() => setModal({ type: 'newAlbum' })}
                   onAddPhotos={album ? () => navigate(`/?addTo=${album.id}`) : undefined}
@@ -1033,7 +1167,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
       {/* Phone: + button and transfers above the tabs; tablet: transfers in the corner */}
       <div className="pointer-events-none fixed inset-x-3 bottom-[96px] z-30 flex flex-col items-end gap-3 md:inset-x-auto md:right-4.5 md:bottom-4.5 md:w-80 lg:hidden">
-        {!selection.length && !addTo && mode !== 'settings' && (
+        {!selection.length && !addTo && mode !== 'settings' && fabEntries.length > 0 && (
           <button
             className="pointer-events-auto mr-3 flex size-15 items-center justify-center rounded-[10px] bg-brand text-white raised-md active:pressed md:hidden"
             onClick={(e) => {
@@ -1098,6 +1232,40 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             await move(useDrive.getState().drive, modal.items, target)
             clearSelection()
             toast(`Moved ${modal.items.length === 1 ? `“${modal.items[0].name}”` : `${modal.items.length} items`}`)
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'lockPhotos' && (
+        <LockPhotosDialog
+          count={modal.files.length}
+          first={modal.first}
+          onSubmit={async (password) => {
+            const folder = await openLocked(password)
+            const files = modal.files
+            setModal(null)
+            await act(finishLocking(files, folder))
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'removeFromPhone' && (
+        <ConfirmDialog
+          title="Also remove from this phone?"
+          icon={Lock}
+          confirmLabel="Remove from phone"
+          message={
+            <>
+              <p>
+                {modal.items.length === 1 ? 'The photo you locked is' : `${modal.items.length} of the photos you locked are`} still
+                in this phone’s Gallery ({formatBytes(modal.bytes)}). Remove {modal.items.length === 1 ? 'it' : 'them'} so{' '}
+                {modal.items.length === 1 ? 'it’s' : 'they’re'} only in Locked photos?
+              </p>
+              <p className="mt-2">They go to the phone’s bin first and are deleted for good after 30 days. Android will ask once more.</p>
+            </>
+          }
+          onConfirm={async () => {
+            if (await freeUpSpace(modal.items)) toast('Removed from this phone')
           }}
           onClose={() => setModal(null)}
         />
@@ -1283,6 +1451,11 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 function SelectionBar(props: {
   count: number
   trashMode: boolean
+  /** In Locked photos: Download, Move out and Delete forever only. */
+  lockedMode: boolean
+  onMoveOut: () => void
+  /** TelePhotos: Move to Locked photos. */
+  onLock?: () => void
   /** TelePhotos. */
   onAddToAlbum?: () => void
   /** In an album. */
@@ -1304,7 +1477,19 @@ function SelectionBar(props: {
         <X />
       </button>
       <span className="min-w-0 flex-1 truncate text-[15px] font-extrabold">{p.count} selected</span>
-      {p.trashMode ? (
+      {p.lockedMode ? (
+        <>
+          <button className="icon-btn" onClick={p.onDownload} aria-label="Download" title="Download">
+            <Download />
+          </button>
+          <button className="icon-btn" onClick={p.onMoveOut} aria-label="Move out of Locked photos" title="Move out of Locked photos">
+            <LockOpen />
+          </button>
+          <button className="icon-btn text-brand-ink" onClick={p.onDeleteForever} aria-label="Delete forever" title="Delete forever">
+            <Trash2 />
+          </button>
+        </>
+      ) : p.trashMode ? (
         <>
           <button className="btn-secondary px-3.5 sm:px-4.5" onClick={p.onRestore} aria-label="Restore">
             <ArchiveRestore /> <span className="hidden sm:inline">Restore</span>
@@ -1337,6 +1522,11 @@ function SelectionBar(props: {
           <button className="icon-btn hidden sm:inline-flex" onClick={p.onSend} aria-label="Send to Telegram" title="Send to Telegram">
             <Send />
           </button>
+          {p.onLock && (
+            <button className="icon-btn" onClick={p.onLock} aria-label="Move to Locked photos" title="Move to Locked photos">
+              <Lock />
+            </button>
+          )}
           {p.onMove && (
             <button className="icon-btn" onClick={p.onMove} aria-label="Move" title="Move">
               <FolderInput />
@@ -1393,6 +1583,11 @@ function EmptyState(props: {
     trash: { icon: Trash2, title: 'Trash is empty', text: `Deleted items stay here for ${TRASH_DAYS} days.` },
     albums: { icon: AlbumIcon, title: 'No albums yet', text: 'Group photos into albums. A photo can be in several albums.' },
     album: { icon: AlbumIcon, title: 'This album is empty', text: 'Add photos from your timeline.' },
+    locked: {
+      icon: Lock,
+      title: 'No locked photos yet',
+      text: 'Select photos in your timeline and choose Move to Locked photos. They open only with your TeleDrive password.',
+    },
   }
   const { icon: Icon, title, text } = content[mode]
   return (
@@ -1440,7 +1635,7 @@ function BottomNav({ photos }: { photos: boolean }) {
       go: () => navigate('/'),
     },
     photos
-      ? { label: 'Albums', icon: AlbumIcon, on: pathname === '/albums' || pathname.startsWith('/album/'), go: () => navigate('/albums') }
+      ? { label: 'Albums', icon: AlbumIcon, on: pathname === '/albums' || pathname.startsWith('/album/') || pathname === '/locked', go: () => navigate('/albums') }
       : { label: 'Recent', icon: Clock, on: pathname === '/recent', go: () => navigate('/recent') },
     { label: 'Starred', icon: Star, on: pathname === '/starred', go: () => navigate('/starred') },
     { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
