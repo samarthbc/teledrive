@@ -1,6 +1,6 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, Camera, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen, FolderPlus,
-  FolderUp, HardDrive, Images, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff,
+  FolderUp, HardDrive, Images, Info, LayoutGrid, Loader2, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff,
   Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, MonitorSmartphone, RefreshCcwDot, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -47,6 +47,8 @@ import { closeAllLocks, holdOpen } from '../drive/keyring'
 import { DriveFileUpload } from '../drive/stream'
 import { FILTERS, formatBytes, formatDate, type FilterKey } from '../lib/format'
 import { useDrive, useInPhotos, useRootName, type SortKey } from '../store/useDrive'
+import { useBackup } from '../native/backup'
+import { driveName } from '../telegram/channel'
 import { toast, toastError } from '../store/useToast'
 
 export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash' | 'settings'
@@ -770,6 +772,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             {mode === 'trash' && items.length > 0 && (
               <p className="mt-2 text-sm text-muted">Items in the trash are deleted forever after {TRASH_DAYS} days.</p>
             )}
+            {appUi && <BackupNotice inPhotos={inPhotos} onOpenPhotos={openPhotos} />}
           </div>
           {(mode === 'folder' || mode === 'search') && (
             <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
@@ -1211,4 +1214,36 @@ function waitForItem(id: string, ok: (item: Item) => boolean, ms = 10_000): Prom
 function isMedia(file: UploadSource): boolean {
   if (/^(image|video)\//.test(file.type)) return true
   return /\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|tiff?|dng|mp4|mov|m4v|webm|mkv|3gp|avi)$/i.test(file.name)
+}
+
+/**
+ * Camera backup, seen from the drive page: photos waiting because another drive is open, or a background backup
+ * that opened TelePhotos and goes back to the drive that was open when it's done.
+ */
+function BackupNotice({ inPhotos, onOpenPhotos }: { inPhotos: boolean; onOpenPhotos: () => void }) {
+  const waiting = useBackup((s) => (s.settings.enabled ? s.waiting : 0))
+  const returnName = useDrive((s) => {
+    const d = s.returnTo ? s.drives.find((x) => x.id === s.returnTo) : undefined
+    return d ? driveName(d) : null
+  })
+  const box = 'mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-3.5 py-2.5 text-sm pressed'
+  if (inPhotos && returnName)
+    return (
+      <p className={box}>
+        <Loader2 className="size-4 shrink-0 animate-spin text-muted" />
+        <span>Backing up new photos. You'll go back to {returnName} when it's done.</span>
+      </p>
+    )
+  if (inPhotos || !waiting) return null
+  return (
+    <p className={box}>
+      <Camera className="size-4 shrink-0 text-muted" />
+      <span>
+        {waiting} photo{waiting === 1 ? '' : 's'} waiting to back up
+      </span>
+      <button className="font-bold text-brand-ink hover:underline" onClick={onOpenPhotos}>
+        Open TelePhotos
+      </button>
+    </p>
+  )
 }

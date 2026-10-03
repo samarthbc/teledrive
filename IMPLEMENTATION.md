@@ -814,20 +814,47 @@ videos, and camera backup is set up from there and uploads into its Camera folde
 - Not checked yet: the "Back up to TelePhotos instead" notice (needs a phone whose backup was set up in My Drive),
   skipping non-photos shared into TelePhotos, the website.
 
-## Phase 12: Backup from anywhere
+## Phase 12: Backup from anywhere ✅ (implemented; being tested)
 
 **Problem:** while the app is open, backup only runs in its own drive (*"Paused: open the TelePhotos drive"*).
-With the app in the background, Android's job asks the app's JavaScript to back up (`backgroundBackup`), which hits
-the same pause when My Drive is open. Only a fully closed app (the headless page) backs up regardless.
+With the app in the background, Android's job asks the app's JavaScript to back up (`backgroundBackup`), which hit
+the same pause when My Drive was open. Only a fully closed app (the headless page) backed up regardless.
 
-**Plan:** when a backup round is due **while the app is in the background** and another drive is open, switch to
-TelePhotos quietly, run the round, and remember to switch back: on return the app opens the drive the person left
-(or stays in TelePhotos if the round is still running, then switches back). Switching is refused while transfers run,
-so the round waits for the person's own uploads first.
-- Background backup becomes always on when camera backup is on (the separate switch goes).
-- My Drive shows a small "N photos waiting to back up · Open TelePhotos" line while the app is on screen.
-- **Done when:** with My Drive left open and the app in the background, a new photo shows up in TelePhotos within
-  minutes, and returning to the app shows My Drive again.
+### 12.1 Switching for a background round
+- `backupRound()` (what Android's job runs in the app) first calls `openBackupDrive()`: if another drive is open,
+  backup is on, the app is ready, it may read photos, the network fits (Wi-Fi only) and something is waiting
+  (`countWaiting()`), it asks the host to open the backup drive. Then the round runs as usual and, in `finally`,
+  `returnFromBackup()` opens the drive that was open again.
+- Store: `openForBackup(id)` refuses while transfers run (the round then pauses until the next trigger), sets
+  `returnTo` (kept across several rounds) and opens the drive **without saving it as the last one**, so a phone that
+  kills the app mid-round still starts in the drive the person left. `returnFromBackup()` goes back unless the person
+  switched drives themselves (`switchDrive` clears `returnTo`) or a transfer started meanwhile.
+- If the person comes back during a round, TelePhotos shows "Backing up new photos. You'll go back to My Drive when
+  it's done."
+- Unlocked items in the drive that was left are locked by the switch (as with any drive switch).
+
+### 12.2 In the app, on screen
+- With another drive open, the paused check also counts what's waiting (`waiting` in the backup store); the drive page
+  shows "N photos waiting to back up · **Open TelePhotos**".
+- Opening the backup drive (by the person; not by a background round) starts a check at once (`backupDriveOpened`),
+  so waiting photos upload right away.
+
+### 12.3 Background backup always on
+- The "Back up when the app is closed" switch is gone: Android's job is scheduled whenever camera backup is on
+  (`syncBackgroundSchedule`), and the headless page no longer checks `settings.background`. The phone tips
+  (Autostart, battery saver) and the last background run always show in the dialog.
+
+### 12.4 Duplicate TelePhotos
+- `createPhotosDrive` looks on Telegram (`refreshDrives`) before creating, so a TelePhotos created on another device
+  is used instead of a second one. Two taps at once share one creation (`creatingPhotos`).
+
+### 12.5 Checked on the phone
+- My Drive open, app in the background (Home), new photo in `DCIM/Camera` → Android's job ran ~20 s later, the
+  photo was uploaded to **TelePhotos/Camera** ("Backed up 1 photo or video"), and reopening the app showed My Drive.
+  Repeated on the final build; nothing landed in My Drive (search).
+- App on screen in My Drive, new photo + network change → "1 photo waiting to back up · Open TelePhotos"; tapping it
+  opened TelePhotos and uploaded the photo at once.
+- Not checked: the duplicate check (needs a second device), coming back to the app in the middle of a round.
 
 ## Phase 13: Photo screens
 - File metadata gets `dt` (date taken; MediaStore `DATE_TAKEN` for backups, EXIF via a small reader for uploads,

@@ -5,7 +5,7 @@ import DrivePage from './pages/Drive'
 import LoginPage from './pages/Login'
 import PasswordPage from './pages/Password'
 import SetupPage from './pages/Setup'
-import { initCameraBackup } from './native/backup'
+import { backupDriveOpened, initCameraBackup } from './native/backup'
 import { driveName } from './telegram/channel'
 import { useDrive } from './store/useDrive'
 
@@ -30,6 +30,13 @@ export default function App() {
         const d = useDrive.getState().drives.find((x) => x.id === id)
         return d && driveName(d)
       },
+      openForBackup: (id) => useDrive.getState().openForBackup(id),
+      returnFromBackup: () => useDrive.getState().returnFromBackup(),
+    })
+    // Opening the backup drive backs up what waited meanwhile (not when a background round opened it: it does that)
+    useDrive.subscribe((s, prev) => {
+      const opened = s.phase === 'ready' && (prev.phase !== 'ready' || s.currentDrive !== prev.currentDrive)
+      if (opened && !s.returnTo) backupDriveOpened()
     })
   }, [phase])
 

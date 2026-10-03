@@ -185,7 +185,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 ### 4.11 TelePhotos (Google Photos–style, separate from files)
 - [x] A second built-in drive, **TelePhotos**, next to My Drive; only photos and videos; can't be renamed or deleted
 - [x] Camera backup lives in TelePhotos (camera → Camera, other phone folders → their own folder)
-- [ ] Backup keeps working whichever drive was left open
+- [x] Backup keeps working whichever drive was left open
 - [ ] Timeline by date taken, source filters, favorites, trash, locked
 - [ ] Move existing Camera Backup folders from My Drive to TelePhotos
 - [ ] Backup modes: as photos are taken, or once a day overnight

@@ -92,13 +92,7 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
               checked={settings.wifiOnly}
               onChange={(wifiOnly) => void updateBackupSettings({ wifiOnly })}
             />
-            <Toggle
-              label="Back up when the app is closed"
-              hint="New photos upload within a few minutes, even with TeleDrive closed"
-              checked={!!settings.background}
-              onChange={(background) => void updateBackupSettings({ background })}
-            />
-            {settings.background && <BackgroundInfo encrypted={encrypted} />}
+            <BackgroundInfo encrypted={encrypted} />
             <div className="flex justify-end gap-2">
               <button className="btn-ghost font-semibold text-brand-ink" onClick={() => void updateBackupSettings({ enabled: false })}>
                 Turn off
@@ -120,7 +114,10 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
               checked={settings.wifiOnly}
               onChange={(wifiOnly) => void updateBackupSettings({ wifiOnly })}
             />
-            <p className="text-xs text-muted">You can add more folders and turn on backup while the app is closed after turning this on.</p>
+            <p className="text-xs text-muted">
+              New photos upload within a few minutes, also while TeleDrive is closed. You can add more folders after
+              turning this on.
+            </p>
             {error && <p className="font-semibold text-brand-ink">{error}</p>}
             <div className="flex justify-end">
               <button className="btn-primary" disabled={busy} onClick={enable}>

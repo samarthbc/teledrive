@@ -23,7 +23,7 @@ async function run(): Promise<object> {
   if (!(await acquireSessionLock())) return { status: 'Skipped: the app is open' }
 
   const settings = await loadBackupSettings()
-  if (!settings.enabled || !settings.background) return { status: 'Background backup is off' }
+  if (!settings.enabled) return { status: 'Camera backup is off' }
   if (!(await loadKeys()) || !(await getKV<string>(KEYS.session))) return { status: 'Not logged in' }
 
   const drives = (await getKV<DriveInfo[]>(KEYS.drives)) ?? []

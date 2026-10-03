@@ -38,7 +38,7 @@ export interface BackupSettings {
   /** The drive photos go to (the one open when backup was turned on). */
   driveId?: string
   sources?: BackupSource[]
-  /** Also back up while the app is closed. */
+  /** No longer used: backup always runs in the background too. */
   background?: boolean
 }
 
@@ -55,6 +55,13 @@ export interface BackupHost {
   drive(): Drive
   /** Name of a drive, for the "open that drive" message. */
   driveName(id: string): string | undefined
+  /**
+   * The app, in the background: open the backup drive (remembering the open one). False if it can't now.
+   * Not in the background page, which opens the backup drive itself.
+   */
+  openForBackup?(driveId: string): Promise<boolean>
+  /** Open the drive that was open before openForBackup again. */
+  returnFromBackup?(): Promise<void>
 }
 
 let host: BackupHost | null = null
@@ -69,6 +76,8 @@ interface BackupState {
   running: boolean
   backedUp: number
   lastCheck?: number
+  /** New photos/videos not backed up because another drive is open (shown in that drive). */
+  waiting: number
 }
 
 export const useBackup = create<BackupState>(() => ({
@@ -76,6 +85,7 @@ export const useBackup = create<BackupState>(() => ({
   status: 'Off',
   running: false,
   backedUp: 0,
+  waiting: 0,
 }))
 
 let done = new Set<string>()
@@ -134,11 +144,11 @@ export async function setSource(path: string, on: boolean, since = Math.floor(Da
   await updateBackupSettings({ sources })
 }
 
-/** Tell Android whether to back up while the app is closed. */
+/** Tell Android whether to back up in the background (always, while backup is on). */
 async function syncBackgroundSchedule() {
   if (!isAndroid || isHeadless) return
-  const { enabled, background, wifiOnly } = useBackup.getState().settings
-  await Native.scheduleBackgroundBackup({ enabled: enabled && !!background, wifiOnly }).catch((e) =>
+  const { enabled, wifiOnly } = useBackup.getState().settings
+  await Native.scheduleBackgroundBackup({ enabled, wifiOnly }).catch((e) =>
     console.warn('Could not schedule background backup', e),
   )
 }
@@ -175,9 +185,10 @@ export async function runBackup(): Promise<number> {
     if (!settings.driveId) await updateSettingsQuietly({ driveId: currentDriveId() ?? undefined })
     else if (settings.driveId !== currentDriveId()) {
       const name = host.driveName(settings.driveId)
-      useBackup.setState({ status: `Paused: open the “${name ?? 'backup'}” drive to back up` })
+      useBackup.setState({ status: `Paused: open the “${name ?? 'backup'}” drive to back up`, waiting: await countWaiting() })
       return 0
     }
+    useBackup.setState({ waiting: 0 })
     if (!hasAccountKeys()) {
       useBackup.setState({ status: 'Waiting: enter your TeleDrive password in the app' })
       return 0
@@ -224,6 +235,13 @@ export async function runBackup(): Promise<number> {
   } finally {
     useBackup.setState({ running: false })
   }
+}
+
+/** How many photos/videos in the chosen folders aren't backed up yet. */
+async function countWaiting(): Promise<number> {
+  let n = 0
+  for (const source of sourcesOf(useBackup.getState().settings)) n += (await listNew(source)).length
+  return n
 }
 
 /** New (not yet backed up or queued) media in one folder. */
@@ -321,13 +339,36 @@ export function transfersIdle(): Promise<Transfer[]> {
   })
 }
 
-/** One backup round, then wait for its uploads. Result for Android's background job (JSON). */
+/**
+ * One backup round, then wait for its uploads. Result for Android's background job (JSON).
+ * In the app (in the background) with another drive open, it opens the backup drive for the round and goes back
+ * to the open one afterwards.
+ */
 export async function backupRound(): Promise<string> {
+  await load()
   const before = useBackup.getState().backedUp
-  await runBackup()
-  const list = await transfersIdle()
+  const switched = await openBackupDrive()
+  let list: Transfer[]
+  try {
+    await runBackup()
+    list = await transfersIdle()
+  } finally {
+    if (switched) await host?.returnFromBackup?.()
+  }
   const failed = list.filter((t) => t.kind === 'upload' && t.status === 'error').length
   return JSON.stringify({ uploaded: useBackup.getState().backedUp - before, failed, status: useBackup.getState().status })
+}
+
+/** Open the backup drive for a round, if another one is open and there's something to back up now. */
+async function openBackupDrive(): Promise<boolean> {
+  const { settings } = useBackup.getState()
+  if (!host?.openForBackup || !settings.enabled || !settings.driveId || settings.driveId === currentDriveId()) return false
+  // Switching drives costs a reload: only when the round would really upload something
+  if (!host.ready() || !hasAccountKeys() || !(await Native.mediaPermission({})).granted) return false
+  const net = await network()
+  if (!net.connected || (settings.wifiOnly && !net.wifi)) return false
+  if (!(await countWaiting())) return false
+  return host.openForBackup(settings.driveId)
 }
 
 const AUTO_CHECK_GAP = 30_000
@@ -338,6 +379,12 @@ function autoCheck() {
   if (Date.now() - lastAutoCheck < AUTO_CHECK_GAP) return
   lastAutoCheck = Date.now()
   void runBackup()
+}
+
+/** The person opened a drive: if it's the backup drive, back up what waited while another drive was open. */
+export function backupDriveOpened(): void {
+  const { settings } = useBackup.getState()
+  if (isAndroid && settings.enabled && settings.driveId === currentDriveId()) void runBackup()
 }
 
 /** In the app: check for new photos when it opens, comes back to the foreground, or joins Wi-Fi. */

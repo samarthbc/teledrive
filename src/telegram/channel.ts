@@ -101,6 +101,10 @@ export async function createDrive(name: string, known: DriveInfo[]): Promise<{ d
 export async function createPhotosDrive(known: DriveInfo[]): Promise<{ drive: DriveInfo; drives: DriveInfo[] }> {
   const existing = known.find(isPhotosDrive)
   if (existing) return { drive: existing, drives: known }
+  // Another device may have created it and this one's list isn't refreshed yet: look on Telegram first
+  const refreshed = await refreshDrives(known)
+  const found = refreshed.find(isPhotosDrive)
+  if (found) return { drive: found, drives: refreshed }
   const drive = await createChannel(PHOTOS_TITLE)
   const drives = sortDrives([...known, drive])
   await setKV(KEYS.drives, drives)

@@ -43,6 +43,11 @@ interface State {
   /** All drives (storage channels) of this account. */
   drives: DriveInfo[]
   currentDrive: string | null
+  /**
+   * The drive the person left open, while a background backup has switched to TelePhotos; it's opened again
+   * when the backup is done. Cleared when the person switches drives themselves.
+   */
+  returnTo: string | null
   /** On the 'password' screen: create the TeleDrive password (new account) or enter it (new device). */
   passwordMode: 'create' | 'enter' | null
   boot: (takeOver?: boolean) => Promise<void>
@@ -65,6 +70,13 @@ interface State {
   createDrive: (name: string) => Promise<void>
   /** Open TelePhotos, creating it the first time. Throws if transfers are still running. */
   openPhotos: () => Promise<void>
+  /**
+   * Camera backup while the app is in the background: open the backup drive, remembering the one that was open.
+   * False if it can't now (transfers running, or the switch failed).
+   */
+  openForBackup: (id: string) => Promise<boolean>
+  /** After a background backup: open the drive that was left open again (unless the person switched since). */
+  returnFromBackup: () => Promise<void>
 }
 
 const SYNC_INTERVAL = 30_000
@@ -80,6 +92,8 @@ let timer: ReturnType<typeof setInterval> | undefined
 let booting: Promise<void> | null = null
 /** No syncing while a different drive is being opened. */
 let switching = false
+/** TelePhotos being created (so two taps don't create two). */
+let creatingPhotos: Promise<void> | null = null
 /** Waiting on the TeleDrive password screen. */
 let pendingPassword: { config: AccountConfig | null; resolve: () => void } | null = null
 
@@ -129,14 +143,14 @@ export const useDrive = create<State>((set, get) => {
     refreshDrives(drives).then((list) => set({ drives: list }), (e) => console.warn('Drive list refresh failed', e))
   }
 
-  /** Open a drive: its channel, its local data (shown right away), then sync. */
-  const openDrive = async (d: DriveInfo) => {
+  /** Open a drive: its channel, its local data (shown right away), then sync. `remember`: open it at the next start too. */
+  const openDrive = async (d: DriveInfo, remember = true) => {
     switching = true
     try {
       set({ phase: 'loading', error: null, currentDrive: d.id })
       await openDriveDb(d.id)
       openStorage(d)
-      await setKV(KEYS.currentDrive, d.id)
+      if (remember) await setKV(KEYS.currentDrive, d.id)
       const hasCache = await loadCache()
       // Remembered TeleDrive password: show the cached drive right away
       if (!hasAccountKeys()) await vault.restoreDeviceKeys(null)
@@ -168,6 +182,22 @@ export const useDrive = create<State>((set, get) => {
   }
 
   const forgetKeys = () => setAccount(null)
+
+  /** Open another drive. Throws if transfers are still running. */
+  const changeDrive = async (id: string, remember = true) => {
+    if (id === get().currentDrive) return
+    const d = get().drives.find((x) => x.id === id)
+    if (!d) throw new Error('Drive not found')
+    if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before switching drives')
+    await syncIdle()
+    // Unlocked items belong to the drive being left
+    closeAllLocks()
+    try {
+      await openDrive(d, remember)
+    } catch (e) {
+      fail(e)
+    }
+  }
 
   const startAutoSync = () => {
     clearInterval(timer)
@@ -225,6 +255,7 @@ export const useDrive = create<State>((set, get) => {
     sort: { key: 'name', dir: 'asc' },
     drives: [],
     currentDrive: null,
+    returnTo: null,
     passwordMode: null,
 
     boot: (takeOver = false) => {
@@ -330,18 +361,9 @@ export const useDrive = create<State>((set, get) => {
     },
 
     switchDrive: async (id) => {
-      if (id === get().currentDrive) return
-      const d = get().drives.find((x) => x.id === id)
-      if (!d) throw new Error('Drive not found')
-      if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before switching drives')
-      await syncIdle()
-      // Unlocked items belong to the drive being left
-      closeAllLocks()
-      try {
-        await openDrive(d)
-      } catch (e) {
-        fail(e)
-      }
+      // The person chose a drive: don't take them back after a background backup
+      set({ returnTo: null })
+      await changeDrive(id)
     },
 
     createDrive: async (name) => {
@@ -354,10 +376,41 @@ export const useDrive = create<State>((set, get) => {
     openPhotos: async () => {
       const existing = get().drives.find(isPhotosDrive)
       if (existing) return get().switchDrive(existing.id)
+      if (creatingPhotos) return creatingPhotos
       if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before opening TelePhotos')
-      const { drive, drives } = await createPhotosDrive(get().drives)
-      set({ drives })
-      await get().switchDrive(drive.id)
+      creatingPhotos = (async () => {
+        const { drive, drives } = await createPhotosDrive(get().drives)
+        set({ drives })
+        await get().switchDrive(drive.id)
+      })().finally(() => (creatingPhotos = null))
+      return creatingPhotos
+    },
+
+    openForBackup: async (id) => {
+      const { currentDrive, phase, returnTo } = get()
+      if (id === currentDrive) return true
+      if (phase !== 'ready' || hasActiveTransfers()) return false
+      // Already away for an earlier backup: keep the drive the person actually left
+      set({ returnTo: returnTo ?? currentDrive })
+      try {
+        await changeDrive(id, false)
+      } catch (e) {
+        console.warn('Could not open the backup drive', e)
+      }
+      return get().currentDrive === id && get().phase === 'ready'
+    },
+
+    returnFromBackup: async () => {
+      const target = get().returnTo
+      if (!target) return
+      set({ returnTo: null })
+      if (target === get().currentDrive || !get().drives.some((d) => d.id === target)) return
+      try {
+        await changeDrive(target)
+      } catch (e) {
+        // E.g. the person started an upload here in the meantime: stay
+        console.warn('Could not go back to the drive that was open', e)
+      }
     },
   }
 })
