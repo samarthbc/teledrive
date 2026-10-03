@@ -1029,8 +1029,26 @@ WhatsApp media once a night, for example).
   (ZIP checked on the PC); Share album → Saved Messages → sent as one 2-photo album; the chat list no longer has
   TeleDrive Storage.
 
+### 16.4 Search ✅
+- **What:** in TelePhotos the search box ("Search your photos") finds photos the way they're remembered; results are a
+  timeline (select, add to album, share as usual). Every word must match one of:
+  - **dates** (date taken, local time): year ("2024"), month ("dec", "December"), day next to a month ("25 dec",
+    "3rd march"), weekday ("sunday"), season ("summer", northern-hemisphere months), "today", "yesterday",
+    "this/last week|month|year", "last summer|winter|…" (the latest one, so in October "last summer" is this year's);
+  - **kind:** videos, photos, starred/favourites, large/big (videos ≥ 100 MB, photos ≥ 10 MB), a file type (png,
+    jpg, gif, heic…);
+  - **where from:** a top folder ("screenshots", "whatsapp"; singular or plural), an album's name;
+  - **the file's name** (not for a year or a day number, so "dec 3" doesn't match every name with a 3).
+- **Suggestions:** chips under the box: Videos, Starred, This month, Last month, This year, Last year, the top folders,
+  the 5 newest albums, Large videos. Empty state gives examples.
+- **Code:** `drive/photoSearch.ts` (`searchPhotos(drive, timeline, query, now)`), unit-tested
+  (`photoSearch.test.ts`: dates, relative dates, kinds, folders, albums, names). Nothing new is stored; works on the
+  website and the apps. My Drive's search is unchanged (names).
+- **Checked on the phone:** suggestions shown; "dec 2024" → the 25 Dec 2024 photo; the Camera chip → the 9 camera
+  photos.
+
 ### Still to do
-- On this day; map (opt-in, encrypted); search.
+- On this day; map (opt-in, encrypted); smart search (on-device image model, opt-in).
 
 ---
 

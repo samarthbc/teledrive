@@ -30,6 +30,7 @@ import {
 import { AddToAlbumDialog, AlbumGrid } from '../components/Albums'
 import { createAlbum, deleteAlbum, renameAlbum, setInAlbum } from '../drive/ops'
 import PhotoTimeline, { timelineItems } from '../components/PhotoTimeline'
+import { searchPhotos } from '../drive/photoSearch'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
 import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } from '../native/android'
 import { useBackHandler } from '../native/backButton'
@@ -127,7 +128,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const current = mode === 'folder' && folderExists ? folderId : ROOT
   const crumbs = mode === 'folder' ? breadcrumbs(drive, current) : []
   // TelePhotos: its top and Starred are a timeline of every photo and video (by date taken), not folders
-  const timeline = inPhotos && ((mode === 'folder' && current === ROOT) || mode === 'starred' || mode === 'album')
+  // Search in TelePhotos finds photos by date, kind, folder, album or name, shown as a timeline too
+  const timeline = inPhotos && ((mode === 'folder' && current === ROOT) || mode === 'starred' || mode === 'album' || mode === 'search')
   const album = mode === 'album' && albumId ? drive.albums.get(albumId) : undefined
   /** Picking photos to add to an album: the timeline without that album's photos; tapping selects. */
   const addTo = timeline && mode === 'folder' ? (drive.albums.get(params.get('addTo') ?? '') ?? null) : null
@@ -140,6 +142,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const items = useMemo(() => {
     const match = filter && FILTERS[filter] ? FILTERS[filter].match : undefined
+    if (timeline && mode === 'search') return query ? searchPhotos(drive, timelineItems(drive, {}), query) : []
     if (timeline)
       return timelineItems(drive, { starred: mode === 'starred', source, album: album?.id ?? (mode === 'album' ? '-' : undefined), notInAlbum: addTo?.id })
     switch (mode) {
@@ -160,6 +163,14 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         return []
     }
   }, [drive, mode, current, query, filter, sort, timeline, source, album, addTo])
+
+  /** TelePhotos search: suggestions under the search box. */
+  const photoSuggestions = useMemo(() => {
+    if (!(timeline && mode === 'search')) return []
+    const folders = listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked).map((f) => f.name)
+    const albums = [...drive.albums.values()].sort((a, b) => b.ts - a.ts).slice(0, 5).map((a) => a.name)
+    return [...new Set(['Videos', 'Starred', 'This month', 'Last month', 'This year', 'Last year', ...folders, ...albums, 'Large videos'])]
+  }, [drive, timeline, mode])
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const selection = [...selected].flatMap((id) => byId.get(id) ?? [])
@@ -797,7 +808,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   type="text"
                   role="searchbox"
                   enterKeyHint="search"
-                  placeholder="Search in TeleDrive"
+                  placeholder={inPhotos ? 'Search your photos' : 'Search in TeleDrive'}
                   className="input pr-10 pl-10.5"
                   value={searchText}
                   onChange={(e) => {
@@ -930,6 +941,23 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   onClick={() => setParams({ ...(c.id && { src: c.id }), ...(addTo && { addTo: addTo.id }) }, { replace: true })}
                 >
                   {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {mode === 'search' && timeline && (
+            // Things to search for: tapping one searches for it
+            <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
+              {photoSuggestions.map((s) => (
+                <button
+                  key={s}
+                  className={query.toLowerCase() === s.toLowerCase() ? 'chip-active' : 'chip'}
+                  onClick={() => {
+                    setSearchText(s)
+                    setSearch(s)
+                  }}
+                >
+                  {s}
                 </button>
               ))}
             </div>
@@ -1348,9 +1376,13 @@ function EmptyState(props: {
           text: isAndroid ? 'Turn on Camera backup in Settings, or upload photos and videos.' : 'Drop photos and videos here, or use Upload.',
         }
       : { icon: CloudUpload, title: isRoot ? 'Your drive is empty' : 'Nothing here yet', text: 'Drop files or folders here, or use Upload.' },
-    search: searched || filtered
-      ? { icon: Search, title: 'No results', text: 'Try a different name or filter.' }
-      : { icon: Search, title: 'Search your drive', text: 'Type a file or folder name, or pick a filter.' },
+    search: photos
+      ? searched
+        ? { icon: Search, title: 'No photos found', text: 'Try a month or year, a folder, an album, or “videos”.' }
+        : { icon: Search, title: 'Search your photos', text: 'Try “December 2024”, “last summer”, “screenshots”, an album’s name, or “videos”.' }
+      : searched || filtered
+        ? { icon: Search, title: 'No results', text: 'Try a different name or filter.' }
+        : { icon: Search, title: 'Search your drive', text: 'Type a file or folder name, or pick a filter.' },
     recent: { icon: Clock, title: 'No recent files', text: 'Files you upload will show up here.' },
     starred: { icon: Star, title: 'Nothing starred yet', text: 'Star files and folders to find them quickly.' },
     trash: { icon: Trash2, title: 'Trash is empty', text: `Deleted items stay here for ${TRASH_DAYS} days.` },

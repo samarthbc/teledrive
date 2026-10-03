@@ -193,7 +193,8 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] New album from + New and the + button
 - [x] Free up space: remove backed-up photos from the phone (after an "Are you sure?" and Android's own prompt)
 - [x] Share an album to a Telegram chat (as Telegram albums); download an album as a ZIP
-- [ ] Later: on this day, map, search
+- [x] Search photos by date ("dec 2024", "last summer"), kind (videos, starred, large), folder, album or name
+- [ ] Later: on this day, map, smart search (what's in a photo, on the device)
 
 ---
 
