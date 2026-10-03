@@ -29,7 +29,7 @@ export default function Sidebar(props: {
   /** Open TelePhotos (created the first time). */
   onOpenPhotos: () => void
   onNewDrive: () => void
-  /** Only in the Android app, in TelePhotos. */
+  /** Only in the Android app, in TelePhotos: the storage card's Backup line (leads to Settings). */
   onCameraBackup?: () => void
   /** Only on the website: download links for the apps. */
   onGetApps?: () => void
@@ -130,7 +130,6 @@ export default function Sidebar(props: {
         <Link to="/" icon={inPhotos ? Images : HardDrive} label={rootName} active={inDrive} />
         <Link to="/recent" icon={Clock} label="Recent" />
         <Link to="/starred" icon={Star} label="Starred" count={counts.starred} />
-        {onCameraBackup && <Item icon={Camera} label="Camera backup" onClick={onCameraBackup} />}
         <Link to="/trash" icon={Trash2} label="Trash" count={counts.trash} />
       </nav>
 

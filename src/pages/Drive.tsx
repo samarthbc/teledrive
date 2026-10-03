@@ -32,7 +32,6 @@ import { discard, findResumable, uploadFile, type UploadSource } from '../drive/
 import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } from '../native/android'
 import { useBackHandler } from '../native/backButton'
 import { useIncomingShares } from '../native/share'
-import CameraBackupDialog from '../components/dialogs/CameraBackupDialog'
 import Dialog from '../components/Dialog'
 import GetApps from '../components/GetApps'
 import ThemeButton from '../components/ThemeButton'
@@ -63,7 +62,6 @@ type Modal =
   | { type: 'trashLocked'; items: Item[] }
   | { type: 'details'; item: Item }
   | { type: 'logout' }
-  | { type: 'backup' }
   | { type: 'getApps' }
   | { type: 'lock'; item: Item; action: LockAction; then?: (item: Item) => void }
   | { type: 'send'; files: FileItem[] }
@@ -588,7 +586,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       onSwitchDrive={switchDrive}
       onOpenPhotos={openPhotos}
       onNewDrive={() => setModal({ type: 'newDrive' })}
-      onCameraBackup={appUi && inPhotos ? () => setModal({ type: 'backup' }) : undefined}
+      // Camera backup lives in Settings; TelePhotos' storage card shows its status and leads there
+      onCameraBackup={appUi && inPhotos ? () => navigate('/settings') : undefined}
       onGetApps={() => setModal({ type: 'getApps' })}
     />
   )
@@ -665,7 +664,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             </header>
             <div className="flex-1 overflow-y-auto px-4 pt-5 pb-28 md:-mx-4.5 md:-mb-4.5 md:px-4.5 md:pt-6 md:pb-8">
               <h1 className="h-display mb-6 md:mb-8">Settings</h1>
-              <SettingsView onGetApps={isWebsite ? () => setModal({ type: 'getApps' }) : undefined} />
+              <SettingsView onGetApps={isWebsite ? () => setModal({ type: 'getApps' }) : undefined} cameraBackup={appUi} />
             </div>
           </>
         ) : (
@@ -883,7 +882,6 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       </div>
       <BottomNav
         photos={inPhotos}
-        onBackup={appUi && inPhotos ? () => setModal({ type: 'backup' }) : undefined}
         onPhotos={appUi && !inPhotos ? openPhotos : undefined}
       />
 
@@ -1001,7 +999,6 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           onClose={() => setModal(null)}
         />
       )}
-      {modal?.type === 'backup' && <CameraBackupDialog onClose={() => setModal(null)} />}
       {modal?.type === 'getApps' && (
         <Dialog title="Get the app" icon={MonitorSmartphone} subtitle="TeleDrive for Windows and Android" onClose={() => setModal(null)}>
           <GetApps heading={false} />
@@ -1146,7 +1143,7 @@ function EmptyState(props: {
       ? {
           icon: Images,
           title: isRoot ? 'No photos yet' : 'Nothing here yet',
-          text: isAndroid ? 'Turn on Camera backup, or upload photos and videos.' : 'Drop photos and videos here, or use Upload.',
+          text: isAndroid ? 'Turn on Camera backup in Settings, or upload photos and videos.' : 'Drop photos and videos here, or use Upload.',
         }
       : { icon: CloudUpload, title: isRoot ? 'Your drive is empty' : 'Nothing here yet', text: 'Drop files or folders here, or use Upload.' },
     search: searched || filtered
@@ -1180,11 +1177,8 @@ function EmptyState(props: {
   )
 }
 
-/**
- * Phone tabs. The fourth: in the app, Photos (opens TelePhotos) in other drives and Camera backup in TelePhotos;
- * Trash on the website.
- */
-function BottomNav({ photos, onBackup, onPhotos }: { photos: boolean; onBackup?: () => void; onPhotos?: () => void }) {
+/** Phone tabs. The fourth: in the app, Photos (opens TelePhotos) in other drives; otherwise Trash. */
+function BottomNav({ photos, onPhotos }: { photos: boolean; onPhotos?: () => void }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const tabs = [
@@ -1196,11 +1190,9 @@ function BottomNav({ photos, onBackup, onPhotos }: { photos: boolean; onBackup?:
     },
     { label: 'Recent', icon: Clock, on: pathname === '/recent', go: () => navigate('/recent') },
     { label: 'Starred', icon: Star, on: pathname === '/starred', go: () => navigate('/starred') },
-    onBackup
-      ? { label: 'Backup', icon: Camera, on: false, go: onBackup }
-      : onPhotos
-        ? { label: 'Photos', icon: Images, on: false, go: onPhotos }
-        : { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
+    onPhotos
+      ? { label: 'Photos', icon: Images, on: false, go: onPhotos }
+      : { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
   ]
   return (
     <nav className="fixed inset-x-3 bottom-3 z-20 flex h-18 items-center justify-around rounded-md bg-surface raised-md md:hidden">

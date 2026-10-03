@@ -1,26 +1,26 @@
-import { Camera, ExternalLink, Folder, Loader2 } from 'lucide-react'
+import { ExternalLink, Folder, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Native, type MediaFolder } from '../../native/android'
+import { Native, type MediaFolder } from '../native/android'
 import {
-  CAMERA_PATH, folderLabel, requestMediaPermission, runBackup, setSource, setSourceWhen, sourcesOf, updateBackupSettings, useBackup,
-  type BackupWhen,
-} from '../../native/backup'
-import { driveName, PHOTOS_NAME } from '../../telegram/channel'
-import { useDrive } from '../../store/useDrive'
-import Dialog from '../Dialog'
-import { Choice as UiChoice, Segmented, Toggle as Switch } from '../ui'
+  CAMERA_PATH, enableBackup, folderLabel, requestMediaPermission, runBackup, setSource, setSourceWhen, sourcesOf,
+  updateBackupSettings, useBackup, type BackupWhen,
+} from '../native/backup'
+import { driveName, isPhotosDrive, PHOTOS_NAME } from '../telegram/channel'
+import { useDrive } from '../store/useDrive'
+import { toastError } from '../store/useToast'
+import { Choice as UiChoice, Segmented, Toggle as Switch } from './ui'
 
 const time = (ms: number) => new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
-export default function CameraBackupDialog({ onClose }: { onClose: () => void }) {
+/** Settings → Camera backup (Android app, shown while TelePhotos is open). Backups always go to TelePhotos. */
+export default function CameraBackupSettings() {
   const { settings, status, running, backedUp, lastCheck, tonight } = useBackup()
   const anyOvernight = sourcesOf(settings).some((s) => s.when === 'overnight')
   const encrypted = useDrive((s) => !!s.drive.encryption)
   // Backups set up before TelePhotos still go to the drive they were turned on in
   const elsewhere = useDrive((s) => {
-    if (!settings.driveId || settings.driveId === s.currentDrive) return null
-    const d = s.drives.find((x) => x.id === settings.driveId)
-    return d ? driveName(d) : null
+    const d = settings.driveId ? s.drives.find((x) => x.id === settings.driveId) : undefined
+    return d && !isPhotosDrive(d) ? driveName(d) : null
   })
   const [scope, setScope] = useState<'new' | 'all'>('new')
   const [error, setError] = useState<string | null>(null)
@@ -41,17 +41,17 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
       const since = scope === 'new' ? Math.floor(Date.now() / 1000) : 0
       // Keep the folders chosen before (if any), otherwise start with the camera
       const sources = settings.sources?.length ? settings.sources : [{ path: CAMERA_PATH, since }]
-      await updateBackupSettings({ enabled: true, since, sources })
+      await enableBackup({ since, sources })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Dialog title="Camera backup" onClose={onClose} wide>
-      <div className="space-y-4 pb-4 text-sm">
-        <div className="flex items-start gap-3">
-          <Camera className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+    <div className="space-y-4 px-4 py-4 text-sm sm:px-5">
+        <div>
           <p className="text-muted">
             New photos and videos are uploaded to {PHOTOS_NAME}: the camera into <b>Camera</b>, other folders you pick
             (Screenshots, WhatsApp Images…) into a folder of their own. Each folder is backed up as photos are taken, or
@@ -72,7 +72,7 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
               <button className="btn-ghost font-semibold text-brand-ink" onClick={() => void updateBackupSettings({ enabled: false })}>
                 Turn off
               </button>
-              <button className="btn-primary" onClick={() => void updateBackupSettings({ enabled: true })}>
+              <button className="btn-primary" onClick={() => enableBackup().catch(toastError)}>
                 Back up to {PHOTOS_NAME} instead
               </button>
             </div>
@@ -139,8 +139,7 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
             </div>
           </>
         )}
-      </div>
-    </Dialog>
+    </div>
   )
 }
 

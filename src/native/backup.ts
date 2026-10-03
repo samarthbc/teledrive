@@ -70,6 +70,8 @@ export interface BackupHost {
   openForBackup?(driveId: string): Promise<boolean>
   /** Open the drive that was open before openForBackup again. */
   returnFromBackup?(): Promise<void>
+  /** The app: TelePhotos' ID, creating it (without opening it) if it doesn't exist yet. */
+  photosDriveId?(): Promise<string>
 }
 
 let host: BackupHost | null = null
@@ -139,16 +141,29 @@ export async function loadBackupSettings(): Promise<BackupSettings> {
 export async function updateBackupSettings(changes: Partial<BackupSettings>): Promise<void> {
   await load()
   const settings = { ...useBackup.getState().settings, ...changes }
-  // Turning backup on in another drive moves it there
-  if (changes.enabled && settings.driveId !== currentDriveId()) {
-    settings.driveId = currentDriveId() ?? undefined
-    delete settings.folderId
-    settings.sources = sourcesOf(settings).map(({ folderId: _, ...s }) => s)
-  }
   useBackup.setState({ settings, status: settings.enabled ? 'Waiting…' : 'Off' })
   await setKV(SETTINGS_KEY, settings)
   await syncBackgroundSchedule()
   if (settings.enabled) void runBackup()
+}
+
+/**
+ * Turn backup on, into TelePhotos (created if needed). Also moves backups set up in another drive before TelePhotos:
+ * new photos go to TelePhotos, what's backed up stays where it is.
+ */
+export async function enableBackup(changes: Partial<BackupSettings> = {}): Promise<void> {
+  await load()
+  if (!host?.photosDriveId) throw new Error('Camera backup only works in the app')
+  const driveId = await host.photosDriveId()
+  const settings = { ...useBackup.getState().settings, ...changes }
+  // Folders made in the old drive don't exist in TelePhotos
+  const moved = settings.driveId !== driveId
+  await updateBackupSettings({
+    ...changes,
+    enabled: true,
+    driveId,
+    ...(moved && { folderId: undefined, sources: sourcesOf(settings).map(({ folderId: _, ...s }) => s) }),
+  })
 }
 
 /** Start or stop backing up a folder. `since`: only media added from then on (0 = everything). */

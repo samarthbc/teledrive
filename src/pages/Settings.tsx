@@ -1,5 +1,6 @@
 import { Loader2, Lock, LogOut, Monitor, RefreshCw, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import CameraBackupSettings from '../components/CameraBackupSettings'
 import ConfirmDialog from '../components/dialogs/ConfirmDialog'
 import { Segmented, Toggle } from '../components/ui'
 import { setRememberOnDevice } from '../drive/vault'
@@ -10,22 +11,39 @@ import { setThemeMode, useTheme, type ThemeMode } from '../lib/theme'
 import { checkForUpdates, updateNow, useUpdate, type CheckResult } from '../lib/updates'
 import { isAndroid } from '../native/android'
 import { isDesktop } from '../native/desktop'
-import { useDrive } from '../store/useDrive'
-import { toast } from '../store/useToast'
+import { useDrive, useInPhotos } from '../store/useDrive'
+import { PHOTOS_NAME } from '../telegram/channel'
+import { toast, toastError } from '../store/useToast'
 import { describeError } from '../telegram/auth'
 import { sessions, type Session } from '../telegram/sessions'
 
 /** Settings (IMPLEMENTATION.md Phase 10): per device, shown in the drive page's main area. */
-export default function SettingsView({ onGetApps }: { onGetApps?: () => void }) {
+export default function SettingsView({ onGetApps, cameraBackup }: { onGetApps?: () => void; cameraBackup?: boolean }) {
   const settings = useSettings()
   const themeMode = useTheme((t) => t.mode)
   const anyUnlocked = useDrive((s) => [...s.drive.items.values()].some((i) => i.lock && !i.locked))
   const lockNow = useDrive((s) => s.lockNow)
+  const inPhotos = useInPhotos()
 
   return (
-    // Full width; on very wide screens two columns (appearance, security and about | sessions)
-    <div className="grid items-start gap-8 pb-6 2xl:grid-cols-2">
-      <div className="space-y-8">
+    // Full width; on very wide screens two columns (appearance, security and about | sessions). The columns can't
+    // grow past the screen (long, truncated texts would otherwise widen them)
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-8 pb-6 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-8">
+        {/* Camera backup belongs to TelePhotos: set up there; other drives point to it */}
+        {cameraBackup && (
+          <Section title="Camera backup">
+            {inPhotos ? (
+              <CameraBackupSettings />
+            ) : (
+              <Row name={`Camera backup is in ${PHOTOS_NAME}`} hint={`Photos and videos are backed up to ${PHOTOS_NAME}. Its settings are there.`}>
+                <button className="btn-secondary" onClick={() => useDrive.getState().openPhotos().catch(toastError)}>
+                  Open {PHOTOS_NAME}
+                </button>
+              </Row>
+            )}
+          </Section>
+        )}
         <Section title="Appearance">
           <Row name="Theme" hint="System follows your device's light or dark mode.">
             <Segmented<ThemeMode>

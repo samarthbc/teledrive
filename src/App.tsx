@@ -32,6 +32,7 @@ export default function App() {
       },
       openForBackup: (id) => useDrive.getState().openForBackup(id),
       returnFromBackup: () => useDrive.getState().returnFromBackup(),
+      photosDriveId: () => useDrive.getState().ensurePhotosDrive().then((d) => d.id),
     })
     // Opening the backup drive backs up what waited meanwhile (not when a background round opened it: it does that)
     useDrive.subscribe((s, prev) => {

@@ -70,6 +70,8 @@ interface State {
   createDrive: (name: string) => Promise<void>
   /** Open TelePhotos, creating it the first time. Throws if transfers are still running. */
   openPhotos: () => Promise<void>
+  /** TelePhotos, created (but not opened) if it doesn't exist yet. */
+  ensurePhotosDrive: () => Promise<DriveInfo>
   /**
    * Camera backup while the app is in the background: open the backup drive, remembering the one that was open.
    * False if it can't now (transfers running, or the switch failed).
@@ -93,7 +95,7 @@ let booting: Promise<void> | null = null
 /** No syncing while a different drive is being opened. */
 let switching = false
 /** TelePhotos being created (so two taps don't create two). */
-let creatingPhotos: Promise<void> | null = null
+let creatingPhotos: Promise<DriveInfo> | null = null
 /** Waiting on the TeleDrive password screen. */
 let pendingPassword: { config: AccountConfig | null; resolve: () => void } | null = null
 
@@ -376,12 +378,18 @@ export const useDrive = create<State>((set, get) => {
     openPhotos: async () => {
       const existing = get().drives.find(isPhotosDrive)
       if (existing) return get().switchDrive(existing.id)
-      if (creatingPhotos) return creatingPhotos
       if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before opening TelePhotos')
-      creatingPhotos = (async () => {
+      const drive = await get().ensurePhotosDrive()
+      await get().switchDrive(drive.id)
+    },
+
+    ensurePhotosDrive: async () => {
+      const existing = get().drives.find(isPhotosDrive)
+      if (existing) return existing
+      creatingPhotos ??= (async () => {
         const { drive, drives } = await createPhotosDrive(get().drives)
         set({ drives })
-        await get().switchDrive(drive.id)
+        return drive
       })().finally(() => (creatingPhotos = null))
       return creatingPhotos
     },
