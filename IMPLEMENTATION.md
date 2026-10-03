@@ -1123,6 +1123,66 @@ no separate password to set.
   + Add, Also remove from this phone.
 
 
+## Phase 18: Back up a date range 📝 (planned)
+
+Today camera backup offers two starting points: **only new** photos (from now on) or **everything** in the folder.
+This phase adds a third: **every photo and video taken between two dates**, for example "all of 2024" or "the trip,
+12–20 Aug". It works when backup is first turned on and for a folder that's already backed up (catching up on older
+photos without uploading the whole folder).
+
+### 18.1 What the user sees
+- **Turning camera backup on:** three choices: *Only new photos and videos*, *Everything in the camera folder*, and
+  *From a date range* (**From** and **To** date pickers, both days included). Below the dates: "N photos and videos,
+  X GB" counted live, so the user knows how much will upload before starting. **Also back up new photos** (on by
+  default) keeps backing up photos taken from now on; turned off, only the range is backed up.
+- **Adding a folder** (the *Back up:* row under a folder): *Only new*, *All N items*, and **Date range…** (the
+  same pickers and count).
+- **A folder that's already on:** **Back up older photos…** in its row opens the same pickers. The range is added to
+  what the folder already backs up, so new photos keep coming either way.
+- Quick picks next to the pickers: *Last 30 days*, *This year*, *Last year*. The **To** date can't be before
+  **From**, and neither can be in the future.
+- The status line counts the range like any other waiting photos ("Backing up 120 of 3,400"). When the range is
+  done, it's dropped from the settings (and shows as a short "Backed up 2024" toast or line, not a permanent setting).
+
+### 18.2 Which date
+- The **date taken** (`dateTaken`, from the photo library/EXIF), falling back to the date it was added to the phone
+  (`dateAdded`). The date taken is what the user means by "photos from August": photos copied from an old phone
+  or downloaded later have a recent added date but an old taken date. It's also the date the timeline sorts by.
+- Days are whole local days: From = 00:00 on that day, To = 23:59:59 on that day, in the phone's time zone.
+
+### 18.3 How it's stored
+- `BackupSource.ranges?: { from: number; to: number }[]` (unix seconds, taken-date bounds) next to the existing
+  `since` (added-date start for new photos). An item is in scope when `dateAdded >= since` **or** its taken date
+  falls in one of the ranges.
+- "Only the range, no new photos": `since` is set far in the future (`Number.MAX_SAFE_INTEGER`), so the folder
+  stops when the range is done. Once a range has nothing left waiting, it's removed; a folder left with no ranges and
+  no new photos to back up is turned off.
+- Overlaps cost nothing: the done set (`backupDone`) already skips anything uploaded before, whatever range found it.
+- Older app versions ignore `ranges` and keep using `since`, so settings stay readable both ways.
+
+### 18.4 Listing
+- `listSince(source, keep)` lists from `since`; with ranges it lists from 0 instead and keeps items that are in scope
+  (18.3). Each listing goes through the whole folder in pages of 1,000, which is fine for tens of thousands of photos.
+  If that's slow on big folders, add `takenFrom`/`takenTo` to the native `listMedia` (a `DATE_TAKEN` condition in the
+  MediaStore query), but only if needed.
+- The same scope check is used by `listNew` (what to upload), the waiting/tonight counts, Free up space and
+  `findPhoneCopies`, so they agree on which photos the folder covers.
+- The range follows the folder's *As taken / Overnight* setting. A big range on the camera folder uploads straight
+  away like Everything does today (on Wi-Fi only if chosen).
+- New function `countRange(path, from, to)` gives the live count and size for the dialog: items in range and not
+  already done.
+
+### 18.5 Steps
+1. `BackupSource.ranges`, the in-scope check, `listSince` from 0 with ranges, dropping finished ranges;
+   `countRange`; unit tests for the scope (taken vs added date, day bounds, overlaps, only-range folders).
+2. UI: a `DateRangePicker` (two native `<input type="date">`, quick picks, live count); the third choice when turning
+   backup on; *Date range…* when adding a folder; *Back up older photos…* on a folder that's on.
+3. Background page and Android jobs: nothing new (they run `backupRound`, which uses the same listing), but check a
+   range uploads with the app closed.
+4. Check on the phone: a range of a few days in Camera uploads exactly those photos; a range overlapping what's
+   backed up uploads only the rest; "only the range" stops afterwards; a range added to a folder that's on keeps new
+   photos coming; counts match; Free up space still offers only backed-up photos.
+
 ## Later (ideas, not planned yet)
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).
 

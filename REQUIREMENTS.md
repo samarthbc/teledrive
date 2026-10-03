@@ -195,6 +195,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Share an album to a Telegram chat (as Telegram albums); download an album as a ZIP
 - [x] Search photos by date ("dec 2024", "last summer"), kind (videos, starred, large), folder, album or name
 - [ ] Locked photos: a default album behind the TeleDrive password; locked photos are in no other album (Phase 17)
+- [ ] Camera backup from a date range: every photo and video taken between two dates, when turning backup on or for a folder already backed up (Phase 18)
 - [ ] Later: on this day, map, smart search (what's in a photo, on the device)
 
 ---
@@ -239,3 +240,4 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **15** | TelePhotos: per-folder backup timing (as taken / overnight) |
 | **16** | TelePhotos: albums, free up space, and more |
 | **17** | TelePhotos: Locked photos |
+| **18** | Camera backup: back up a date range |
