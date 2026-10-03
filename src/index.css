@@ -256,3 +256,12 @@ body {
     animation-duration: 0s !important;
   }
 }
+
+/* Anything clickable shows the hand (Tailwind 4 leaves buttons with the arrow) */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary {
+    cursor: pointer;
+  }
+}

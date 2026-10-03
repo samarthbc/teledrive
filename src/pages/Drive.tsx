@@ -189,6 +189,11 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     setAnchor(null)
   }, [page])
 
+  // TelePhotos has no Recent (its timeline is newest first)
+  useEffect(() => {
+    if (inPhotos && mode === 'recent') navigate('/', { replace: true })
+  }, [inPhotos, mode, navigate])
+
   // The album was deleted (here or on another device)
   useEffect(() => {
     if (mode === 'album' && !album) navigate('/albums', { replace: true })
