@@ -33,6 +33,7 @@ import { verifyPassword } from '../drive/vault'
 import { AddToAlbumDialog, AlbumGrid } from '../components/Albums'
 import { createAlbum, deleteAlbum, renameAlbum, setInAlbum } from '../drive/ops'
 import PhotoTimeline, { timelineItems } from '../components/PhotoTimeline'
+import { photoSources } from '../drive/photos'
 import { searchPhotos } from '../drive/photoSearch'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
 import { isAndroid, openWithOtherApp, phoneSaveTarget, type CameraItem, type PhoneSaveTarget } from '../native/android'
@@ -143,12 +144,15 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const album = mode === 'album' && albumId ? drive.albums.get(albumId) : undefined
   /** Picking photos to add to an album: the timeline without that album's photos; tapping selects. */
   const addTo = timeline && mode === 'folder' ? (drive.albums.get(params.get('addTo') ?? '') ?? null) : null
-  /** Timeline chip: a source folder's ID (Camera, Screenshots…), or "videos". */
-  const source = timeline && mode === 'folder' ? params.get('src') : null
-  const sources = useMemo(
-    () => (timeline && mode === 'folder' ? listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked && !i.x.lp) : []),
+  /** Timeline chips: the source folders that have photos (Camera, Screenshots…), and Videos if there are any. */
+  const chips = useMemo(
+    () => (timeline && mode === 'folder' ? photoSources(drive) : { folders: [], videos: false }),
     [drive, timeline, mode],
   )
+  const sources = chips.folders
+  /** The chosen chip: a source folder's ID, or "videos" (All if its chip is gone, e.g. the folder was emptied). */
+  const picked = timeline && mode === 'folder' ? params.get('src') : null
+  const source = picked === 'videos' ? (chips.videos ? picked : null) : sources.some((f) => f.id === picked) ? picked : null
 
   const items = useMemo(() => {
     const match = filter && FILTERS[filter] ? FILTERS[filter].match : undefined
@@ -179,7 +183,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   /** TelePhotos search: suggestions under the search box. */
   const photoSuggestions = useMemo(() => {
     if (!(timeline && mode === 'search')) return []
-    const folders = listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked && !i.x.lp).map((f) => f.name)
+    const folders = photoSources(drive).folders.map((f) => f.name)
     const albums = [...drive.albums.values()].sort((a, b) => b.ts - a.ts).slice(0, 5).map((a) => a.name)
     return [...new Set(['Videos', 'Starred', 'This month', 'Last month', 'This year', 'Last year', ...folders, ...albums, 'Large videos'])]
   }, [drive, timeline, mode])
@@ -1067,9 +1071,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
             {appUi && <BackupNotice inPhotos={inPhotos} onOpenPhotos={openPhotos} />}
           </div>
           {addTo && <p className="-mt-2 mb-4 text-sm text-muted">To “{addTo.name}”: photos that aren't in it yet.</p>}
-          {timeline && mode === 'folder' && (
+          {timeline && mode === 'folder' && (sources.length > 0 || chips.videos) && (
             <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
-              {[{ id: null, name: 'All' }, ...sources.map((f) => ({ id: f.id, name: f.name })), { id: 'videos', name: 'Videos' }].map((c) => (
+              {[{ id: null, name: 'All' }, ...sources.map((f) => ({ id: f.id, name: f.name })), ...(chips.videos ? [{ id: 'videos', name: 'Videos' }] : [])].map((c) => (
                 <button
                   key={c.id ?? 'all'}
                   className={source === c.id ? 'chip-active' : 'chip'}

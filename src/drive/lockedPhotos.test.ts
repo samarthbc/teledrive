@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { timelineItems } from './photos'
+import { photoSources, timelineItems } from './photos'
 import { ROOT, type Meta } from './meta'
 import { searchPhotos } from './photoSearch'
 import { buildDrive, lockedPhotosFolder, type MessageRecord } from './tree'
@@ -41,5 +41,23 @@ describe('locked photos', () => {
   it('lists only them in Locked photos', () => {
     expect(ids(timelineItems(drive(), { locked: true }))).toEqual(['secret'])
     expect(timelineItems(buildDrive([rec(photo('a', ROOT, 'a.jpg'))]), { locked: true })).toEqual([])
+  })
+})
+
+describe('timeline chips', () => {
+  it('only folders that still have photos, and Videos only if there are videos', () => {
+    const d = buildDrive([
+      rec({ td: 1, t: 'd', id: 'cam', p: ROOT, n: 'Camera' }),
+      rec({ td: 1, t: 'd', id: 'shots', p: ROOT, n: 'Screenshots' }),
+      rec({ td: 1, t: 'd', id: 'lp', p: ROOT, n: 'Locked photos', x: { lp: 1 } }),
+      rec(photo('a', 'cam', 'a.jpg')),
+      rec(photo('s', 'shots', 's.jpg')),
+      rec(photo('secret', 'lp', 'secret.jpg')),
+    ])
+    expect(photoSources(d).folders.map((f) => f.id).sort()).toEqual(['cam', 'shots'])
+    expect(photoSources(d).videos).toBe(false)
+    // Every screenshot deleted (in the trash): no Screenshots chip
+    d.items.get('s')!.x.tr = 1
+    expect(photoSources(d).folders.map((f) => f.id)).toEqual(['cam'])
   })
 })

@@ -1,5 +1,5 @@
 import { ROOT } from './meta'
-import { isHidden, lockedPhotosFolder, type Drive, type FileItem, type Item } from './tree'
+import { isHidden, listFolder, lockedPhotosFolder, type Drive, type FileItem, type Item } from './tree'
 
 /** When a photo was taken; files without a date taken (older uploads) use their upload time. */
 export function photoDate(item: FileItem): number {
@@ -34,6 +34,21 @@ export function timelineItems(
     out.push(i)
   }
   return sortPhotos(out)
+}
+
+/**
+ * The timeline's chips: the folders at the top (Camera, Screenshots…) that have photos or videos in the timeline, and
+ * whether it has any videos. A folder that's been emptied (all its photos deleted) gets no chip.
+ */
+export function photoSources(drive: Drive): { folders: Item[]; videos: boolean } {
+  const used = new Set<string>()
+  let videos = false
+  for (const i of timelineItems(drive, {})) {
+    used.add(topFolder(drive, i))
+    if (i.mime.startsWith('video/')) videos = true
+  }
+  const folders = listFolder(drive, ROOT).filter((i) => i.kind === 'folder' && !i.locked && !i.x.lp && used.has(i.id))
+  return { folders, videos }
 }
 
 /** The folder at the top of the drive an item is in (its own ID if it's at the top). */
