@@ -1135,7 +1135,7 @@ Settings → Camera backup was redesigned at the same time (canvas "Camera backu
 details one tap deeper).
 - **Backup off:** one row, "Back up this phone's photos" and **Turn on** (the camera, new photos only, Wi-Fi only);
   everything else is chosen once it's on. Below it, Free up space.
-- **Backup on:** a status card (Up to date / Backing up…, "11 backed up · checked 9:20 pm", **Back up now**); then
+- **Backup on:** a status card (Up to date / Backing up…, "Checked 9:20 pm"; no count of what was backed up, since it may have been deleted since, **Back up now**); then
   *Camera backup* (switch), *Folders >* ("Camera, Screenshots"), *Only on Wi-Fi*, *Only while charging* (when some
   folder is overnight); then *Free up space* and *Notice* (folds open).
 - **Folders** (a screen of its own): *On* (each with "1,783 items · As taken" and a switch) and *On this phone*

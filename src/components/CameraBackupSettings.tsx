@@ -27,7 +27,7 @@ const folderIcon = (path: string) => (path === CAMERA_PATH ? Camera : isScreensh
  * then the settings (Folders opens a screen of its own), then Free up space and Notice. Backups go to TelePhotos.
  */
 export default function CameraBackupSettings() {
-  const { settings, status, running, backedUp, lastCheck, tonight } = useBackup()
+  const { settings, status, running, lastCheck, tonight } = useBackup()
   const sources = sourcesOf(settings)
   const anyOvernight = sources.some((s) => s.when === 'overnight')
   const encrypted = useDrive((s) => !!s.drive.encryption)
@@ -84,11 +84,17 @@ export default function CameraBackupSettings() {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-base leading-snug font-extrabold break-words">{status}</p>
-          <p className="mt-0.5 text-[13px] text-muted">
-            {backedUp} backed up
-            {lastCheck && ` · checked ${new Date(lastCheck).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
-            {anyOvernight && tonight > 0 && ` · ${tonight} waiting for tonight`}
-          </p>
+          {/* No "N backed up": what was backed up may since have been deleted from TelePhotos */}
+          {(lastCheck || (anyOvernight && tonight > 0)) && (
+            <p className="mt-0.5 text-[13px] text-muted">
+              {[
+                lastCheck && `Checked ${new Date(lastCheck).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`,
+                anyOvernight && tonight > 0 && `${tonight} waiting for tonight`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
         </div>
         <button className="btn-secondary h-10 shrink-0 px-4" disabled={running} onClick={() => void runBackup('all')}>
           Back up now
