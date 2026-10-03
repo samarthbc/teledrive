@@ -1,5 +1,5 @@
 import {
-  Camera, Check, ChevronDown, Clock, FolderPlus, FolderUp, HardDrive, Images, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Settings, Star,
+  Album, Camera, Check, ChevronDown, Clock, FolderPlus, FolderUp, HardDrive, Images, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Settings, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -128,6 +128,7 @@ export default function Sidebar(props: {
 
       <nav className="space-y-1">
         <Link to="/" icon={inPhotos ? Images : HardDrive} label={rootName} active={inDrive} />
+        {inPhotos && <Link to="/albums" icon={Album} label="Albums" active={pathname === '/albums' || pathname.startsWith('/album/')} />}
         <Link to="/recent" icon={Clock} label="Recent" />
         <Link to="/starred" icon={Star} label="Starred" count={counts.starred} />
         <Link to="/trash" icon={Trash2} label="Trash" count={counts.trash} />

@@ -1,6 +1,6 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, Camera, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen, FolderPlus,
-  FolderUp, HardDrive, Images, Info, LayoutGrid, Loader2, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff,
+  FolderUp, HardDrive, Images, ImageMinus, ImagePlus, Info, Album as AlbumIcon, MoreVertical, LayoutGrid, Loader2, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff,
   Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, MonitorSmartphone, RefreshCcwDot, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -24,10 +24,12 @@ import {
 } from '../drive/ops'
 import { enqueue } from '../drive/queue'
 import {
-  breadcrumbs, childLevel, collectTree, containsLocked, messageIds, findDuplicate, hasFileOfSize, isHidden, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
-  type Drive, type FileItem, type Item,
+  breadcrumbs, childLevel, collectTree, containsLocked, messageIds, findDuplicate, hasFileOfSize, listFolder, zipEntries, locationOf, recentFiles, searchItems, starredItems, trashedItems, uniqueName,
+  type Album, type FileItem, type Item,
 } from '../drive/tree'
-import PhotoTimeline, { sortPhotos } from '../components/PhotoTimeline'
+import { AddToAlbumDialog, AlbumGrid } from '../components/Albums'
+import { createAlbum, deleteAlbum, renameAlbum, setInAlbum } from '../drive/ops'
+import PhotoTimeline, { timelineItems } from '../components/PhotoTimeline'
 import { discard, findResumable, uploadFile, type UploadSource } from '../drive/upload'
 import { isAndroid, openWithOtherApp, phoneSaveTarget, type PhoneSaveTarget } from '../native/android'
 import { useBackHandler } from '../native/backButton'
@@ -51,7 +53,7 @@ import { useBackup } from '../native/backup'
 import { driveName } from '../telegram/channel'
 import { toast, toastError } from '../store/useToast'
 
-export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash' | 'settings'
+export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash' | 'settings' | 'albums' | 'album'
 
 type Modal =
   | { type: 'newFolder' }
@@ -66,6 +68,10 @@ type Modal =
   | { type: 'lock'; item: Item; action: LockAction; then?: (item: Item) => void }
   | { type: 'send'; files: FileItem[] }
   | { type: 'newDrive' }
+  | { type: 'addToAlbum'; files: FileItem[] }
+  | { type: 'newAlbum' }
+  | { type: 'renameAlbum'; album: Album }
+  | { type: 'deleteAlbum'; album: Album }
   | { type: 'duplicates'; duplicates: Duplicate[]; total: number; onSkip: () => void; onUploadAll: () => void }
 
 /** A file to upload and the folder it goes into. */
@@ -75,7 +81,9 @@ interface UploadJob {
 }
 
 const SORT_LABELS: Record<SortKey, string> = { name: 'Name', date: 'Date', size: 'Size', type: 'Type' }
-const TITLES: Record<Mode, string> = { folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash', settings: 'Settings' }
+const TITLES: Record<Mode, string> = {
+  folder: 'My Drive', search: 'Search', recent: 'Recent', starred: 'Starred', trash: 'Trash', settings: 'Settings', albums: 'Albums', album: 'Album',
+}
 
 const act = (p: Promise<unknown>) => p.catch(toastError)
 
@@ -88,7 +96,7 @@ const appUi = isAndroid || (import.meta.env.DEV && new URLSearchParams(location.
 let lastFolderPath = '/'
 
 export default function DrivePage({ mode }: { mode: Mode }) {
-  const { folderId = ROOT } = useParams()
+  const { folderId = ROOT, albumId } = useParams()
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -119,7 +127,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const current = mode === 'folder' && folderExists ? folderId : ROOT
   const crumbs = mode === 'folder' ? breadcrumbs(drive, current) : []
   // TelePhotos: its top and Starred are a timeline of every photo and video (by date taken), not folders
-  const timeline = inPhotos && ((mode === 'folder' && current === ROOT) || mode === 'starred')
+  const timeline = inPhotos && ((mode === 'folder' && current === ROOT) || mode === 'starred' || mode === 'album')
+  const album = mode === 'album' && albumId ? drive.albums.get(albumId) : undefined
+  /** Picking photos to add to an album: the timeline without that album's photos; tapping selects. */
+  const addTo = timeline && mode === 'folder' ? (drive.albums.get(params.get('addTo') ?? '') ?? null) : null
   /** Timeline chip: a source folder's ID (Camera, Screenshots…), or "videos". */
   const source = timeline && mode === 'folder' ? params.get('src') : null
   const sources = useMemo(
@@ -129,8 +140,12 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const items = useMemo(() => {
     const match = filter && FILTERS[filter] ? FILTERS[filter].match : undefined
-    if (timeline) return timelineItems(drive, { starred: mode === 'starred', source })
+    if (timeline)
+      return timelineItems(drive, { starred: mode === 'starred', source, album: album?.id ?? (mode === 'album' ? '-' : undefined), notInAlbum: addTo?.id })
     switch (mode) {
+      case 'albums':
+      case 'album':
+        return []
       case 'folder':
         return sortItems(listFolder(drive, current), sort)
       case 'search':
@@ -144,7 +159,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       case 'settings':
         return []
     }
-  }, [drive, mode, current, query, filter, sort, timeline, source])
+  }, [drive, mode, current, query, filter, sort, timeline, source, album, addTo])
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const selection = [...selected].flatMap((id) => byId.get(id) ?? [])
@@ -156,11 +171,17 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     if (f && (!now || now.locked || now.concealed)) setPreview(null)
   }, [drive, preview])
 
-  // Selection belongs to the page being viewed
+  // Selection belongs to the page being viewed (picking photos for an album keeps it across the chips)
+  const page = addTo ? `${location.pathname}|add:${addTo.id}` : `${location.pathname}${location.search}`
   useEffect(() => {
     setSelected(new Set())
     setAnchor(null)
-  }, [location.pathname, location.search])
+  }, [page])
+
+  // The album was deleted (here or on another device)
+  useEffect(() => {
+    if (mode === 'album' && !album) navigate('/albums', { replace: true })
+  }, [mode, album, navigate])
 
   useEffect(() => {
     if (mode === 'search') searchInput.current?.focus()
@@ -416,7 +437,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         return
       }
     }
-    if (e.ctrlKey || e.metaKey || selected.size) return toggle(item)
+    if (e.ctrlKey || e.metaKey || selected.size || addTo) return toggle(item)
     open(item)
   }
 
@@ -438,6 +459,29 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   })
 
   // ---- Menus ----
+
+  const removeFromAlbum = async (list: Item[]) => {
+    if (!album) return
+    const files = list.filter((i): i is FileItem => i.kind === 'file')
+    await setInAlbum(files, album.id, false)
+    clearSelection()
+    toast(`Removed ${files.length} photo${files.length === 1 ? '' : 's'} from “${album.name}”`)
+  }
+
+  const finishAdding = async () => {
+    if (!addTo) return
+    const files = selection.filter((i): i is FileItem => i.kind === 'file')
+    if (files.length) {
+      await setInAlbum(files, addTo.id, true)
+      toast(`Added ${files.length} photo${files.length === 1 ? '' : 's'} to “${addTo.name}”`)
+    }
+    navigate(`/album/${addTo.id}`)
+  }
+
+  const albumMenu = (a: Album): MenuEntry[] => [
+    { label: 'Rename', icon: Pencil, onClick: () => setModal({ type: 'renameAlbum', album: a }) },
+    { label: 'Delete album', icon: Trash2, danger: true, onClick: () => setModal({ type: 'deleteAlbum', album: a }) },
+  ]
 
   const itemMenu = (item: Item): MenuEntry[] => {
     if (mode === 'trash')
@@ -467,6 +511,12 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ? [{ label: 'Send to Telegram…', icon: Send, onClick: () => sendToTelegram([item]), disabled: !!cantSend(item) }]
         : []),
       ...(mode !== 'folder' ? [{ label: 'Show in folder', icon: FolderInput, onClick: () => openFolder(item.parent) }] : []),
+      ...(inPhotos && item.kind === 'file'
+        ? [
+            { label: 'Add to album…', icon: ImagePlus, onClick: () => setModal({ type: 'addToAlbum', files: [item] }) },
+            ...(album ? [{ label: 'Remove from album', icon: ImageMinus, onClick: () => void act(removeFromAlbum([item])) }] : []),
+          ]
+        : []),
       { label: 'Rename', icon: Pencil, onClick: () => setModal({ type: 'rename', item }) },
       { label: 'Move', icon: FolderInput, onClick: () => setModal({ type: 'move', items: [item] }) },
       item.x.fav
@@ -599,14 +649,24 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ? (i: Item) => `Deleted ${formatDate(i.x.tr ?? 0)} · from ${locationOf(drive, i, rootName)}`
         : (i: Item) => locationOf(drive, i, rootName)
 
-  const fabEntries: MenuEntry[] = inPhotos
+  const fabEntries: MenuEntry[] = mode === 'albums'
+    ? [{ label: 'New album', icon: Plus, onClick: () => setModal({ type: 'newAlbum' }) }]
+    : album
+      ? [{ label: 'Add photos', icon: ImagePlus, onClick: () => navigate(`/?addTo=${album.id}`) }]
+      : inPhotos
     ? [{ label: 'Upload photos', icon: Upload, onClick: () => fileInput.current?.click() }]
     : [
         { label: 'Upload files', icon: Upload, onClick: () => fileInput.current?.click() },
         ...(isAndroid ? [] : [{ label: 'Upload folder', icon: FolderUp, onClick: () => folderInput.current?.click() }]),
         { label: 'New folder', icon: FolderPlus, onClick: newFolder },
       ]
-  const title = mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : TITLES[mode]
+  const title = addTo
+    ? 'Add photos'
+    : mode === 'folder'
+      ? (crumbs.at(-1)?.name ?? rootName)
+      : mode === 'album'
+        ? (album?.name ?? '')
+        : TITLES[mode]
   const count =
     mode === 'search'
       ? query || filter
@@ -614,7 +674,9 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           ? 'first 500 results'
           : `${items.length} result${items.length === 1 ? '' : 's'}`
         : ''
-      : timeline
+      : mode === 'albums'
+        ? `${drive.albums.size} album${drive.albums.size === 1 ? '' : 's'}`
+        : timeline
         ? `${items.length} photo${items.length === 1 ? '' : 's'}`
         : `${items.length} item${items.length === 1 ? '' : 's'}`
 
@@ -670,15 +732,34 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ) : (
           <>
         <header className="flex min-h-11 items-center gap-2.5 px-4 pt-4 md:gap-3 md:px-0 md:pt-0">
-          {selection.length ? (
+          {addTo ? (
+            <>
+              <button className="icon-btn" onClick={() => navigate(`/album/${addTo.id}`)} aria-label="Cancel">
+                <X />
+              </button>
+              <span className="min-w-0 flex-1 truncate text-[15px] font-extrabold">
+                {selection.length ? `${selection.length} selected` : 'Tap photos to add'}
+              </span>
+              <button className="btn-primary" disabled={!selection.length} onClick={() => void act(finishAdding())}>
+                <ImagePlus /> Add
+              </button>
+            </>
+          ) : selection.length ? (
             <SelectionBar
               count={selection.length}
               trashMode={mode === 'trash'}
+              onAddToAlbum={
+                inPhotos && mode !== 'trash'
+                  ? () => setModal({ type: 'addToAlbum', files: selection.filter((i): i is FileItem => i.kind === 'file') })
+                  : undefined
+              }
+              onRemoveFromAlbum={album ? () => void act(removeFromAlbum(selection)) : undefined}
               allStarred={selection.every((i) => i.x.fav)}
               onClear={clearSelection}
               onDownload={() => void download(selection)}
               onSend={() => sendToTelegram(selection)}
-              onMove={() => setModal({ type: 'move', items: selection })}
+              // Photos aren't sorted into folders in TelePhotos
+              onMove={inPhotos ? undefined : () => setModal({ type: 'move', items: selection })}
               onStar={() => void act(toggleStar(selection))}
               onTrash={() => void act(moveToTrash(selection))}
               onRestore={() => void act(restoreItems(selection))}
@@ -726,7 +807,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   <TriangleAlert className="size-5" />
                 </span>
               )}
-              <div className={`hidden h-11 shrink-0 gap-1 rounded-md p-1 pressed ${timeline ? '' : 'md:flex'}`} role="group" aria-label="View">
+              <div className={`hidden h-11 shrink-0 gap-1 rounded-md p-1 pressed ${timeline || mode === 'albums' ? '' : 'md:flex'}`} role="group" aria-label="View">
                 {(['list', 'grid'] as const).map((v) => {
                   const Icon = v === 'list' ? List : LayoutGrid
                   return (
@@ -744,15 +825,28 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                 })}
               </div>
               <button
-                className={`icon-btn md:hidden ${timeline ? 'hidden' : ''}`}
+                className={`icon-btn md:hidden ${timeline || mode === 'albums' ? 'hidden' : ''}`}
                 onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
                 aria-label={view === 'grid' ? 'List view' : 'Grid view'}
               >
                 {view === 'grid' ? <List /> : <LayoutGrid />}
               </button>
-              {mode !== 'recent' && mode !== 'trash' && !timeline && (
+              {mode !== 'recent' && mode !== 'trash' && mode !== 'albums' && !timeline && (
                 <button className="icon-btn" onClick={sortMenu} aria-label="Sort" title={`Sort by ${SORT_LABELS[sort.key]}`}>
                   {sort.dir === 'asc' ? <ArrowDownAZ /> : <ArrowUpAZ />}
+                </button>
+              )}
+              {album && (
+                <button
+                  className="icon-btn"
+                  aria-label="Album actions"
+                  title="Album actions"
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setMenu({ x: r.right - 224, y: r.bottom + 4, entries: albumMenu(album), header: { title: album.name } })
+                  }}
+                >
+                  <MoreVertical />
                 </button>
               )}
               <button className="icon-btn hidden md:inline-flex" onClick={() => void refresh()} aria-label="Refresh" title="Refresh">
@@ -790,19 +884,30 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   <Trash2 /> Empty trash
                 </button>
               )}
+              {mode === 'albums' && (
+                <button className="btn-secondary ml-auto hidden md:inline-flex" onClick={() => setModal({ type: 'newAlbum' })}>
+                  <Plus /> New album
+                </button>
+              )}
+              {album && (
+                <button className="btn-secondary ml-auto hidden md:inline-flex" onClick={() => navigate(`/?addTo=${album.id}`)}>
+                  <ImagePlus /> Add photos
+                </button>
+              )}
             </div>
             {mode === 'trash' && items.length > 0 && (
               <p className="mt-2 text-sm text-muted">Items in the trash are deleted forever after {TRASH_DAYS} days.</p>
             )}
             {appUi && <BackupNotice inPhotos={inPhotos} onOpenPhotos={openPhotos} />}
           </div>
+          {addTo && <p className="-mt-2 mb-4 text-sm text-muted">To “{addTo.name}”: photos that aren't in it yet.</p>}
           {timeline && mode === 'folder' && (
             <div className="-mx-4 mb-4 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:mb-3 md:px-4.5">
               {[{ id: null, name: 'All' }, ...sources.map((f) => ({ id: f.id, name: f.name })), { id: 'videos', name: 'Videos' }].map((c) => (
                 <button
                   key={c.id ?? 'all'}
                   className={source === c.id ? 'chip-active' : 'chip'}
-                  onClick={() => setParams(c.id ? { src: c.id } : {}, { replace: true })}
+                  onClick={() => setParams({ ...(c.id && { src: c.id }), ...(addTo && { addTo: addTo.id }) }, { replace: true })}
                 >
                   {c.name}
                 </button>
@@ -824,15 +929,22 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
           <div className="flex items-start gap-4.5">
             <div className="min-w-0 flex-1">
-              {timeline && items.length ? (
+              {mode === 'albums' && drive.albums.size ? (
+                <AlbumGrid
+                  drive={drive}
+                  onOpen={(a) => navigate(`/album/${a.id}`)}
+                  onMenu={(a, x, y) => setMenu({ x, y, entries: albumMenu(a), header: { title: a.name } })}
+                />
+              ) : timeline && items.length ? (
                 <PhotoTimeline
-                  key={`${mode}|${source ?? ''}`}
+                  key={`${mode}|${source ?? ''}|${album?.id ?? ''}|${addTo?.id ?? ''}`}
                   items={items as FileItem[]}
                   selected={selected}
                   scroller={scroller}
                   onClick={onItemClick}
                   onToggle={toggle}
                   onSelectMany={selectMany}
+                  selecting={!!addTo}
                   onMenu={(item, x, y) => setMenu({ x, y, entries: itemMenu(item), header: itemHeader(item) })}
                 />
               ) : items.length ? (
@@ -854,6 +966,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   photos={inPhotos}
                   onUpload={() => fileInput.current?.click()}
                   onNewFolder={newFolder}
+                  onNewAlbum={() => setModal({ type: 'newAlbum' })}
+                  onAddPhotos={album ? () => navigate(`/?addTo=${album.id}`) : undefined}
                 />
               )}
             </div>
@@ -866,7 +980,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
       {/* Phone: + button and transfers above the tabs; tablet: transfers in the corner */}
       <div className="pointer-events-none fixed inset-x-3 bottom-[96px] z-30 flex flex-col items-end gap-3 md:inset-x-auto md:right-4.5 md:bottom-4.5 md:w-80 lg:hidden">
-        {!selection.length && mode !== 'settings' && (
+        {!selection.length && !addTo && mode !== 'settings' && (
           <button
             className="pointer-events-auto mr-3 flex size-15 items-center justify-center rounded-[10px] bg-brand text-white raised-md active:pressed md:hidden"
             onClick={(e) => {
@@ -1001,6 +1115,52 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           <GetApps heading={false} />
         </Dialog>
       )}
+      {modal?.type === 'addToAlbum' && (
+        <AddToAlbumDialog
+          drive={drive}
+          files={modal.files}
+          onDone={(a) => {
+            setModal(null)
+            if (a) clearSelection()
+          }}
+        />
+      )}
+      {modal?.type === 'newAlbum' && (
+        <PromptDialog
+          title="New album"
+          initial=""
+          confirmLabel="Create"
+          onSubmit={async (name) => {
+            const id = await createAlbum(name)
+            // Straight on to choosing its photos
+            navigate(`/?addTo=${id}`)
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'renameAlbum' && (
+        <PromptDialog
+          title="Rename album"
+          initial={modal.album.name}
+          confirmLabel="Rename"
+          onSubmit={(name) => renameAlbum(modal.album, name)}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'deleteAlbum' && (
+        <ConfirmDialog
+          title="Delete album?"
+          danger
+          confirmLabel="Delete album"
+          message={`“${modal.album.name}” will be deleted. Its photos stay in ${rootName}.`}
+          onConfirm={async () => {
+            await deleteAlbum(modal.album)
+            toast(`Deleted “${modal.album.name}”`)
+            if (mode === 'album') navigate('/albums', { replace: true })
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal?.type === 'newDrive' && (
         <PromptDialog
           title="New drive"
@@ -1070,11 +1230,15 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 function SelectionBar(props: {
   count: number
   trashMode: boolean
+  /** TelePhotos. */
+  onAddToAlbum?: () => void
+  /** In an album. */
+  onRemoveFromAlbum?: () => void
   allStarred: boolean
   onClear: () => void
   onDownload: () => void
   onSend: () => void
-  onMove: () => void
+  onMove?: () => void
   onStar: () => void
   onTrash: () => void
   onRestore: () => void
@@ -1098,15 +1262,33 @@ function SelectionBar(props: {
         </>
       ) : (
         <>
-          <button className="icon-btn" onClick={p.onDownload} aria-label="Download" title="Download">
+          {p.onAddToAlbum && (
+            <button className="icon-btn" onClick={p.onAddToAlbum} aria-label="Add to album" title="Add to album">
+              <ImagePlus />
+            </button>
+          )}
+          {p.onRemoveFromAlbum && (
+            <button className="icon-btn" onClick={p.onRemoveFromAlbum} aria-label="Remove from album" title="Remove from album">
+              <ImageMinus />
+            </button>
+          )}
+          {/* In an album the phone has no room for everything: Download stays in the photo's menu */}
+          <button
+            className={`icon-btn ${p.onRemoveFromAlbum ? 'hidden sm:inline-flex' : ''}`}
+            onClick={p.onDownload}
+            aria-label="Download"
+            title="Download"
+          >
             <Download />
           </button>
           <button className="icon-btn hidden sm:inline-flex" onClick={p.onSend} aria-label="Send to Telegram" title="Send to Telegram">
             <Send />
           </button>
-          <button className="icon-btn" onClick={p.onMove} aria-label="Move" title="Move">
-            <FolderInput />
-          </button>
+          {p.onMove && (
+            <button className="icon-btn" onClick={p.onMove} aria-label="Move" title="Move">
+              <FolderInput />
+            </button>
+          )}
           <button
             className="icon-btn"
             onClick={p.onStar}
@@ -1133,8 +1315,11 @@ function EmptyState(props: {
   photos: boolean
   onUpload: () => void
   onNewFolder: () => void
+  onNewAlbum: () => void
+  /** In an album. */
+  onAddPhotos?: () => void
 }) {
-  const { mode, filtered, searched, isRoot, photos, onUpload, onNewFolder } = props
+  const { mode, filtered, searched, isRoot, photos, onUpload, onNewFolder, onNewAlbum, onAddPhotos } = props
   const content: Record<Exclude<Mode, 'settings'>, { icon: typeof Search; title: string; text: string }> = {
     folder: photos
       ? {
@@ -1149,6 +1334,8 @@ function EmptyState(props: {
     recent: { icon: Clock, title: 'No recent files', text: 'Files you upload will show up here.' },
     starred: { icon: Star, title: 'Nothing starred yet', text: 'Star files and folders to find them quickly.' },
     trash: { icon: Trash2, title: 'Trash is empty', text: `Deleted items stay here for ${TRASH_DAYS} days.` },
+    albums: { icon: AlbumIcon, title: 'No albums yet', text: 'Group photos into albums. A photo can be in several albums.' },
+    album: { icon: AlbumIcon, title: 'This album is empty', text: 'Add photos from your timeline.' },
   }
   const { icon: Icon, title, text } = content[mode]
   return (
@@ -1170,11 +1357,21 @@ function EmptyState(props: {
           )}
         </div>
       )}
+      {mode === 'albums' && (
+        <button className="btn-primary mt-2" onClick={onNewAlbum}>
+          <Plus /> New album
+        </button>
+      )}
+      {mode === 'album' && onAddPhotos && (
+        <button className="btn-primary mt-2" onClick={onAddPhotos}>
+          <ImagePlus /> Add photos
+        </button>
+      )}
     </div>
   )
 }
 
-/** Phone tabs: the drive's top (Photos in TelePhotos), Recent, Starred, Trash. */
+/** Phone tabs: the drive's top, Recent (Albums in TelePhotos), Starred, Trash. */
 function BottomNav({ photos }: { photos: boolean }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -1185,7 +1382,9 @@ function BottomNav({ photos }: { photos: boolean }) {
       on: pathname === '/' || pathname.startsWith('/folder/'),
       go: () => navigate('/'),
     },
-    { label: 'Recent', icon: Clock, on: pathname === '/recent', go: () => navigate('/recent') },
+    photos
+      ? { label: 'Albums', icon: AlbumIcon, on: pathname === '/albums' || pathname.startsWith('/album/'), go: () => navigate('/albums') }
+      : { label: 'Recent', icon: Clock, on: pathname === '/recent', go: () => navigate('/recent') },
     { label: 'Starred', icon: Star, on: pathname === '/starred', go: () => navigate('/starred') },
     { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
   ]
@@ -1282,26 +1481,3 @@ function BackupNotice({ inPhotos, onOpenPhotos }: { inPhotos: boolean; onOpenPho
   )
 }
 
-/** TelePhotos' timeline: every photo and video not in the trash or a locked folder, newest first by date taken. */
-function timelineItems(drive: Drive, opts: { starred: boolean; source: string | null }): FileItem[] {
-  const out: FileItem[] = []
-  for (const i of drive.items.values()) {
-    if (i.kind !== 'file' || i.locked || !/^(image|video)\//.test(i.mime)) continue
-    if (opts.starred && !i.x.fav) continue
-    if (opts.source === 'videos' ? !i.mime.startsWith('video/') : opts.source && topFolder(drive, i) !== opts.source) continue
-    if (isHidden(drive, i)) continue
-    out.push(i)
-  }
-  return sortPhotos(out)
-}
-
-/** The folder at the top of the drive an item is in (its own ID if it's at the top). */
-function topFolder(drive: Drive, item: Item): string {
-  let cur = item
-  for (let n = 0; n < 100 && cur.parent !== ROOT; n++) {
-    const up = drive.items.get(cur.parent)
-    if (!up) break
-    cur = up
-  }
-  return cur.id
-}

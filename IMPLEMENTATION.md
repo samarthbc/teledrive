@@ -962,7 +962,38 @@ WhatsApp media once a night, for example).
   section in TelePhotos (opening TelePhotos backed up a waiting photo); none in My Drive.
 
 ## Phase 16: More
-- Albums (a photo in several albums without uploading again: album marker messages + album IDs on the file).
+
+### 16.1 Albums ✅ (implemented; being tested)
+- **How they work:** a photo can be in several albums; deleting an album deletes no photo; removing a photo from an
+  album only takes it out of that album; a photo moved to the trash leaves every album's view (it comes back when
+  restored). Album names are encrypted like file names.
+- **Format:** an album is one message `{"td":1,"t":"a","id","ts","x":{"enc":1},"e"}`, its name sealed in `e` with the
+  top level's key. Membership is on the photo: `Secret.al` (album IDs) in its encrypted caption, so adding or removing
+  a photo is one caption edit (`setInAlbum`), nothing is uploaded. IDs of deleted albums are ignored (and dropped the
+  next time that photo's albums change). Older app versions ignore `t:"a"` messages and the extra `al` field.
+- **Tree:** `Drive.albums` (id, name, msgId, ts); `FileItem.albums`. Decrypting album names goes through
+  `unresolved`/`resolveSecrets` like other names. Unit-tested (decoding, membership, deleted albums).
+- **Ops:** `createAlbum`, `renameAlbum`, `deleteAlbum` (deletes the album message only), `setInAlbum(files, id, on)`.
+- **Screens** (`components/Albums.tsx`, wired in `Drive.tsx`):
+  - TelePhotos' phone tabs: Photos · **Albums** · Starred · Trash; desktop side menu gets *Albums* in TelePhotos.
+  - `/albums`: a card per album (cover = newest photo, name, count), newest album first; long-press / right-click →
+    Rename, Delete album ("Its photos stay in TelePhotos"); **New album** (button, + menu, empty state).
+  - `/album/:id`: the timeline of its photos; ⋮ in the top bar (Rename, Delete album); **Add photos**.
+  - **Add photos** (`/?addTo=<id>`, also right after creating an album): the timeline without the album's photos,
+    selection circles shown from the start, tap to pick, *Add* in the top bar; the chips keep the picking (and the
+    selection) on.
+  - Selection bar in TelePhotos: **Add to album** (dialog: existing albums with cover and count, "Already in this
+    album" disabled, or create one by name); in an album also **Remove from album**. *Move* is gone in TelePhotos
+    (photos aren't sorted into folders there); in an album the phone hides *Download* (still in the photo's menu) so
+    everything fits. The photo menu has *Add to album…* / *Remove from album* too.
+- **Checked on the phone:** New album → straight to picking → 3 photos added; the album survived a restart (read back
+  from Telegram); removing one left 2; a photo already in it plus another added to a second album created from the
+  dialog (one photo in two albums); deleting the first album left the second with its 2 photos and the timeline with
+  all 10. Fixed while testing: the selection bar overflowed on the phone; the album title was cut short by its ⋮
+  button (moved to the top bar). Not checked: renaming, and trash/restore with albums (follows from the timeline
+  rules).
+
+### Still to do
 - Free up space (delete phone copies already backed up, checked by SHA-256, via Android's delete dialog).
 - On this day; share an album to a Telegram chat as a media group; map (opt-in, encrypted); search.
 

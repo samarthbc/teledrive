@@ -7,15 +7,16 @@ import { messagesFromUpdates } from '../telegram/messages'
 import {
   changeLockPassword, moveLock, newLock, openLock, rewrapFileKey, seal, unseal, type LockInfo,
 } from './crypto'
-import { closeLevel, openLevel, requireLevelKey } from './keyring'
-import { encode, ROOT, validateName, type Flags, type FolderMeta, type Meta, type Secret } from './meta'
+import { closeLevel, openLevel, requireLevelKey, ROOT_LEVEL } from './keyring'
+import { encode, ROOT, validateName, type AlbumMeta, type Flags, type FolderMeta, type Meta, type Secret } from './meta'
 import { rememberSecret } from './secrets'
 import { applyDeleted, applyMessages, getRecord } from './sync'
 import { driveDb } from '../db/db'
 import { randomLong } from './transfer'
 import { discard } from './upload'
 import {
-  childLevel, collectTree, isDescendant, isHidden, messageIds, trashedItems, uniqueName, type Drive, type Item,
+  childLevel, collectTree, isDescendant, isHidden, messageIds, trashedItems, uniqueName, type Album, type Drive, type FileItem,
+  type Item,
 } from './tree'
 
 const DELETE_BATCH = 100
@@ -338,4 +339,68 @@ async function refetch(ids: number[]): Promise<void> {
     new Api.channels.GetMessages({ channel: storageChannel(), id: ids.map((id) => new Api.InputMessageID({ id })) }),
   )
   if ('messages' in res) await applyMessages(res.messages)
+}
+
+// ---- TelePhotos albums ----
+// An album is one message (its name, sealed with the top level's key). Which photos are in it is stored on each
+// photo (Secret.al), so adding or removing a photo is one caption edit and nothing is uploaded again.
+
+const MAX_ALBUM_NAME = 100
+
+function albumName(name: string): string {
+  const n = name.trim()
+  if (!n) throw new Error('Give the album a name')
+  if (n.length > MAX_ALBUM_NAME) throw new Error(`Album names can be at most ${MAX_ALBUM_NAME} characters`)
+  return n
+}
+
+export async function createAlbum(name: string): Promise<string> {
+  const n = albumName(name)
+  const id = nanoid(10)
+  const e = await seal(requireLevelKey(ROOT_LEVEL), { n } satisfies Secret)
+  rememberSecret(e, ROOT_LEVEL, { n })
+  const meta: AlbumMeta = { td: 1, t: 'a', id, ts: now(), x: { enc: 1 }, e }
+  const client = await getClient()
+  const res = await client.invoke(
+    new Api.messages.SendMessage({ peer: storagePeer(), message: encode(meta), randomId: randomLong(), silent: true }),
+  )
+  const msgs = messagesFromUpdates(res)
+  if (msgs.length) await applyMessages(msgs)
+  else if (res instanceof Api.UpdateShortSentMessage) await refetch([res.id])
+  return id
+}
+
+export async function renameAlbum(album: Album, name: string): Promise<void> {
+  const n = albumName(name)
+  if (n === album.name) return
+  const current = getRecord(album.msgId)?.meta
+  if (current?.t !== 'a') throw new Error('Album not found. Try refreshing.')
+  const e = await seal(requireLevelKey(ROOT_LEVEL), { n } satisfies Secret)
+  rememberSecret(e, ROOT_LEVEL, { n })
+  await writeMeta(album.msgId, { ...current, e })
+}
+
+/** Delete an album. Its photos stay where they are (they just aren't in it any more). */
+export async function deleteAlbum(album: Album): Promise<void> {
+  await deleteMessages([album.msgId])
+}
+
+/** Put photos into an album, or take them out of it. */
+export async function setInAlbum(files: FileItem[], albumId: string, inAlbum: boolean): Promise<void> {
+  for (const file of files) {
+    if (file.locked) continue
+    const has = !!file.albums?.includes(albumId)
+    if (has === inAlbum) continue
+    const current = currentMeta(file)
+    if (!current.e) continue // from before everything was encrypted
+    const key = requireLevelKey(file.level)
+    const secret = await unseal<Secret>(key, current.e)
+    // Albums that were deleted meanwhile are dropped on the way
+    const others = (secret.al ?? []).filter((a) => a !== albumId)
+    secret.al = inAlbum ? [...others, albumId] : others
+    if (!secret.al.length) delete secret.al
+    const e = await seal(key, secret)
+    rememberSecret(e, file.level, secret)
+    await writeMeta(file.msgId, { ...current, e })
+  }
 }

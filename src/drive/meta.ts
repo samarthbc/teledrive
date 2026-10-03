@@ -23,6 +23,8 @@ export interface Secret {
   dt?: number
   /** Photos and videos: width and height in pixels. */
   wh?: [number, number]
+  /** TelePhotos: the albums the photo is in (album IDs). */
+  al?: string[]
 }
 
 export interface FolderMeta {
@@ -87,7 +89,20 @@ export interface ConfigMeta {
   e?: AccountConfig
 }
 
-export type Meta = FolderMeta | FileMeta | ChunkMeta | ConfigMeta
+/**
+ * A TelePhotos album. Its name is sealed in `e` (with the top level's key); which photos are in it is stored on the
+ * photos (`Secret.al`), so a photo can be in several albums and deleting an album deletes no photo.
+ */
+export interface AlbumMeta {
+  td: 1
+  t: 'a'
+  id: string
+  ts: number
+  x: Flags
+  e: string
+}
+
+export type Meta = FolderMeta | FileMeta | ChunkMeta | ConfigMeta | AlbumMeta
 
 export class MetaError extends Error {}
 
@@ -148,6 +163,9 @@ export function decode(text: string | undefined | null): Meta | null {
       return { td: 1, t: 'c', id: o.id, pt: o.pt }
     case 'cfg':
       return { td: 1, t: 'cfg', app: 'teledrive', ...(isAccountConfig(o.e) && { e: o.e }) }
+    case 'a':
+      if (!isStr(o.id) || !sealed) return null
+      return { td: 1, t: 'a', id: o.id, ts: isInt(o.ts) ? o.ts : 0, x: x ?? {}, e: sealed }
     default:
       return null
   }

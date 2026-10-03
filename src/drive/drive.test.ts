@@ -176,3 +176,34 @@ describe('zipEntries', () => {
     expect(bytes).toBe(20)
   })
 })
+
+describe('albums', () => {
+  // Sealed fields stand in as "secret:<json>"; the view decrypts them
+  const sealed = (o: object) => `secret:${JSON.stringify(o)}`
+  const keys = { isOpen: () => true, secretOf: (s: string) => (s.startsWith('secret:') ? JSON.parse(s.slice(7)) : undefined) }
+  const album = (id: string, n: string): Meta => ({ td: 1, t: 'a', id, ts: 9, x: { enc: 1 }, e: sealed({ n }) })
+  const photo = (id: string, al?: string[]): Meta =>
+    ({ td: 1, t: 'f', id, p: ROOT, n: '', s: 10, m: '', of: 1, ts: 5, x: { enc: 1 }, e: sealed({ n: `${id}.jpg`, m: 'image/jpeg', ...(al && { al }) }) })
+
+  it('decodes album messages (encrypted names only)', () => {
+    const a = album('al1', 'Goa')
+    expect(decode(encode(a))).toEqual(a)
+    expect(decode('{"td":1,"t":"a","id":"x","n":"plain"}')).toBeNull()
+  })
+
+  it('reads albums and which albums each photo is in', () => {
+    const d = buildDrive([rec(album('al1', 'Goa')), rec(album('al2', 'Family')), rec(photo('p1', ['al1', 'al2'])), rec(photo('p2'))], keys)
+    expect([...d.albums.values()].map((a) => a.name)).toEqual(['Goa', 'Family'])
+    const p1 = d.items.get('p1')!
+    expect(p1.kind === 'file' && p1.albums).toEqual(['al1', 'al2'])
+    const p2 = d.items.get('p2')!
+    expect(p2.kind === 'file' && p2.albums).toBeUndefined()
+  })
+
+  it('leaves out albums that were deleted (the photos stay)', () => {
+    const d = buildDrive([rec(album('al1', 'Goa')), rec(photo('p1', ['al1', 'gone']))], keys)
+    const p1 = d.items.get('p1')!
+    expect(p1.kind === 'file' && p1.albums).toEqual(['al1'])
+    expect(buildDrive([rec(photo('p1', ['gone']))], keys).items.get('p1')).toBeDefined()
+  })
+})

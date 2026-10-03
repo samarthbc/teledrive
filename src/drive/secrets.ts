@@ -30,6 +30,8 @@ export function unresolved(records: Iterable<MessageRecord>): { sealed: string; 
   }
   for (const r of list) {
     const m = r.meta
+    // Album names are sealed with the top level's key
+    if (m.t === 'a') want(m.e, ROOT_LEVEL)
     if (m.t !== 'd' && m.t !== 'f') continue
     want(m.e, levels.get(m.id)!)
     // A locked item's visible name is sealed with its folder's key

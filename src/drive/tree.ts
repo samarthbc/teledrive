@@ -75,11 +75,21 @@ export interface FileItem extends Protection {
   taken?: number
   /** Photos and videos: width and height in pixels, if known. */
   wh?: [number, number]
+  /** TelePhotos: the albums it's in (album IDs; ones that no longer exist are left out). */
+  albums?: string[]
   /** Encrypted thumbnail (encrypted files only). */
   thumbPart?: Part
 }
 
 export type Item = FolderItem | FileItem
+
+/** A TelePhotos album (see AlbumMeta). */
+export interface Album {
+  id: string
+  name: string
+  msgId: number
+  ts: number
+}
 
 export interface Drive {
   items: Map<string, Item>
@@ -89,6 +99,8 @@ export interface Drive {
   allChildren: Map<string, Item[]>
   /** Chunk messages whose file no longer exists (safe to delete). */
   orphanChunks: number[]
+  /** TelePhotos' albums. */
+  albums: Map<string, Album>
   configMsgId?: number
   /** The TeleDrive password's check value. */
   encryption?: AccountConfig
@@ -139,6 +151,7 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
   /** Locked items' names readable with their folder's key (meta `ln`). */
   const labelOf = new Map<string, string>()
   const chunks = new Map<string, Part[]>()
+  const albums = new Map<string, Album>()
   let configMsgId: number | undefined
   let encryption: AccountConfig | undefined
 
@@ -150,6 +163,9 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
         configMsgId = r.msgId
         encryption = m.e
       }
+    } else if (m.t === 'a') {
+      // Named once the top level's key is open
+      if (!albums.has(m.id)) albums.set(m.id, { id: m.id, name: keys.secretOf(m.e)?.n ?? 'Album', msgId: r.msgId, ts: m.ts || r.date })
     } else if (m.t === 'c') {
       const list = chunks.get(m.id) ?? []
       list.push({ pt: m.pt, msgId: r.msgId, doc: r.doc })
@@ -216,6 +232,10 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
         if (secret?.h) item.hash = secret.h
         if (secret?.dt) item.taken = secret.dt
         if (secret?.wh) item.wh = secret.wh
+        if (secret?.al?.length) {
+          const inAlbums = secret.al.filter((a) => albums.has(a))
+          if (inAlbums.length) item.albums = inAlbums
+        }
       }
     }
     if (item.kind === 'file') {
@@ -228,7 +248,7 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
     children.set(item.parent, list)
   }
 
-  return { items, children, allChildren, orphanChunks, configMsgId, encryption }
+  return { items, children, allChildren, orphanChunks, albums, configMsgId, encryption }
 }
 
 function reachesRoot(items: Map<string, Item>, id: string): boolean {

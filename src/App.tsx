@@ -82,6 +82,8 @@ export default function App() {
       <Route path="/search" element={<DrivePage mode="search" />} />
       <Route path="/recent" element={<DrivePage mode="recent" />} />
       <Route path="/starred" element={<DrivePage mode="starred" />} />
+      <Route path="/albums" element={<DrivePage mode="albums" />} />
+      <Route path="/album/:albumId" element={<DrivePage mode="album" />} />
       <Route path="/trash" element={<DrivePage mode="trash" />} />
       <Route path="/settings" element={<DrivePage mode="settings" />} />
       <Route path="*" element={<Navigate to="/" replace />} />
