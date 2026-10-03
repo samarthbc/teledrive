@@ -1,6 +1,8 @@
 package com.samarthbc.teledrive;
 
 import android.Manifest;
+import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
@@ -16,6 +18,9 @@ import android.provider.Settings;
 import android.util.Base64;
 import android.view.Window;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.IntentSenderRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.view.WindowCompat;
@@ -81,6 +86,9 @@ public class TeleDriveNativePlugin extends Plugin {
     private volatile String appBackupResult;
     /** Files shared to the app that JavaScript hasn't picked up yet. */
     private final List<JSObject> pendingShares = new ArrayList<>();
+    /** Android's "move to trash?" prompt for Free up space, and the call waiting for its answer. */
+    private ActivityResultLauncher<IntentSenderRequest> trashPrompt;
+    private PluginCall trashCall;
 
     private static class Output {
         Uri uri;
@@ -94,6 +102,47 @@ public class TeleDriveNativePlugin extends Plugin {
         media = new MediaAccess(getContext());
         instance = this;
         collectShares(getActivity().getIntent());
+        trashPrompt = getActivity().registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), result -> {
+            PluginCall call = trashCall;
+            trashCall = null;
+            if (call == null) return;
+            JSObject ret = new JSObject();
+            ret.put("done", result.getResultCode() == Activity.RESULT_OK);
+            call.resolve(ret);
+        });
+    }
+
+    /**
+     * Free up space: move photos/videos (content URIs) to the phone's trash, where Android deletes them for good after
+     * 30 days. Android asks the user first; resolves { done } with whether they allowed it. Needs Android 11+.
+     */
+    @PluginMethod
+    public void trashMedia(PluginCall call) {
+        if (Build.VERSION.SDK_INT < 30) {
+            call.reject("Free up space needs Android 11 or newer");
+            return;
+        }
+        if (trashCall != null) {
+            call.reject("Already waiting for an answer");
+            return;
+        }
+        try {
+            List<Uri> uris = new ArrayList<>();
+            JSArray arr = call.getArray("uris", new JSArray());
+            for (int i = 0; i < arr.length(); i++) uris.add(Uri.parse(arr.getString(i)));
+            if (uris.isEmpty()) {
+                JSObject ret = new JSObject();
+                ret.put("done", true);
+                call.resolve(ret);
+                return;
+            }
+            PendingIntent pi = MediaStore.createTrashRequest(getContext().getContentResolver(), uris, true);
+            trashCall = call;
+            getActivity().runOnUiThread(() -> trashPrompt.launch(new IntentSenderRequest.Builder(pi.getIntentSender()).build()));
+        } catch (Exception e) {
+            trashCall = null;
+            call.reject(e.getMessage(), e);
+        }
     }
 
     @Override

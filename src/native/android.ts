@@ -54,6 +54,8 @@ interface TeleDriveNativePlugin {
   thumbnail(o: { uri: string }): Promise<{ data?: string }>
   listMedia(o: { paths: string[]; since: number; limit?: number }): Promise<{ items: CameraItem[] }>
   listMediaFolders(): Promise<{ folders: MediaFolder[] }>
+  /** Move photos/videos to the phone's trash (Android asks first). `done`: the user allowed it. Android 11+. */
+  trashMedia(o: { uris: string[] }): Promise<{ done: boolean }>
   scheduleBackgroundBackup(o: { enabled: boolean; wifiOnly: boolean; instant: boolean; overnight: boolean; charging: boolean }): Promise<void>
   backgroundBackupStatus(): Promise<{ lastRun: number; lastResult: string }>
   backgroundBackupDone(o: { result: string }): Promise<void>

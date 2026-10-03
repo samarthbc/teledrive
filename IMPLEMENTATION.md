@@ -993,14 +993,29 @@ WhatsApp media once a night, for example).
   button (moved to the top bar). Not checked: renaming, and trash/restore with albums (follows from the timeline
   rules).
 
+- **Later:** *New album* is also in the sidebar's + New and the + button (timeline, Albums page, inside an album).
+
+### 16.2 Free up space ✅
+- **Where:** Settings → *Free up space*, in TelePhotos in the Android app (next to Camera backup).
+- **What goes:** a photo/video on the phone goes only if camera backup uploaded it (its MediaStore ID is in the backup's
+  done list, and it isn't queued) **and** TelePhotos has a file of the same name and size that isn't in its trash or a
+  locked folder (a " (n)" added to a taken name is ignored). Anything else stays. Only folders currently backed up
+  are looked at (`findFreeable` in `native/backup.ts`).
+- **Asking twice:** an in-app "Are you sure?" (how many photos and videos, how much space, that the copies stay in
+  TelePhotos and the phone's bin keeps them 30 days), then Android's own prompt.
+- **Native:** `trashMedia({ uris })` → `MediaStore.createTrashRequest` launched with an activity-result launcher
+  registered in the plugin's `load()`; resolves `{ done }` with the user's answer. Items go to the phone's bin
+  (Android deletes them after 30 days), not deleted outright. Needs Android 11+ (Android 10 gets an error message).
+- **Checked on the phone:** with nothing backed up left on the phone → "Nothing to free up"; a new test photo backed
+  up → the warning listed exactly 1 photo (1.6 KB) → Android's "move this photo to bin?" → Allow → "Freed up 1.6 KB",
+  the photo gone from the camera folder and still in TelePhotos.
+
 ### Still to do
-- Free up space (delete phone copies already backed up, checked by SHA-256, via Android's delete dialog).
 - On this day; share an album to a Telegram chat as a media group; map (opt-in, encrypted); search.
 
 ---
 
 ## Later (ideas, not planned yet)
-- **Free up space:** delete photos from the phone once they're confirmed in TeleDrive (uses Android's delete confirmation dialog).
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).
 
 ---

@@ -311,20 +311,59 @@ async function countTonight(scope: BackupScope) {
 }
 
 /** New (not yet backed up or queued) media in one folder. */
-async function listNew(source: BackupSource): Promise<CameraItem[]> {
+function listNew(source: BackupSource): Promise<CameraItem[]> {
+  return listSince(source, (i) => !done.has(i.id) && !queued.has(i.id))
+}
+
+/** The folder's media added since it's been backed up (that `keep` accepts). */
+async function listSince(source: BackupSource, keep: (i: CameraItem) => boolean): Promise<CameraItem[]> {
   let since = source.since
   const out: CameraItem[] = []
   for (;;) {
     const { items } = await Native.listMedia({ paths: [source.path], since, limit: BATCH })
     // Safety net: the list must only contain items from `since` on, and each page must move forward
     if (items.some((i) => i.dateAdded < since)) throw new Error('Photo list returned items older than requested')
-    out.push(...items.filter((i) => !done.has(i.id) && !queued.has(i.id)))
+    out.push(...items.filter(keep))
     if (items.length < BATCH) break
     const next = items[items.length - 1].dateAdded + 1
     if (next <= since) break
     since = next
   }
   return out
+}
+
+// ---- Free up space ----
+
+/** "IMG_1 (2).jpg" → "img_1.jpg": a backed-up copy can get " (n)" added when the name was taken. */
+function plainName(name: string): string {
+  return name.replace(/ \(\d+\)(?=\.[^.]*$|$)/, '').toLowerCase()
+}
+
+/**
+ * Photos and videos that can go from the phone: backed up by camera backup, and TelePhotos (the open drive) has a
+ * file of the same name and size that isn't in its trash. Anything else stays.
+ */
+export async function findFreeable(): Promise<{ items: CameraItem[]; bytes: number }> {
+  await load()
+  if (!host?.ready() || !isPhotosDrive(currentDrive())) throw new Error('Open TelePhotos first')
+  if (!(await Native.mediaPermission({})).granted) throw new Error('TeleDrive needs permission to read photos and videos')
+  const inPhotos = new Set<string>()
+  const drive = host.drive()
+  for (const i of drive.items.values()) {
+    if (i.kind === 'file' && !isHidden(drive, i)) inPhotos.add(`${plainName(i.name)}|${i.size}`)
+  }
+  const found = new Map<string, CameraItem>()
+  for (const source of sourcesOf(useBackup.getState().settings)) {
+    const items = await listSince(source, (i) => done.has(i.id) && !queued.has(i.id) && inPhotos.has(`${plainName(i.name)}|${i.size}`))
+    for (const i of items) found.set(i.id, i)
+  }
+  const items = [...found.values()]
+  return { items, bytes: items.reduce((n, i) => n + i.size, 0) }
+}
+
+/** Move them to the phone's trash (Android asks first). False if the user said no there. */
+export async function freeUpSpace(items: CameraItem[]): Promise<boolean> {
+  return (await Native.trashMedia({ uris: items.map((i) => i.uri) })).done
 }
 
 function queue(item: CameraItem, folderId: string) {

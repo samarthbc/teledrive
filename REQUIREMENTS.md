@@ -190,7 +190,9 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] ~~Move existing Camera Backup folders from My Drive to TelePhotos~~ (not needed: none exist)
 - [x] Each folder backed up as photos are taken, or once a day overnight (optionally only while charging)
 - [x] Albums: a photo in several albums; deleting an album keeps its photos
-- [ ] Later: free up space, on this day, share an album, map, search
+- [x] New album from + New and the + button
+- [x] Free up space: remove backed-up photos from the phone (after an "Are you sure?" and Android's own prompt)
+- [ ] Later: on this day, share an album, map, search
 
 ---
 
