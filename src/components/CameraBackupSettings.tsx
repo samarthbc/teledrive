@@ -11,7 +11,7 @@ import Dialog from './Dialog'
 import { driveName, isPhotosDrive, PHOTOS_NAME } from '../telegram/channel'
 import { useDrive } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
-import { Checkbox, Choice as UiChoice, Segmented, Toggle as Switch } from './ui'
+import { Segmented, Toggle as Switch } from './ui'
 
 const time = (ms: number) => new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 const day = (s: number) => new Date(s * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
@@ -105,13 +105,9 @@ export default function CameraBackupSettings() {
   )
 }
 
-/** Camera backup while it's off: where to start from, then Turn on. */
+/** Camera backup while it's off: just Turn on (the camera, new photos only); the rest is chosen once it's on. */
 function TurnOn() {
   const settings = useBackup((s) => s.settings)
-  const [scope, setScope] = useState<'new' | 'all' | 'range'>('new')
-  const [days, setDays] = useState<Days>(initialDays)
-  const [alsoNew, setAlsoNew] = useState(true)
-  const [canRead, setCanRead] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -123,18 +119,10 @@ function TurnOn() {
         setError('TeleDrive needs permission to read your photos and videos. Allow it in Android Settings → Apps → TeleDrive → Permissions.')
         return
       }
-      const now = Math.floor(Date.now() / 1000)
-      const since = scope === 'all' ? 0 : scope === 'range' && !alsoNew ? NO_NEW : now
+      const since = Math.floor(Date.now() / 1000)
       // Keep the folders chosen before (if any), otherwise start with the camera
-      let sources: BackupSource[] = settings.sources?.length ? settings.sources : [{ path: CAMERA_PATH, since }]
-      if (scope === 'range') {
-        const range = dayRange(days.from, days.to)
-        const camera = sources.find((s) => s.path === CAMERA_PATH)
-        sources = camera
-          ? sources.map((s) => (s === camera ? { ...s, ranges: [...(s.ranges ?? []), range] } : s))
-          : [...sources, { path: CAMERA_PATH, since, ranges: [range] }]
-      }
-      await enableBackup({ since: since === NO_NEW ? now : since, sources })
+      const sources: BackupSource[] = settings.sources?.length ? settings.sources : [{ path: CAMERA_PATH, since }]
+      await enableBackup({ since, sources })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -143,51 +131,18 @@ function TurnOn() {
   }
 
   return (
-    <div className="space-y-4 px-4 py-4 text-sm sm:px-5">
-      <fieldset className="space-y-2">
-        <Choice checked={scope === 'new'} onChange={() => setScope('new')} label="Only new photos and videos" hint="Taken from now on" />
-        <Choice checked={scope === 'all'} onChange={() => setScope('all')} label="Everything in the camera folder" hint="Can be a lot of data" />
-        <Choice
-          checked={scope === 'range'}
-          onChange={() => {
-            setScope('range')
-            // Counting what's in the dates needs to read the photos
-            void requestMediaPermission().then(setCanRead, () => setCanRead(false))
-          }}
-          label="From a date range"
-          hint="Photos and videos taken between two dates"
-        />
-      </fieldset>
-      {scope === 'range' && (
-        <div className="space-y-3 rounded-md p-3.5 pressed">
-          {canRead ? (
-            <DateRangePicker path={CAMERA_PATH} value={days} onChange={setDays} />
-          ) : (
-            <p className="text-xs text-muted">TeleDrive needs permission to read your photos and videos.</p>
-          )}
-          <Checkbox checked={alsoNew} onChange={setAlsoNew}>
-            Also back up new photos and videos
-          </Checkbox>
-        </div>
-      )}
+    <div className="space-y-3 px-4 py-4 sm:px-5">
       <div className="flex items-center justify-between gap-3">
-        <span>
-          <span className="block font-bold">Only on Wi-Fi</span>
-          <span className="block text-xs text-muted">Don't use mobile data for backups</span>
-        </span>
-        <Switch label="Only on Wi-Fi" checked={settings.wifiOnly} onChange={(wifiOnly) => void updateBackupSettings({ wifiOnly })} />
-      </div>
-      <p className="text-xs text-muted">
-        New photos upload within a few minutes, also while TeleDrive is closed. You can add more folders after turning
-        this on.
-      </p>
-      {error && <p className="font-semibold text-brand-ink">{error}</p>}
-      <div className="flex justify-end">
-        <button className="btn-primary" disabled={busy || (scope === 'range' && !validDays(days))} onClick={enable}>
+        <div className="min-w-0">
+          <p className="font-bold">Back up this phone's photos</p>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-muted">New photos and videos upload to {PHOTOS_NAME} as you take them.</p>
+        </div>
+        <button className="btn-primary shrink-0" disabled={busy} onClick={enable}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           Turn on
         </button>
       </div>
+      {error && <p className="text-sm font-semibold text-brand-ink">{error}</p>}
     </div>
   )
 }
@@ -475,8 +430,4 @@ function Row(props: { name: string; hint?: string; children: React.ReactNode }) 
       {props.children}
     </div>
   )
-}
-
-function Choice(props: { label: string; hint: string; checked: boolean; onChange: () => void }) {
-  return <UiChoice name="backup-choice" {...props} />
 }
