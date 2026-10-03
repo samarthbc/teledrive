@@ -184,6 +184,13 @@ export async function setSource(path: string, on: boolean, since = Math.floor(Da
   await updateBackupSettings({ sources })
 }
 
+/** A folder that's backed up: which media it backs up from now on (0 = everything, else added from then on). */
+export async function setSourceSince(path: string, since: number): Promise<void> {
+  await load()
+  const sources = sourcesOf(useBackup.getState().settings).map((s) => (s.path === path ? { ...s, since } : s))
+  await updateBackupSettings({ sources })
+}
+
 /** A folder that's backed up: also back up the photos taken in `range`. */
 export async function addRange(path: string, range: DateRange): Promise<void> {
   await load()
