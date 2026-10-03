@@ -1,4 +1,4 @@
-import { ExternalLink, Folder, Loader2 } from 'lucide-react'
+import { ChevronRight, ExternalLink, Folder, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Native, type MediaFolder } from '../native/android'
 import {
@@ -51,14 +51,6 @@ export default function CameraBackupSettings() {
 
   return (
     <div className="space-y-4 px-4 py-4 text-sm sm:px-5">
-        <div>
-          <p className="text-muted">
-            New photos and videos are uploaded to {PHOTOS_NAME}: the camera into <b>Camera</b>, other folders you pick
-            (Screenshots, WhatsApp Images…) into a folder of their own. Each folder is backed up as photos are taken, or
-            once a day overnight.
-          </p>
-        </div>
-
         {settings.enabled && elsewhere ? (
           <div className="space-y-3 rounded-md p-3.5 pressed">
             <p>
@@ -238,9 +230,6 @@ function FolderList() {
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-xs text-muted">
-        WhatsApp's "Sent" folders are hidden from other apps, so only received media can be backed up.
-      </p>
     </div>
   )
 }
@@ -261,7 +250,7 @@ function FolderThumb({ uri }: { uri: string }) {
   )
 }
 
-/** Last background run, plus what some phones need for it to work. */
+/** Last background run, plus what some phones need for it to work (folded away under "Notice"). */
 function BackgroundInfo({ encrypted }: { encrypted: boolean }) {
   const [last, setLast] = useState<{ lastRun: number; status: string } | null>(null)
   useEffect(() => {
@@ -278,21 +267,27 @@ function BackgroundInfo({ encrypted }: { encrypted: boolean }) {
   }, [])
 
   return (
-    <div className="space-y-2 rounded-md p-3.5 text-xs leading-relaxed pressed">
-      <p>
-        On Xiaomi, Redmi, POCO and some other phones, background work is blocked unless you allow it: in the app settings turn on
-        <b> Autostart</b> and set <b>Battery saver</b> to <b>No restrictions</b>.
-      </p>
-      {encrypted && <p>This drive is encrypted: background backup only works if "Remember on this device" was ticked when unlocking.</p>}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-muted">
-          {last?.lastRun ? `Last background run: ${time(last.lastRun)}${last.status ? ` (${last.status})` : ''}` : 'Not run in the background yet'}
-        </span>
-        <button className="btn-ghost py-1 text-xs" onClick={() => void Native.openAppSettings()}>
-          <ExternalLink className="h-3.5 w-3.5" /> App settings
-        </button>
+    <details className="group rounded-md text-xs leading-relaxed pressed">
+      <summary className="flex list-none items-center justify-between gap-2 p-3.5 font-bold [&::-webkit-details-marker]:hidden">
+        Notice
+        <ChevronRight className="size-4 text-muted transition-transform duration-120 group-open:rotate-90" />
+      </summary>
+      <div className="space-y-2 px-3.5 pb-3.5">
+        <p>
+          On Xiaomi, Redmi, POCO and some other phones, background work is blocked unless you allow it: in the app settings turn on
+          <b> Autostart</b> and set <b>Battery saver</b> to <b>No restrictions</b>.
+        </p>
+        {encrypted && <p>This drive is encrypted: background backup only works if "Remember on this device" was ticked when unlocking.</p>}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-muted">
+            {last?.lastRun ? `Last background run: ${time(last.lastRun)}${last.status ? ` (${last.status})` : ''}` : 'Not run in the background yet'}
+          </span>
+          <button className="btn-ghost py-1 text-xs" onClick={() => void Native.openAppSettings()}>
+            <ExternalLink className="h-3.5 w-3.5" /> App settings
+          </button>
+        </div>
       </div>
-    </div>
+    </details>
   )
 }
 

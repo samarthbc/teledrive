@@ -336,10 +336,7 @@ function FreeUpSpace() {
   const what = [...count((found?.items.length ?? 0) - videos, 'photo'), ...count(videos, 'video')].join(' and ')
   return (
     <Section title="Free up space">
-      <Row
-        name="Remove backed-up photos from this phone"
-        hint="Photos and videos that are already in TelePhotos are removed from the phone. They stay in TelePhotos."
-      >
+      <Row name="Remove backed-up photos from this phone">
         <button className="btn-secondary shrink-0" disabled={busy} onClick={() => void check()}>
           {busy ? <Loader2 className="animate-spin" /> : <Eraser />} Free up space
         </button>
