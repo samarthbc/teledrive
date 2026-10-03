@@ -12,8 +12,7 @@ import { checkForUpdates, updateNow, useUpdate, type CheckResult } from '../lib/
 import { isAndroid } from '../native/android'
 import { isDesktop } from '../native/desktop'
 import { useDrive, useInPhotos } from '../store/useDrive'
-import { PHOTOS_NAME } from '../telegram/channel'
-import { toast, toastError } from '../store/useToast'
+import { toast } from '../store/useToast'
 import { describeError } from '../telegram/auth'
 import { sessions, type Session } from '../telegram/sessions'
 
@@ -30,18 +29,10 @@ export default function SettingsView({ onGetApps, cameraBackup }: { onGetApps?: 
     // grow past the screen (long, truncated texts would otherwise widen them)
     <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-8 pb-6 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-8">
-        {/* Camera backup belongs to TelePhotos: set up there; other drives point to it */}
-        {cameraBackup && (
+        {/* Camera backup belongs to TelePhotos: only in its settings */}
+        {cameraBackup && inPhotos && (
           <Section title="Camera backup">
-            {inPhotos ? (
-              <CameraBackupSettings />
-            ) : (
-              <Row name={`Camera backup is in ${PHOTOS_NAME}`} hint={`Photos and videos are backed up to ${PHOTOS_NAME}. Its settings are there.`}>
-                <button className="btn-secondary" onClick={() => useDrive.getState().openPhotos().catch(toastError)}>
-                  Open {PHOTOS_NAME}
-                </button>
-              </Row>
-            )}
+            <CameraBackupSettings />
           </Section>
         )}
         <Section title="Appearance">

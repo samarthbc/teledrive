@@ -947,8 +947,8 @@ WhatsApp media once a night, for example).
 ## Phase 15b: Camera backup moves to Settings ✅ (implemented; being tested)
 - The Camera backup dialog became a section of **Settings** (`components/CameraBackupSettings.tsx`), first on the
   page, in the Android app. Settings are per device (the same in every drive), but the section shows only while
-  **TelePhotos** is open; in other drives it's one row, "Camera backup is in TelePhotos", with **Open TelePhotos**
-  (switches drive and stays on Settings). That way Back up now always runs in TelePhotos.
+  **TelePhotos** is open; other drives' Settings have no camera backup at all. That way Back up now always runs in
+  TelePhotos.
 - Gone: the side menu's *Camera backup* item and TelePhotos' *Backup* phone tab (TelePhotos' fourth tab is now
   Trash). TelePhotos' storage card still shows the backup status and leads to Settings.
 - Turning backup on targets TelePhotos explicitly (`enableBackup`: the app host's `photosDriveId` creates it if
@@ -957,7 +957,7 @@ WhatsApp media once a night, for example).
   texts (the active sessions list), so every row was about twice the screen width. The columns are now
   `minmax(0, 1fr)`.
 - Checked on the phone: Settings fits the screen (no sideways scroll; long session names truncate); in My Drive the
-  pointer row; Open TelePhotos switched drive, stayed on Settings, showed the section and backed up a waiting photo.
+  section in TelePhotos (opening TelePhotos backed up a waiting photo); none in My Drive.
 
 ## Phase 16: More
 - Albums (a photo in several albums without uploading again: album marker messages + album IDs on the file).
