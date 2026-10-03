@@ -3,23 +3,29 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FileItem } from '../../drive/tree'
 import { describeError } from '../../telegram/auth'
 import { enqueue } from '../../drive/queue'
-import { listChats, searchPeople, sendFile, type Chat } from '../../telegram/share'
+import { listChats, searchPeople, sendAlbum, sendFile, type Chat } from '../../telegram/share'
+import { Segmented } from '../ui'
+import { useDrive } from '../../store/useDrive'
 import { toast } from '../../store/useToast'
 import Dialog from '../Dialog'
 
 let cachedChats: Chat[] | null = null
 
-/** Pick a Telegram chat and send files to it. */
-export default function SendDialog({ files, onClose }: { files: FileItem[]; onClose: () => void }) {
+/**
+ * Pick a Telegram chat and send files to it. With `album` (a TelePhotos album's name): its photos go as Telegram
+ * albums, as photos or as the original files, the album's name as the message.
+ */
+export default function SendDialog({ files, album, onClose }: { files: FileItem[]; album?: string; onClose: () => void }) {
   const [chats, setChats] = useState<Chat[] | null>(cachedChats)
   const [found, setFound] = useState<Chat[]>([])
   const [query, setQuery] = useState('')
   const [chosen, setChosen] = useState<Chat | null>(null)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(album ?? '')
+  const [asPhotos, setAsPhotos] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    listChats().then(
+    listChats(useDrive.getState().drives.map((d) => d.id)).then(
       (c) => {
         cachedChats = c
         setChats(c)
@@ -45,12 +51,18 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
     return [...local, ...found.filter((c) => !keys.has(c.key))]
   }, [chats, found, query])
 
-  const what = files.length === 1 ? `“${files[0].name}”` : `${files.length} files`
+  const what = album ? `“${album}”` : files.length === 1 ? `“${files[0].name}”` : `${files.length} files`
 
   // Each file is decrypted and uploaded into the chat, with progress in the transfers panel
   const send = () => {
     if (!chosen) return
     const to = chosen
+    if (album) {
+      const bytes = files.reduce((n, f) => n + f.size, 0)
+      enqueue('upload', `${album} → ${to.title}`, bytes, (ctl) => sendAlbum(to.peer, files, message.trim(), asPhotos, ctl))
+      toast(`Sending ${what} to ${to.title}`)
+      return onClose()
+    }
     files.forEach((f, i) =>
       enqueue('upload', `${f.name} → ${to.title}`, f.size, (ctl) => sendFile(to.peer, f, i === 0 ? message.trim() : '', ctl)),
     )
@@ -106,7 +118,22 @@ export default function SendDialog({ files, onClose }: { files: FileItem[]; onCl
             </li>
           ))}
         </ul>
-        {chosen && (
+        {album && (
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-muted">
+              {files.length} item{files.length === 1 ? '' : 's'} ·{' '}
+              {asPhotos ? 'shown as a photo album; Telegram makes photos smaller' : 'full quality, sent as files'}
+            </span>
+            <Segmented<'photos' | 'files'>
+              small
+              label="Send as"
+              value={asPhotos ? 'photos' : 'files'}
+              options={[{ value: 'photos', label: 'Photos' }, { value: 'files', label: 'Original files' }]}
+              onChange={(v) => setAsPhotos(v === 'photos')}
+            />
+          </div>
+        )}
+        {(chosen || album) && (
           <input className="input" aria-label="Message" placeholder="Add a message (optional)" value={message} onChange={(e) => setMessage(e.target.value)} />
         )}
         {error && <p className="font-semibold text-brand-ink">{error}</p>}

@@ -1010,8 +1010,27 @@ WhatsApp media once a night, for example).
   up → the warning listed exactly 1 photo (1.6 KB) → Android's "move this photo to bin?" → Allow → "Freed up 1.6 KB",
   the photo gone from the camera folder and still in TelePhotos.
 
+### 16.3 Share an album, download an album ✅
+- **Where:** the album's menu (⋮ in its top bar; long-press / right-click its card): *Share album…*, *Download as ZIP*,
+  Rename, Delete album.
+- **Share album…:** the Send dialog in album mode (`SendDialog album=<name>`): pick a chat; the album's name is the
+  message (can be edited); **Photos** (default: Telegram shows them as an album grid and makes photos smaller) or
+  **Original files** (full quality, sent as files). One transfer "<album> → <chat>" for all of it.
+  `sendAlbum` (`telegram/share.ts`): each photo is decrypted and uploaded (`uploadBytes`), turned into media with
+  `messages.UploadMedia`, then sent in groups of 10 with `messages.SendMultiMedia` (one item: `SendMedia`), the message
+  on the first. JPEG/PNG/WebP up to 10 MB go as photos, videos as streamable videos, everything else (HEIC, big
+  photos) as files in groups of their own (Telegram doesn't mix files with photos). Photos that can't be sent (locked,
+  incomplete) are left out with a note.
+- **Send dialog:** no longer offers any TeleDrive drive's own channel (it only hid the open one, so My Drive's
+  "TeleDrive Storage" showed up in TelePhotos).
+- **Download as ZIP:** the album's photos in one ZIP named after the album (`downloadAsZip(list, name)`; same names
+  get " (1)").
+- **Checked on the phone:** Second Album → Download as ZIP → `Download/TeleDrive/Second Album.zip` with both photos
+  (ZIP checked on the PC); Share album → Saved Messages → sent as one 2-photo album; the chat list no longer has
+  TeleDrive Storage.
+
 ### Still to do
-- On this day; share an album to a Telegram chat as a media group; map (opt-in, encrypted); search.
+- On this day; map (opt-in, encrypted); search.
 
 ---
 

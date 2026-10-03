@@ -66,7 +66,7 @@ type Modal =
   | { type: 'logout' }
   | { type: 'getApps' }
   | { type: 'lock'; item: Item; action: LockAction; then?: (item: Item) => void }
-  | { type: 'send'; files: FileItem[] }
+  | { type: 'send'; files: FileItem[]; album?: string }
   | { type: 'newDrive' }
   | { type: 'addToAlbum'; files: FileItem[] }
   | { type: 'newAlbum' }
@@ -314,11 +314,22 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     setModal({ type: 'send', files })
   }
 
-  /** Folders (and everything in them) as one ZIP file. */
-  const downloadAsZip = async (list: Item[]) => {
+  /** A TelePhotos album to a Telegram chat, as Telegram albums. */
+  const shareAlbum = (a: Album) => {
+    const all = timelineItems(useDrive.getState().drive, { album: a.id })
+    const files = all.filter((f) => !cantSend(f))
+    if (!files.length) return toastError(new Error(all.length ? "This album's photos can't be sent" : 'This album is empty'))
+    if (files.length < all.length) toast(`${all.length - files.length} photo${all.length - files.length === 1 ? '' : 's'} can't be sent and will be left out`)
+    setModal({ type: 'send', files, album: a.name })
+  }
+
+  /** Folders (and everything in them) as one ZIP file; `zipName` names it (an album's ZIP). */
+  const downloadAsZip = async (list: Item[], zipName?: string) => {
     const { entries, skipped, bytes } = zipEntries(useDrive.getState().drive, list)
-    if (!entries.length) return toastError(new Error('Nothing to download'))
-    const name = list.length === 1 ? `${list[0].name}.zip` : `TeleDrive ${new Date().toISOString().slice(0, 10)}.zip`
+    if (!entries.length) return toastError(new Error(zipName ? 'This album is empty' : 'Nothing to download'))
+    const name = zipName
+      ? `${zipName}.zip`
+      : list.length === 1 ? `${list[0].name}.zip` : `TeleDrive ${new Date().toISOString().slice(0, 10)}.zip`
     // Must run first, while the click still counts as a user gesture
     const target = await pickSaveTarget({ name, mime: 'application/zip' })
     if (!target) return
@@ -479,6 +490,12 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   }
 
   const albumMenu = (a: Album): MenuEntry[] => [
+    { label: 'Share album…', icon: Send, onClick: () => shareAlbum(a) },
+    {
+      label: 'Download as ZIP',
+      icon: Download,
+      onClick: () => void downloadAsZip(timelineItems(useDrive.getState().drive, { album: a.id }), a.name),
+    },
     { label: 'Rename', icon: Pencil, onClick: () => setModal({ type: 'renameAlbum', album: a }) },
     { label: 'Delete album', icon: Trash2, danger: true, onClick: () => setModal({ type: 'deleteAlbum', album: a }) },
   ]
@@ -1177,7 +1194,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
           onClose={() => setModal(null)}
         />
       )}
-      {modal?.type === 'send' && <SendDialog files={modal.files} onClose={() => setModal(null)} />}
+      {modal?.type === 'send' && <SendDialog files={modal.files} album={modal.album} onClose={() => setModal(null)} />}
       {modal?.type === 'duplicates' && (
         <DuplicatesDialog
           duplicates={modal.duplicates}

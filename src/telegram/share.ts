@@ -20,10 +20,13 @@ export interface Chat {
 
 const DIALOG_LIMIT = 200
 
-/** Chats the user can send files to: Saved Messages, people, groups, and channels they can post in. */
-export async function listChats(): Promise<Chat[]> {
+/**
+ * Chats the user can send files to: Saved Messages, people, groups, and channels they can post in. Not the drives'
+ * own channels (`driveIds`, and the open one).
+ */
+export async function listChats(driveIds: string[] = []): Promise<Chat[]> {
   const client = await getClient()
-  const storageId = storagePeer().channelId.toString()
+  const drives = new Set([storagePeer().channelId.toString(), ...driveIds])
   const chats: Chat[] = [{ key: 'self', title: 'Saved Messages', subtitle: 'Your own cloud chat', peer: new Api.InputPeerSelf() }]
   for (const d of await client.getDialogs({ limit: DIALOG_LIMIT })) {
     const e = d.entity
@@ -35,7 +38,7 @@ export async function listChats(): Promise<Chat[]> {
       if (e.left || e.deactivated) continue
       chats.push({ key: `c${e.id}`, title: e.title, subtitle: 'Group', peer: d.inputEntity })
     } else if (e instanceof Api.Channel) {
-      if (e.left || e.id.toString() === storageId) continue
+      if (e.left || drives.has(e.id.toString())) continue
       const canPost = e.megagroup ? !e.defaultBannedRights?.sendMedia || e.creator || !!e.adminRights : e.creator || !!e.adminRights?.postMessages
       if (!canPost) continue
       chats.push({ key: `ch${e.id}`, title: e.title, subtitle: e.megagroup ? 'Group' : 'Channel', peer: d.inputEntity })
@@ -125,4 +128,95 @@ async function sendByReference(peer: Api.TypeInputPeer, file: FileItem, message:
     }
     text = ''
   }
+}
+
+// ---- Sharing a TelePhotos album ----
+
+/** Telegram puts at most 10 photos/videos in one album message. */
+const GROUP = 10
+/** Telegram's limit for a file sent as a photo (bigger ones go as files). */
+const MAX_PHOTO = 10 * 1024 * 1024
+const PHOTO_TYPES = /^image\/(jpeg|png|webp)$/
+
+type SendKind = 'photo' | 'video' | 'file'
+
+/** As photos: Telegram shows them in a grid (and makes the photos smaller). Otherwise the original files. */
+function sendKind(file: FileItem, asPhotos: boolean): SendKind {
+  if (!asPhotos) return 'file'
+  if (PHOTO_TYPES.test(file.mime) && file.size <= MAX_PHOTO) return 'photo'
+  if (file.mime.startsWith('video/')) return 'video'
+  return 'file'
+}
+
+function chunks<T>(list: T[], n: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += n) out.push(list.slice(i, i + n))
+  return out
+}
+
+/**
+ * Send photos to a chat as Telegram albums (groups of up to 10), the caption on the first. Photos and videos can share
+ * a group, files only group with files. Progress for all of them goes through `ctl`.
+ */
+export async function sendAlbum(
+  peer: Api.TypeInputPeer, files: FileItem[], caption: string, asPhotos: boolean, ctl: TransferControl,
+): Promise<void> {
+  const client = await getClient()
+  const encrypted = files.filter((f) => f.fileKey)
+  const media = encrypted.filter((f) => sendKind(f, asPhotos) !== 'file')
+  const docs = encrypted.filter((f) => sendKind(f, asPhotos) === 'file')
+  let text = caption
+  for (const group of [...chunks(media, GROUP), ...chunks(docs, GROUP)]) {
+    const items: Api.InputSingleMedia[] = []
+    for (const f of group) {
+      items.push(new Api.InputSingleMedia({ media: await uploadMedia(peer, f, sendKind(f, asPhotos), ctl), message: text, randomId: randomLong() }))
+      text = ''
+    }
+    await ctl.checkpoint()
+    await withRetry(
+      () =>
+        client.invoke(
+          items.length === 1
+            ? new Api.messages.SendMedia({ peer, media: items[0].media, message: items[0].message, randomId: randomLong() })
+            : new Api.messages.SendMultiMedia({ peer, multiMedia: items }),
+        ),
+      ctl,
+    )
+  }
+  // From before everything was encrypted: one by one
+  for (const f of files.filter((x) => !x.fileKey)) {
+    await sendByReference(peer, f, text)
+    ctl.progress(f.size)
+    text = ''
+  }
+}
+
+/** Upload a decrypted copy to Telegram (not sent yet) and return it ready to go into an album message. */
+async function uploadMedia(peer: Api.TypeInputPeer, file: FileItem, kind: SendKind, ctl: TransferControl): Promise<Api.TypeInputMedia> {
+  const client = await getClient()
+  const inputFile = await uploadBytes(new DriveFileSource(file), file.name, ctl)
+  await ctl.checkpoint()
+  const filename = new Api.DocumentAttributeFilename({ fileName: file.name })
+  const uploaded =
+    kind === 'photo'
+      ? new Api.InputMediaUploadedPhoto({ file: inputFile })
+      : new Api.InputMediaUploadedDocument({
+          file: inputFile,
+          mimeType: file.mime,
+          forceFile: kind === 'file',
+          attributes:
+            kind === 'video'
+              ? [new Api.DocumentAttributeVideo({ duration: 0, w: file.wh?.[0] ?? 0, h: file.wh?.[1] ?? 0, supportsStreaming: true }), filename]
+              : [filename],
+        })
+  const res = await withRetry(() => client.invoke(new Api.messages.UploadMedia({ peer, media: uploaded })), ctl)
+  if (res instanceof Api.MessageMediaPhoto && res.photo instanceof Api.Photo) {
+    const p = res.photo
+    return new Api.InputMediaPhoto({ id: new Api.InputPhoto({ id: p.id, accessHash: p.accessHash, fileReference: p.fileReference }) })
+  }
+  if (res instanceof Api.MessageMediaDocument && res.document instanceof Api.Document) {
+    const d = res.document
+    return new Api.InputMediaDocument({ id: new Api.InputDocument({ id: d.id, accessHash: d.accessHash, fileReference: d.fileReference }) })
+  }
+  throw new Error(`Telegram didn't accept “${file.name}”`)
 }
