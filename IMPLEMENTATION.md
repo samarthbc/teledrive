@@ -1052,6 +1052,63 @@ WhatsApp media once a night, for example).
 
 ---
 
+## Phase 17: Locked photos
+
+Secret photos in TelePhotos, behind the TeleDrive password. A simpler version of My Drive's locked folders: one place,
+no separate password to set.
+
+### 17.1 What the user sees
+- **Albums** always starts with a **Locked photos** card (lock icon, no cover, no count), even before anything is
+  locked; it can't be renamed or deleted and never appears in the "Add to album" list.
+- Opening it asks for the **TeleDrive password**; then it shows its photos as a timeline. A **Lock** button in its top
+  bar locks it again; it also locks on leaving it, when the app goes to the background, and on the auto-lock timer.
+- **Lock photos:** select photos (or a photo's menu) → **Move to Locked photos** → TeleDrive password (if it isn't
+  open) → they leave the timeline and every album and appear only in Locked photos.
+- Inside Locked photos the selection bar has **Move out** (back to the folder each photo came from, e.g. Camera),
+  **Download** and **Delete forever** (asks first; locked photos don't go through the Trash). No Add to album, Share,
+  Send to Telegram or Star.
+- **+ Add** inside Locked photos uploads straight into it (the photos never touch the timeline).
+- Android: after locking, **"Also remove from this phone?"** (default yes) for photos camera backup uploaded, through
+  Android's own "move to bin" prompt (as Free up space), so the photo doesn't stay in the phone's Gallery.
+
+### 17.2 How it's stored
+- A folder at the top of TelePhotos, created the first time a photo is locked, marked as the Locked photos folder
+  (a flag in its caption, e.g. `x.lp = 1`), with a normal lock (`LockInfo`) whose password is the **TeleDrive
+  password**: `newLock(top level key, password)` after `verifyPassword`. Its key is wrapped by the password and the
+  top level's key, so Telegram, other devices and "Remember on this device" can't open it without the password.
+- **Moving in/out** is the existing move into/out of a locked folder: the photo's file key is re-wrapped and its caption
+  re-sealed with the other level's key; nothing is re-uploaded (a 2 GB video moves as fast as a photo).
+- **Albums:** moving in drops `Secret.al` in the same caption edit, so a locked photo is in no album, even after it's
+  moved out again. `setInAlbum` already skips locked photos; the Add to album UI isn't offered there.
+- **Move out** returns a photo to the folder it came from: the original top folder's ID is kept in its sealed caption
+  when it's locked (e.g. `Secret.op`); if that folder is gone, to the top.
+- Thumbnails of locked photos stay in memory only (as for locked items today), never in the on-disk cache.
+- Older app versions see it as an ordinary locked folder in TelePhotos (still safe: it needs the password).
+
+### 17.3 Kept out of everything else (also while it's open)
+- An open locked folder's photos would normally show everywhere; Locked photos' never do: not in the timeline, its
+  chips, Starred, albums (and their counts and covers), search, Share album / ZIP, Free up space, or the source chips.
+- Camera backup never uploads into it; Free up space never offers its photos (they're removed when locked, 17.1).
+
+### 17.4 Things to remember
+- **Changing the TeleDrive password** (no such feature yet): it must re-lock this folder with the new password
+  (`changeItemPassword`), or Locked photos can't be opened any more.
+- **Forgotten password:** locked photos can't be recovered (as with the rest of an encrypted drive). Say so the first
+  time something is locked.
+- **Multiple devices:** another device sees the same Locked photos card and needs the same password.
+
+### 17.5 Steps
+1. The folder: find it (flag) in `buildDrive`; create and lock it on first use; `lockedPhotosFolder(drive)`.
+2. Exclusions (17.3) in `timelineItems`, `albumStats`, search, sources, Free up space; unit tests.
+3. Ops: `lockPhotos(files, password?)` (move in, drop albums, remember the original folder), `unlockPhotos(files)`
+   (move out), delete forever; unit tests.
+4. Screens: the Locked photos card in Albums, the password prompt, its timeline (top-bar Lock, + Add), selection-bar
+   and photo-menu actions; relock on leaving / background.
+5. Android: "Also remove from this phone?" after locking (match by name and size, as Free up space; `trashMedia`).
+6. Check on the phone and the website: lock, survive a restart, wrong password, move out (back to Camera), albums
+   dropped, nothing leaks into the timeline/search/albums while open, relock on leaving, + Add, remove from phone.
+
+
 ## Later (ideas, not planned yet)
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).
 

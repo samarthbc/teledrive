@@ -194,6 +194,7 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Free up space: remove backed-up photos from the phone (after an "Are you sure?" and Android's own prompt)
 - [x] Share an album to a Telegram chat (as Telegram albums); download an album as a ZIP
 - [x] Search photos by date ("dec 2024", "last summer"), kind (videos, starred, large), folder, album or name
+- [ ] Locked photos: a default album behind the TeleDrive password; locked photos are in no other album (Phase 17)
 - [ ] Later: on this day, map, smart search (what's in a photo, on the device)
 
 ---
@@ -237,3 +238,4 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **14** | TelePhotos: move existing Camera Backup folders (skipped, not needed) |
 | **15** | TelePhotos: per-folder backup timing (as taken / overnight) |
 | **16** | TelePhotos: albums, free up space, and more |
+| **17** | TelePhotos: Locked photos |
