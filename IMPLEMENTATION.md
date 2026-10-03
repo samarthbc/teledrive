@@ -951,6 +951,8 @@ WhatsApp media once a night, for example).
   TelePhotos.
 - Gone: the side menu's *Camera backup* item and TelePhotos' *Backup* phone tab (TelePhotos' fourth tab is now
   Trash). TelePhotos' storage card still shows the backup status and leads to Settings.
+- Phone tabs everywhere: the drive's top (Drive / Photos), Recent, Starred, **Trash** (My Drive's *Photos* tab is
+  gone too; TelePhotos is opened from the drive picker).
 - Turning backup on targets TelePhotos explicitly (`enableBackup`: the app host's `photosDriveId` creates it if
   needed), no longer "the open drive"; the same function moves backups set up in another drive.
 - **Settings on phones scrolled sideways:** the page grid let its column grow to the full width of long, truncated

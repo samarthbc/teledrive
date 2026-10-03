@@ -880,10 +880,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         )}
         <TransferPanel className="pointer-events-auto w-full" />
       </div>
-      <BottomNav
-        photos={inPhotos}
-        onPhotos={appUi && !inPhotos ? openPhotos : undefined}
-      />
+      <BottomNav photos={inPhotos} />
 
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6">
@@ -1177,8 +1174,8 @@ function EmptyState(props: {
   )
 }
 
-/** Phone tabs. The fourth: in the app, Photos (opens TelePhotos) in other drives; otherwise Trash. */
-function BottomNav({ photos, onPhotos }: { photos: boolean; onPhotos?: () => void }) {
+/** Phone tabs: the drive's top (Photos in TelePhotos), Recent, Starred, Trash. */
+function BottomNav({ photos }: { photos: boolean }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const tabs = [
@@ -1190,9 +1187,7 @@ function BottomNav({ photos, onPhotos }: { photos: boolean; onPhotos?: () => voi
     },
     { label: 'Recent', icon: Clock, on: pathname === '/recent', go: () => navigate('/recent') },
     { label: 'Starred', icon: Star, on: pathname === '/starred', go: () => navigate('/starred') },
-    onPhotos
-      ? { label: 'Photos', icon: Images, on: false, go: onPhotos }
-      : { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
+    { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
   ]
   return (
     <nav className="fixed inset-x-3 bottom-3 z-20 flex h-18 items-center justify-around rounded-md bg-surface raised-md md:hidden">
