@@ -1,6 +1,6 @@
 import {
   ArchiveRestore, ArrowDownAZ, ArrowUpAZ, Camera, Clock, CloudUpload, Download, Eye, FolderInput, FolderOpen, FolderPlus,
-  FolderUp, HardDrive, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff,
+  FolderUp, HardDrive, Images, Info, LayoutGrid, List, Menu as MenuIcon, Pencil, Plus, RefreshCw, Search, Star, StarOff,
   Trash2, TriangleAlert, Upload, X, ExternalLink, KeyRound, Lock, LockOpen, MonitorSmartphone, RefreshCcwDot, Send,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -46,7 +46,7 @@ import { createFolders, treeFromDrop, treeFromInput, type PickedTree } from '../
 import { closeAllLocks, holdOpen } from '../drive/keyring'
 import { DriveFileUpload } from '../drive/stream'
 import { FILTERS, formatBytes, formatDate, type FilterKey } from '../lib/format'
-import { useDrive, useRootName, type SortKey } from '../store/useDrive'
+import { useDrive, useInPhotos, useRootName, type SortKey } from '../store/useDrive'
 import { toast, toastError } from '../store/useToast'
 
 export type Mode = 'folder' | 'search' | 'recent' | 'starred' | 'trash' | 'settings'
@@ -94,6 +94,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
   const { drive, view, sort, syncing, syncError, setView, setSort, refresh, logout } = useDrive()
   const anyUnlocked = useMemo(() => [...drive.items.values()].some((i) => i.lock && !i.locked), [drive])
   const rootName = useRootName()
+  const inPhotos = useInPhotos()
   const [modal, setModal] = useState<Modal | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[]; header?: MenuHeader } | null>(null)
   const [preview, setPreview] = useState<{ files: FileItem[]; index: number } | null>(null)
@@ -171,7 +172,14 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   const newFolder = () => setModal({ type: 'newFolder' })
 
-  const upload = async (files: UploadSource[], into?: string) => {
+  const upload = async (all: UploadSource[], into?: string) => {
+    // TelePhotos only takes photos and videos
+    const files = inPhotos ? all.filter(isMedia) : all
+    if (files.length < all.length) {
+      const n = all.length - files.length
+      toast(`${n} file${n === 1 ? ' isn’t a photo or video' : 's aren’t photos or videos'}, skipped. Files go in My Drive.`)
+    }
+    if (!files.length) return
     const target = into ?? (mode === 'folder' ? current : ROOT)
     if (!into && (target !== current || mode !== 'folder')) toast(`Uploading to ${rootName}`)
     await queueUploads(files.map((file) => ({ file, folder: target })))
@@ -179,6 +187,8 @@ export default function DrivePage({ mode }: { mode: Mode }) {
 
   /** Upload a picked or dropped folder: recreate its folders, then upload the files into them. */
   const uploadTree = (tree: PickedTree, into?: string) => {
+    // No folders in TelePhotos: just the photos and videos in it
+    if (inPhotos) return void upload(tree.files.map((f) => f.file), into)
     const target = into ?? (mode === 'folder' ? current : ROOT)
     void act(
       (async () => {
@@ -534,6 +544,17 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     },
   }
 
+  const switchDrive = (id: string) => {
+    if (id === useDrive.getState().currentDrive) return
+    // Folder links belong to one drive, so start at the top of the other one
+    navigate('/')
+    void act(useDrive.getState().switchDrive(id))
+  }
+  const openPhotos = () => {
+    navigate('/')
+    if (!inPhotos) void act(useDrive.getState().openPhotos())
+  }
+
   const sidebar = (
     <Sidebar
       onUpload={() => fileInput.current?.click()}
@@ -542,14 +563,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       onNewFolder={newFolder}
       onLogout={() => setModal({ type: 'logout' })}
       onLockAll={anyUnlocked ? closeAllLocks : undefined}
-      onSwitchDrive={(id) => {
-        if (id === useDrive.getState().currentDrive) return
-        // Folder links belong to one drive, so start at the top of the other one
-        navigate('/')
-        void act(useDrive.getState().switchDrive(id))
-      }}
+      onSwitchDrive={switchDrive}
+      onOpenPhotos={openPhotos}
       onNewDrive={() => setModal({ type: 'newDrive' })}
-      onCameraBackup={appUi ? () => setModal({ type: 'backup' }) : undefined}
+      onCameraBackup={appUi && inPhotos ? () => setModal({ type: 'backup' }) : undefined}
       onGetApps={() => setModal({ type: 'getApps' })}
     />
   )
@@ -561,11 +578,13 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ? (i: Item) => `Deleted ${formatDate(i.x.tr ?? 0)} · from ${locationOf(drive, i, rootName)}`
         : (i: Item) => locationOf(drive, i, rootName)
 
-  const fabEntries: MenuEntry[] = [
-    { label: 'Upload files', icon: Upload, onClick: () => fileInput.current?.click() },
-    ...(isAndroid ? [] : [{ label: 'Upload folder', icon: FolderUp, onClick: () => folderInput.current?.click() }]),
-    { label: 'New folder', icon: FolderPlus, onClick: newFolder },
-  ]
+  const fabEntries: MenuEntry[] = inPhotos
+    ? [{ label: 'Upload photos', icon: Upload, onClick: () => fileInput.current?.click() }]
+    : [
+        { label: 'Upload files', icon: Upload, onClick: () => fileInput.current?.click() },
+        ...(isAndroid ? [] : [{ label: 'Upload folder', icon: FolderUp, onClick: () => folderInput.current?.click() }]),
+        { label: 'New folder', icon: FolderPlus, onClick: newFolder },
+      ]
   const title = mode === 'folder' ? (crumbs.at(-1)?.name ?? rootName) : TITLES[mode]
   const count =
     mode === 'search'
@@ -582,6 +601,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         ref={fileInput}
         type="file"
         multiple
+        accept={inPhotos ? 'image/*,video/*' : undefined}
         hidden
         onChange={(e) => {
           if (e.target.files?.length) void upload(Array.from(e.target.files))
@@ -756,7 +776,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
               <button className={mode === 'search' && filter ? 'chip' : 'chip-active'} onClick={() => setFilter(null)}>
                 All
               </button>
-              {(Object.keys(FILTERS) as FilterKey[]).map((key) => (
+              {(Object.keys(FILTERS) as FilterKey[]).filter((key) => !inPhotos || key === 'image' || key === 'video').map((key) => (
                 <button key={key} className={mode === 'search' && filter === key ? 'chip-active' : 'chip'} onClick={() => setFilter(filter === key ? null : key)}>
                   {FILTERS[key].label}
                 </button>
@@ -782,6 +802,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
                   filtered={!!filter}
                   searched={!!query}
                   isRoot={current === ROOT}
+                  photos={inPhotos}
                   onUpload={() => fileInput.current?.click()}
                   onNewFolder={newFolder}
                 />
@@ -810,7 +831,11 @@ export default function DrivePage({ mode }: { mode: Mode }) {
         )}
         <TransferPanel className="pointer-events-auto w-full" />
       </div>
-      <BottomNav onBackup={appUi ? () => setModal({ type: 'backup' }) : undefined} />
+      <BottomNav
+        photos={inPhotos}
+        onBackup={appUi && inPhotos ? () => setModal({ type: 'backup' }) : undefined}
+        onPhotos={appUi && !inPhotos ? openPhotos : undefined}
+      />
 
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6">
@@ -1060,12 +1085,20 @@ function EmptyState(props: {
   filtered: boolean
   searched: boolean
   isRoot: boolean
+  /** In TelePhotos. */
+  photos: boolean
   onUpload: () => void
   onNewFolder: () => void
 }) {
-  const { mode, filtered, searched, isRoot, onUpload, onNewFolder } = props
+  const { mode, filtered, searched, isRoot, photos, onUpload, onNewFolder } = props
   const content: Record<Exclude<Mode, 'settings'>, { icon: typeof Search; title: string; text: string }> = {
-    folder: { icon: CloudUpload, title: isRoot ? 'Your drive is empty' : 'Nothing here yet', text: 'Drop files or folders here, or use Upload.' },
+    folder: photos
+      ? {
+          icon: Images,
+          title: isRoot ? 'No photos yet' : 'Nothing here yet',
+          text: isAndroid ? 'Turn on Camera backup, or upload photos and videos.' : 'Drop photos and videos here, or use Upload.',
+        }
+      : { icon: CloudUpload, title: isRoot ? 'Your drive is empty' : 'Nothing here yet', text: 'Drop files or folders here, or use Upload.' },
     search: searched || filtered
       ? { icon: Search, title: 'No results', text: 'Try a different name or filter.' }
       : { icon: Search, title: 'Search your drive', text: 'Type a file or folder name, or pick a filter.' },
@@ -1084,28 +1117,40 @@ function EmptyState(props: {
       {mode === 'folder' && (
         <div className="mt-2 flex flex-wrap justify-center gap-3">
           <button className="btn-primary" onClick={onUpload}>
-            <Upload /> Upload files
+            <Upload /> {photos ? 'Upload photos' : 'Upload files'}
           </button>
-          <button className="btn-secondary" onClick={onNewFolder}>
-            <FolderPlus /> New folder
-          </button>
+          {!photos && (
+            <button className="btn-secondary" onClick={onNewFolder}>
+              <FolderPlus /> New folder
+            </button>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-/** Phone tabs. The fourth is Camera backup in the app, Trash on the website. */
-function BottomNav({ onBackup }: { onBackup?: () => void }) {
+/**
+ * Phone tabs. The fourth: in the app, Photos (opens TelePhotos) in other drives and Camera backup in TelePhotos;
+ * Trash on the website.
+ */
+function BottomNav({ photos, onBackup, onPhotos }: { photos: boolean; onBackup?: () => void; onPhotos?: () => void }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const tabs = [
-    { label: 'Drive', icon: HardDrive, on: pathname === '/' || pathname.startsWith('/folder/'), go: () => navigate('/') },
+    {
+      label: photos ? 'Photos' : 'Drive',
+      icon: photos ? Images : HardDrive,
+      on: pathname === '/' || pathname.startsWith('/folder/'),
+      go: () => navigate('/'),
+    },
     { label: 'Recent', icon: Clock, on: pathname === '/recent', go: () => navigate('/recent') },
     { label: 'Starred', icon: Star, on: pathname === '/starred', go: () => navigate('/starred') },
     onBackup
       ? { label: 'Backup', icon: Camera, on: false, go: onBackup }
-      : { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
+      : onPhotos
+        ? { label: 'Photos', icon: Images, on: false, go: onPhotos }
+        : { label: 'Trash', icon: Trash2, on: pathname === '/trash', go: () => navigate('/trash') },
   ]
   return (
     <nav className="fixed inset-x-3 bottom-3 z-20 flex h-18 items-center justify-around rounded-md bg-surface raised-md md:hidden">
@@ -1160,4 +1205,10 @@ function waitForItem(id: string, ok: (item: Item) => boolean, ms = 10_000): Prom
     const unsubscribe = useDrive.subscribe(check)
     check()
   })
+}
+
+/** Photos and videos (by type, else by extension), the only files TelePhotos takes. */
+function isMedia(file: UploadSource): boolean {
+  if (/^(image|video)\//.test(file.type)) return true
+  return /\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|tiff?|dng|mp4|mov|m4v|webm|mkv|3gp|avi)$/i.test(file.name)
 }

@@ -14,7 +14,7 @@ import type { AccountConfig } from '../drive/crypto'
 import { isAndroid } from '../native/android'
 import { describeError, errorCode, logOut } from '../telegram/auth'
 import {
-  createDrive, driveName, loadDrives, openStorage, refreshDrives, stillAccessible, type DriveInfo,
+  createDrive, createPhotosDrive, driveName, isPhotosDrive, loadDrives, openStorage, refreshDrives, stillAccessible, type DriveInfo,
 } from '../telegram/channel'
 import { getClient, isAuthorized, onSessionLost, resetClient, SESSION_LOST_CODES } from '../telegram/client'
 import { acquireSessionLock, onSessionTakenOver } from '../telegram/sessionLock'
@@ -63,6 +63,8 @@ interface State {
   /** Throws if transfers are still running. */
   switchDrive: (id: string) => Promise<void>
   createDrive: (name: string) => Promise<void>
+  /** Open TelePhotos, creating it the first time. Throws if transfers are still running. */
+  openPhotos: () => Promise<void>
 }
 
 const SYNC_INTERVAL = 30_000
@@ -348,8 +350,22 @@ export const useDrive = create<State>((set, get) => {
       set({ drives })
       await get().switchDrive(drive.id)
     },
+
+    openPhotos: async () => {
+      const existing = get().drives.find(isPhotosDrive)
+      if (existing) return get().switchDrive(existing.id)
+      if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before opening TelePhotos')
+      const { drive, drives } = await createPhotosDrive(get().drives)
+      set({ drives })
+      await get().switchDrive(drive.id)
+    },
   }
 })
+
+/** TelePhotos is the open drive. */
+export function useInPhotos(): boolean {
+  return useDrive((s) => isPhotosDrive(s.drives.find((x) => x.id === s.currentDrive)))
+}
 
 /** Name of the open drive ("My Drive" for the first one), shown where the top folder is named. */
 export function useRootName(): string {

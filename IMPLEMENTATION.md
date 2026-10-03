@@ -756,6 +756,107 @@ restarting, and works on the website, the Windows app and the Android app.
 
 ---
 
+# TELEPHOTOS
+
+A Google Photos–style space inside TeleDrive, kept apart from files. Built on the `telephotos` branch and merged
+into `main` once every phase below is done.
+
+### Decisions
+| Decision | Reason |
+|---|---|
+| **TelePhotos is a second built-in drive** (its own channel), not a view over My Drive | Photos and files never mix: separate folders, Recent, Trash, search, and separate in Telegram too |
+| Channel title **"TeleDrive Photos"**, shown as **TelePhotos** | Drive discovery only looks at channels whose title starts with "TeleDrive"; same trick as "TeleDrive Storage" → "My Drive" |
+| Recognised by its title (`isPhotosDrive`) | Like My Drive; needs no extra request when the drive list is loaded on another device |
+| Created **the first time it's opened** (or backup is turned on there) | People who never use photos don't get an extra channel |
+| Always second in the drive list; can't be renamed or deleted; "TelePhotos" is a reserved drive name | It's part of the app, not a user drive |
+| **One drive open at a time stays** (no parallel drives) | Keeping two drives open means changing every module that uses the open channel (`storagePeer()`, 17 places), the local DB and sync. Backup is handled per phase 12 instead |
+| Same login, TeleDrive password, encryption, upload, sync, thumbnails and viewer | Only the screens and the backup target are photo-specific |
+| Camera backup only exists in TelePhotos | Backup is a photos feature; My Drive is for files |
+
+## Phase 11: The TelePhotos drive ✅ (implemented; being tested)
+
+### 11.1 Drive
+- `telegram/channel.ts`: `PHOTOS_TITLE = 'TeleDrive Photos'`, `isPhotosDrive(d)`, `driveName` → "TelePhotos",
+  `createPhotosDrive(known)` (inserted right after My Drive), discovery sorts My Drive, TelePhotos, then the rest.
+  `currentDrive()` returns the open `DriveInfo` (so backup knows it's in TelePhotos, also in the background page).
+- `createDrive` refuses the name "TelePhotos".
+- Store: `openPhotos()` switches to TelePhotos, creating it first if it doesn't exist yet.
+
+### 11.2 Where it shows
+- **Drive picker** (sidebar): My Drive, TelePhotos (image icon; listed even before it exists), other drives, New drive.
+- **Phone tabs:** in My Drive (app) the fourth tab is **Photos** (opens TelePhotos); in TelePhotos the tabs are
+  Photos · Recent · Starred · Backup.
+- Until phase 13 TelePhotos uses the normal file browser (its root is named "TelePhotos").
+
+### 11.3 Photos only
+- Uploads (button, drag and drop, share) keep only images and videos; the rest are skipped with a message.
+- No *Upload folder* / *New folder* in TelePhotos (albums come in phase 16).
+
+### 11.4 Camera backup moves to TelePhotos
+- *Camera backup* (sidebar item, storage-card line, phone tab) only appears in TelePhotos.
+- In TelePhotos the layout is flat: the camera goes into **Camera**, other phone folders into a folder of their own
+  name (**Screenshots**, **WhatsApp Images**…) at the top of the drive. (In other drives the old
+  *Camera Backup/…* layout stays, for backups set up before TelePhotos.)
+- Backups set up before TelePhotos keep going to their old drive until moved: the Camera backup dialog in TelePhotos
+  says where they go and offers **Back up to TelePhotos instead** (new photos only; what's already backed up stays
+  where it is until phase 14). Already backed-up photos aren't uploaded again (the backed-up list is kept).
+
+**Phase 11 done when:** TelePhotos appears in the drive picker, opens (created on first use), only takes photos and
+videos, and camera backup is set up from there and uploads into its Camera folder.
+
+### 11.5 Checked on the phone (Redmi 23124RN87I, release build installed over 1.1.2)
+- My Drive: fourth tab is **Photos**; no Camera backup in the side menu or storage card.
+- Photos tab → TelePhotos created and opened; tabs Photos · Recent · Starred · Backup; chips All / Photos / Videos;
+  + menu only has *Upload photos*; empty state "No photos yet".
+- Drive picker: My Drive, TelePhotos (✓), New drive.
+- Camera backup turned on from TelePhotos (only new) → a test image put in `DCIM/Camera` was uploaded to
+  **TelePhotos/Camera** ("1 item backed up").
+- Not checked yet: the "Back up to TelePhotos instead" notice (needs a phone whose backup was set up in My Drive),
+  skipping non-photos shared into TelePhotos, the website.
+
+## Phase 12: Backup from anywhere
+
+**Problem:** while the app is open, backup only runs in its own drive (*"Paused: open the TelePhotos drive"*).
+With the app in the background, Android's job asks the app's JavaScript to back up (`backgroundBackup`), which hits
+the same pause when My Drive is open. Only a fully closed app (the headless page) backs up regardless.
+
+**Plan:** when a backup round is due **while the app is in the background** and another drive is open, switch to
+TelePhotos quietly, run the round, and remember to switch back: on return the app opens the drive the person left
+(or stays in TelePhotos if the round is still running, then switches back). Switching is refused while transfers run,
+so the round waits for the person's own uploads first.
+- Background backup becomes always on when camera backup is on (the separate switch goes).
+- My Drive shows a small "N photos waiting to back up · Open TelePhotos" line while the app is on screen.
+- **Done when:** with My Drive left open and the app in the background, a new photo shows up in TelePhotos within
+  minutes, and returning to the app shows My Drive again.
+
+## Phase 13: Photo screens
+- File metadata gets `dt` (date taken; MediaStore `DATE_TAKEN` for backups, EXIF via a small reader for uploads,
+  else upload time) and `wh` (width×height). Encrypted files keep them in `Secret`. Older files are filled in
+  lazily (one caption edit each).
+- TelePhotos replaces the file browser with: a **timeline** grouped by day/month with a year/month scrubber,
+  justified rows (from `wh`), multi-select by dragging; the existing full-screen viewer; source filters
+  (Camera, Screenshots, WhatsApp…, from the backup folders); Favorites (starred), Trash and Locked as today.
+
+## Phase 14: Moving existing backups
+- If My Drive (or another drive) has a *Camera Backup* folder, offer **Move to TelePhotos** once.
+- Uses `messages.forwardMessages` between the channels (no new upload), then deletes the originals.
+- To check first: whether each drive wraps file keys with its own key; if so each encrypted file's key is
+  re-wrapped (one caption edit per file).
+- Later: **Move to TelePhotos** for photos uploaded by hand into My Drive.
+
+## Phase 15: Backup modes
+- **As photos are taken** (default; today's triggers) or **Once a day, overnight** (WorkManager ~24 h, optionally
+  Wi-Fi + charging only; a missed night retries within the hour, not the next night). Exact times aren't possible
+  without the restricted exact-alarm permission, so the setting says "overnight".
+- **Back up now** stays.
+
+## Phase 16: More
+- Albums (a photo in several albums without uploading again: album marker messages + album IDs on the file).
+- Free up space (delete phone copies already backed up, checked by SHA-256, via Android's delete dialog).
+- On this day; share an album to a Telegram chat as a media group; map (opt-in, encrypted); search.
+
+---
+
 ## Later (ideas, not planned yet)
 - **Free up space:** delete photos from the phone once they're confirmed in TeleDrive (uses Android's delete confirmation dialog).
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).

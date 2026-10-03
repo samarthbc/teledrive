@@ -8,12 +8,13 @@ import { enqueue, subscribeTransfers, type Transfer } from '../drive/queue'
 import { isHidden, listFolder, uniqueName, type Drive } from '../drive/tree'
 import { uploadFile } from '../drive/upload'
 import { hasAccountKeys, ROOT_LEVEL } from '../drive/keyring'
-import { currentDriveId } from '../telegram/channel'
+import { currentDrive, currentDriveId, isPhotosDrive } from '../telegram/channel'
 import { isAndroid, isHeadless, Native, PhoneFile, type CameraItem } from './android'
 
 /**
- * Camera backup: uploads new photos/videos from chosen folders (DCIM/Camera by default) into a
- * "Camera Backup" folder; other folders go into subfolders of it ("Camera Backup/Screenshots").
+ * Camera backup: uploads new photos/videos from chosen folders (DCIM/Camera by default). In TelePhotos each folder
+ * goes into a folder of its own at the top ("Camera", "Screenshots"); in other drives (backups set up before
+ * TelePhotos) into a "Camera Backup" folder, other folders into subfolders of it ("Camera Backup/Screenshots").
  * Runs in the app, and in the background page while the app is closed (src/backup/headless.ts).
  */
 
@@ -262,8 +263,12 @@ function queue(item: CameraItem, folderId: string) {
   })
 }
 
-/** The "Camera Backup" folder: the saved one if it still exists, else one at the top level. */
+/**
+ * Where backups go: the top of TelePhotos; in other drives the "Camera Backup" folder (the saved one if it still
+ * exists, else one at the top level).
+ */
 async function ensureRootFolder(): Promise<string> {
+  if (isPhotosDrive(currentDrive())) return ROOT
   const drive = host!.drive()
   const { settings } = useBackup.getState()
   const saved = settings.folderId ? drive.items.get(settings.folderId) : undefined
@@ -277,9 +282,12 @@ async function ensureRootFolder(): Promise<string> {
   return folderId
 }
 
-/** Where a source's media goes: the camera into Camera Backup itself, others into a subfolder. */
+/**
+ * Where a source's media goes: a folder named after it ("Camera", "Screenshots"). Outside TelePhotos the camera
+ * goes into Camera Backup itself.
+ */
 async function ensureSourceFolder(source: BackupSource, rootId: string): Promise<string> {
-  if (source.path === CAMERA_PATH) return rootId
+  if (source.path === CAMERA_PATH && !isPhotosDrive(currentDrive())) return rootId
   const drive = host!.drive()
   const saved = source.folderId ? drive.items.get(source.folderId) : undefined
   if (saved?.kind === 'folder' && !isHidden(drive, saved)) return saved.id

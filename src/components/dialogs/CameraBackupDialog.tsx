@@ -4,6 +4,7 @@ import { Native, type MediaFolder } from '../../native/android'
 import {
   CAMERA_PATH, folderLabel, requestMediaPermission, runBackup, setSource, sourcesOf, updateBackupSettings, useBackup,
 } from '../../native/backup'
+import { driveName, PHOTOS_NAME } from '../../telegram/channel'
 import { useDrive } from '../../store/useDrive'
 import Dialog from '../Dialog'
 import { Choice as UiChoice, Toggle as Switch } from '../ui'
@@ -13,6 +14,12 @@ const time = (ms: number) => new Date(ms).toLocaleString(undefined, { day: 'nume
 export default function CameraBackupDialog({ onClose }: { onClose: () => void }) {
   const { settings, status, running, backedUp, lastCheck } = useBackup()
   const encrypted = useDrive((s) => !!s.drive.encryption)
+  // Backups set up before TelePhotos still go to the drive they were turned on in
+  const elsewhere = useDrive((s) => {
+    if (!settings.driveId || settings.driveId === s.currentDrive) return null
+    const d = s.drives.find((x) => x.id === settings.driveId)
+    return d ? driveName(d) : null
+  })
   const [scope, setScope] = useState<'new' | 'all'>('new')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -44,12 +51,30 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
         <div className="flex items-start gap-3">
           <Camera className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
           <p className="text-muted">
-            New photos and videos are uploaded to the <b>Camera Backup</b> folder. Other folders you pick (Screenshots,
-            WhatsApp Images…) go into their own subfolder there.
+            New photos and videos are uploaded to {PHOTOS_NAME}: the camera into <b>Camera</b>, other folders you pick
+            (Screenshots, WhatsApp Images…) into a folder of their own.
           </p>
         </div>
 
-        {settings.enabled ? (
+        {settings.enabled && elsewhere ? (
+          <div className="space-y-3 rounded-md p-3.5 pressed">
+            <p>
+              Backups still go to the <b>Camera Backup</b> folder in <b>{elsewhere}</b>.
+            </p>
+            <p className="text-xs text-muted">
+              Switching sends new photos and videos to {PHOTOS_NAME}. What's already backed up stays where it is and
+              isn't uploaded again.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn-ghost font-semibold text-brand-ink" onClick={() => void updateBackupSettings({ enabled: false })}>
+                Turn off
+              </button>
+              <button className="btn-primary" onClick={() => void updateBackupSettings({ enabled: true })}>
+                Back up to {PHOTOS_NAME} instead
+              </button>
+            </div>
+          </div>
+        ) : settings.enabled ? (
           <>
             <div className="rounded-md p-3.5 pressed">
               <p className="flex items-center gap-2 font-medium">

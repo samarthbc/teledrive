@@ -4,9 +4,12 @@ import { getKV, KEYS, setKV } from '../db/db'
 import { encode, type ConfigMeta } from '../drive/meta'
 import { getClient } from './client'
 
-// Each drive is a private channel. The first one is "TeleDrive Storage"; more are "TeleDrive · <name>".
+// Each drive is a private channel. The first one is "TeleDrive Storage"; TelePhotos is "TeleDrive Photos";
+// more are "TeleDrive · <name>".
 
 const MAIN_TITLE = 'TeleDrive Storage'
+const PHOTOS_TITLE = 'TeleDrive Photos'
+export const PHOTOS_NAME = 'TelePhotos'
 const TITLE_PREFIX = 'TeleDrive · '
 const ABOUT_MARKER = 'teledrive:v1'
 const ABOUT = `${ABOUT_MARKER} · Storage for TeleDrive. Don't post or delete messages here manually.`
@@ -19,7 +22,7 @@ export interface DriveInfo {
 }
 
 let peer: Api.InputPeerChannel | null = null
-let currentId: string | null = null
+let current: DriveInfo | null = null
 
 export function storagePeer(): Api.InputPeerChannel {
   if (!peer) throw new Error('Storage channel not ready')
@@ -34,16 +37,30 @@ export function storageChannel(): Api.InputChannel {
 /** Use this drive's channel for everything from now on. */
 export function openStorage(d: DriveInfo): void {
   peer = new Api.InputPeerChannel({ channelId: bigInt(d.id), accessHash: bigInt(d.accessHash) })
-  currentId = d.id
+  current = d
 }
 
 export function currentDriveId(): string | null {
-  return currentId
+  return current?.id ?? null
 }
 
-/** The name shown in the app: "My Drive" for the first drive, otherwise the part after "TeleDrive · ". */
+/** The open drive. */
+export function currentDrive(): DriveInfo | null {
+  return current
+}
+
+/** TelePhotos: the drive for photos and videos (camera backup goes there). */
+export function isPhotosDrive(d: DriveInfo | null | undefined): boolean {
+  return d?.title === PHOTOS_TITLE
+}
+
+/**
+ * The name shown in the app: "My Drive" for the first drive, "TelePhotos" for the photos drive, otherwise the part
+ * after "TeleDrive · ".
+ */
 export function driveName(d: DriveInfo): string {
   if (d.title === MAIN_TITLE) return 'My Drive'
+  if (d.title === PHOTOS_TITLE) return PHOTOS_NAME
   return d.title.startsWith(TITLE_PREFIX) ? d.title.slice(TITLE_PREFIX.length) : d.title
 }
 
@@ -63,7 +80,7 @@ export async function refreshDrives(known: DriveInfo[]): Promise<DriveInfo[]> {
   if (!found.length) return known
   const byId = new Map(found.map((d) => [d.id, d]))
   // Keep the known order; drop drives that are gone; add new ones at the end
-  const drives = [...known.flatMap((d) => byId.get(d.id) ?? []), ...found.filter((d) => !known.some((k) => k.id === d.id))]
+  const drives = sortDrives([...known.flatMap((d) => byId.get(d.id) ?? []), ...found.filter((d) => !known.some((k) => k.id === d.id))])
   await setKV(KEYS.drives, drives)
   return drives
 }
@@ -72,11 +89,28 @@ export async function createDrive(name: string, known: DriveInfo[]): Promise<{ d
   const n = name.trim()
   if (!n) throw new Error('Give the drive a name')
   if (n.length > MAX_DRIVE_NAME) throw new Error(`Drive names can be at most ${MAX_DRIVE_NAME} characters`)
+  if (n.toLowerCase() === PHOTOS_NAME.toLowerCase()) throw new Error(`${PHOTOS_NAME} is the built-in drive for photos`)
   if (known.some((d) => driveName(d).toLowerCase() === n.toLowerCase())) throw new Error('A drive with this name already exists')
   const drive = await createChannel(TITLE_PREFIX + n)
   const drives = [...known, drive]
   await setKV(KEYS.drives, drives)
   return { drive, drives }
+}
+
+/** Create TelePhotos (once) and put it right after My Drive in the list. */
+export async function createPhotosDrive(known: DriveInfo[]): Promise<{ drive: DriveInfo; drives: DriveInfo[] }> {
+  const existing = known.find(isPhotosDrive)
+  if (existing) return { drive: existing, drives: known }
+  const drive = await createChannel(PHOTOS_TITLE)
+  const drives = sortDrives([...known, drive])
+  await setKV(KEYS.drives, drives)
+  return { drive, drives }
+}
+
+/** My Drive first, then TelePhotos, then the rest in their order. */
+function sortDrives(drives: DriveInfo[]): DriveInfo[] {
+  const rank = (d: DriveInfo) => (d.title === MAIN_TITLE ? 0 : isPhotosDrive(d) ? 1 : 2)
+  return [...drives].sort((a, b) => rank(a) - rank(b))
 }
 
 export async function stillAccessible(c: DriveInfo): Promise<boolean> {
@@ -94,7 +128,7 @@ export async function stillAccessible(c: DriveInfo): Promise<boolean> {
   }
 }
 
-/** All channels you created whose description has the TeleDrive marker (the first drive first). */
+/** All channels you created whose description has the TeleDrive marker (My Drive first, then TelePhotos). */
 async function discoverDrives(): Promise<DriveInfo[]> {
   const client = await getClient()
   const dialogs = await client.getDialogs({ limit: 500 })
@@ -107,7 +141,7 @@ async function discoverDrives(): Promise<DriveInfo[]> {
     )
     if (full.fullChat.about.includes(ABOUT_MARKER)) out.push({ id: e.id.toString(), accessHash: e.accessHash.toString(), title: e.title })
   }
-  return out.sort((a, b) => Number(b.title === MAIN_TITLE) - Number(a.title === MAIN_TITLE))
+  return sortDrives(out)
 }
 
 async function createChannel(title: string): Promise<DriveInfo> {

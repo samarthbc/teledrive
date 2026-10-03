@@ -182,6 +182,15 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Active sessions: see devices logged in to the Telegram account, log one or all others out
 - [x] Check for updates (and the version)
 
+### 4.11 TelePhotos (Google Photos–style, separate from files)
+- [x] A second built-in drive, **TelePhotos**, next to My Drive; only photos and videos; can't be renamed or deleted
+- [x] Camera backup lives in TelePhotos (camera → Camera, other phone folders → their own folder)
+- [ ] Backup keeps working whichever drive was left open
+- [ ] Timeline by date taken, source filters, favorites, trash, locked
+- [ ] Move existing Camera Backup folders from My Drive to TelePhotos
+- [ ] Backup modes: as photos are taken, or once a day overnight
+- [ ] Later: albums, free up space, on this day, share an album, map, search
+
 ---
 
 ## 5. Out of Scope (not possible without a backend)
@@ -217,3 +226,9 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **8** | Windows desktop app (Electron) |
 | **9** | Public release: website online, app downloads, Setup screen everywhere |
 | **10** | Settings: density, thumbnails, auto-lock time, lock on close, lock everything, active sessions, updates |
+| **11** | TelePhotos: the drive, photos only, camera backup moved there |
+| **12** | TelePhotos: backup from anywhere (app in the background with another drive open) |
+| **13** | TelePhotos: date taken, timeline and photo screens |
+| **14** | TelePhotos: move existing Camera Backup folders |
+| **15** | TelePhotos: backup modes (as taken / overnight) |
+| **16** | TelePhotos: albums, free up space, and more |
