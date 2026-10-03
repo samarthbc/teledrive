@@ -389,7 +389,10 @@ public class TeleDriveNativePlugin extends Plugin {
     /** Save the settings the background backup needs and (re)schedule it. */
     @PluginMethod
     public void scheduleBackgroundBackup(PluginCall call) {
-        BackupScheduler.configure(getContext(), call.getBoolean("enabled", false), call.getBoolean("wifiOnly", true));
+        BackupScheduler.configure(
+            getContext(), call.getBoolean("enabled", false), call.getBoolean("wifiOnly", true),
+            call.getBoolean("instant", true), call.getBoolean("overnight", false), call.getBoolean("charging", false)
+        );
         call.resolve();
     }
 
@@ -397,11 +400,13 @@ public class TeleDriveNativePlugin extends Plugin {
      * The app is running in the background: ask its JavaScript to back up, and wait until it says
      * it's done (JS calls backgroundBackupDone). Called from BackupWorker's thread.
      */
-    String runBackupInApp(long timeoutMs) throws InterruptedException {
+    String runBackupInApp(long timeoutMs, String scope) throws InterruptedException {
         CountDownLatch done = new CountDownLatch(1);
         appBackup = done;
         appBackupResult = "{\"status\":\"Timed out\"}";
-        notifyListeners("backgroundBackup", new JSObject(), true);
+        JSObject data = new JSObject();
+        data.put("scope", scope);
+        notifyListeners("backgroundBackup", data, true);
         done.await(timeoutMs, TimeUnit.MILLISECONDS);
         appBackup = null;
         return appBackupResult;

@@ -52,14 +52,14 @@ public final class HeadlessRunner {
     private HeadlessRunner() {}
 
     /** Run the backup page until it reports done (or the time limit). Returns its result (JSON). */
-    static String run(Context context, long timeoutMs) throws InterruptedException {
+    static String run(Context context, long timeoutMs, String scope) throws InterruptedException {
         Context ctx = context.getApplicationContext();
         CountDownLatch done = new CountDownLatch(1);
         synchronized (lock) {
             latch = done;
             result = "{\"status\":\"Timed out\"}";
         }
-        main.post(() -> start(ctx));
+        main.post(() -> start(ctx, scope));
         done.await(timeoutMs, TimeUnit.MILLISECONDS);
         main.post(HeadlessRunner::destroy);
         synchronized (lock) {
@@ -83,7 +83,7 @@ public final class HeadlessRunner {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private static void start(Context ctx) {
+    private static void start(Context ctx, String scope) {
         destroy();
         synchronized (lock) {
             if (latch == null || latch.getCount() == 0) return; // stopped before it started
@@ -115,7 +115,7 @@ public final class HeadlessRunner {
         // Not attached to a window: make sure its timers run anyway
         wv.onResume();
         wv.resumeTimers();
-        wv.loadUrl(ORIGIN + "/backup.html");
+        wv.loadUrl(ORIGIN + "/backup.html?scope=" + scope);
         webView = wv;
     }
 

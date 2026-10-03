@@ -2,17 +2,19 @@ import { Camera, ExternalLink, Folder, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Native, type MediaFolder } from '../../native/android'
 import {
-  CAMERA_PATH, folderLabel, requestMediaPermission, runBackup, setSource, sourcesOf, updateBackupSettings, useBackup,
+  CAMERA_PATH, folderLabel, requestMediaPermission, runBackup, setSource, setSourceWhen, sourcesOf, updateBackupSettings, useBackup,
+  type BackupWhen,
 } from '../../native/backup'
 import { driveName, PHOTOS_NAME } from '../../telegram/channel'
 import { useDrive } from '../../store/useDrive'
 import Dialog from '../Dialog'
-import { Choice as UiChoice, Toggle as Switch } from '../ui'
+import { Choice as UiChoice, Segmented, Toggle as Switch } from '../ui'
 
 const time = (ms: number) => new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 export default function CameraBackupDialog({ onClose }: { onClose: () => void }) {
-  const { settings, status, running, backedUp, lastCheck } = useBackup()
+  const { settings, status, running, backedUp, lastCheck, tonight } = useBackup()
+  const anyOvernight = sourcesOf(settings).some((s) => s.when === 'overnight')
   const encrypted = useDrive((s) => !!s.drive.encryption)
   // Backups set up before TelePhotos still go to the drive they were turned on in
   const elsewhere = useDrive((s) => {
@@ -52,7 +54,8 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
           <Camera className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
           <p className="text-muted">
             New photos and videos are uploaded to {PHOTOS_NAME}: the camera into <b>Camera</b>, other folders you pick
-            (Screenshots, WhatsApp Images…) into a folder of their own.
+            (Screenshots, WhatsApp Images…) into a folder of their own. Each folder is backed up as photos are taken, or
+            once a day overnight.
           </p>
         </div>
 
@@ -83,6 +86,7 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
               <p className="text-xs text-muted">
                 {backedUp} item{backedUp === 1 ? '' : 's'} backed up
                 {lastCheck && ` · checked ${new Date(lastCheck).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
+                {anyOvernight && tonight > 0 && ` · ${tonight} waiting for tonight`}
               </p>
             </div>
             <FolderList />
@@ -92,12 +96,20 @@ export default function CameraBackupDialog({ onClose }: { onClose: () => void })
               checked={settings.wifiOnly}
               onChange={(wifiOnly) => void updateBackupSettings({ wifiOnly })}
             />
+            {anyOvernight && (
+              <Toggle
+                label="Only while charging"
+                hint="For folders backed up overnight"
+                checked={!!settings.charging}
+                onChange={(charging) => void updateBackupSettings({ charging })}
+              />
+            )}
             <BackgroundInfo encrypted={encrypted} />
             <div className="flex justify-end gap-2">
               <button className="btn-ghost font-semibold text-brand-ink" onClick={() => void updateBackupSettings({ enabled: false })}>
                 Turn off
               </button>
-              <button className="btn-primary" disabled={running} onClick={() => void runBackup()}>
+              <button className="btn-primary" disabled={running} onClick={() => void runBackup('all')}>
                 Back up now
               </button>
             </div>
@@ -163,7 +175,7 @@ function FolderList() {
   return (
     <div>
       <p className="mb-1 font-medium">Folders</p>
-      <ul className="max-h-64 divide-y-2 divide-line overflow-y-auto rounded-md px-1 pressed">
+      <ul className="max-h-80 divide-y-2 divide-line overflow-y-auto rounded-md px-1 pressed">
         {folders.map((f) => (
           <li key={f.path} className="px-3 py-2">
             <label className="flex cursor-pointer items-center gap-3">
@@ -184,6 +196,20 @@ function FolderList() {
                 }}
               />
             </label>
+            {chosen.has(f.path) && (
+              <div className="mt-2 pl-12">
+                <Segmented<BackupWhen>
+                  small
+                  label={`When to back up ${f.path === CAMERA_PATH ? 'Camera' : folderLabel(f.path)}`}
+                  value={chosen.get(f.path)?.when ?? 'instant'}
+                  options={[
+                    { value: 'instant', label: 'As taken' },
+                    { value: 'overnight', label: 'Overnight' },
+                  ]}
+                  onChange={(when) => void setSourceWhen(f.path, when)}
+                />
+              </div>
+            )}
             {asking?.path === f.path && (
               <div className="mt-2 flex flex-wrap items-center gap-2 pl-12">
                 <span className="text-xs text-muted">Back up:</span>

@@ -901,18 +901,48 @@ the same pause when My Drive was open. Only a fully closed app (the headless pag
 - Bug found and fixed: the scrubber measured the scrolling area in a layout effect, before React had set the
   parent's ref, so it never appeared.
 
-## Phase 14: Moving existing backups
-- If My Drive (or another drive) has a *Camera Backup* folder, offer **Move to TelePhotos** once.
-- Uses `messages.forwardMessages` between the channels (no new upload), then deletes the originals.
-- To check first: whether each drive wraps file keys with its own key; if so each encrypted file's key is
-  re-wrapped (one caption edit per file).
-- Later: **Move to TelePhotos** for photos uploaded by hand into My Drive.
+## Phase 14: Moving existing backups ⏭️ (not needed)
+Skipped: there are no existing *Camera Backup* folders to move. Backups set up in another drive before TelePhotos can
+still be switched with **Back up to TelePhotos instead** (11.4); their old files stay where they are.
 
-## Phase 15: Backup modes
-- **As photos are taken** (default; today's triggers) or **Once a day, overnight** (WorkManager ~24 h, optionally
-  Wi-Fi + charging only; a missed night retries within the hour, not the next night). Exact times aren't possible
-  without the restricted exact-alarm permission, so the setting says "overnight".
-- **Back up now** stays.
+## Phase 15: When each folder is backed up ✅ (implemented; being tested)
+
+Each backed-up folder is backed up **As taken** or **Overnight**, chosen per folder (camera photos right away,
+WhatsApp media once a night, for example).
+
+### 15.1 Settings and UI
+- `BackupSource.when`: `'instant'` (default, also for folders chosen before) or `'overnight'`. Turning a folder on:
+  the camera starts as **As taken**, every other folder as **Overnight**.
+- `BackupSettings.charging`: the overnight run waits until the phone is charging.
+- Camera backup dialog: under each folder that's on, a small *As taken | Overnight* switch (`Segmented small`);
+  **Only while charging** shows while some folder is overnight; the status line adds "N waiting for tonight".
+- **Back up now** backs up every folder at once, whatever its setting.
+
+### 15.2 Runs and their scope
+- `runBackup(scope)` / `backupRound(scope)`: `'instant'` looks only at the "as taken" folders (checks on opening,
+  resuming, network changes, opening TelePhotos, Android's new-photo and hourly jobs); `'all'` looks at every folder
+  (the nightly run, Back up now). Instant runs also count what the overnight folders have waiting (`tonight`).
+- Android (`BackupScheduler.configure(enabled, wifiOnly, instant, overnight, charging)`):
+  - some folder "as taken": the new-photo trigger and the hourly job, as before (scope `instant`);
+  - some folder "overnight": a 24-hour periodic job starting around **1 AM** (`setInitialDelay` to the next 1:00),
+    on the allowed network, battery not low, and charging if chosen; scope `all`. It's only re-enqueued when its
+    conditions change (so restarting the app doesn't move it). If it can't run at night (no Wi-Fi, not charging) it
+    runs when it can; if the app is on screen or another run is going, it retries (15 min, linear backoff).
+  - Android's new-photo trigger can't watch only some folders: a new WhatsApp image still wakes the app, which finds
+    nothing "as taken" to back up and stops within a second (no drive switch).
+- The scope reaches the app as the `backgroundBackup` event's `scope`, and the headless page as `backup.html?scope=all`.
+- Also fixed: with another drive open and nothing to back up, the status said "Paused: open the TelePhotos drive";
+  it now says "Up to date".
+
+### 15.3 Checked on the phone
+- Dialog: Camera shows *As taken*; turning Screenshots on (only new) made it *Overnight*; **Only while charging**
+  appeared. Android then had three jobs: trigger, hourly, and the nightly one due at 1:00 AM; with charging on, the
+  nightly job required CHARGING; with no overnight folder left it was cancelled.
+- A new screenshot with the app in the background: the new-photo run uploaded nothing ("Up to date"); the dialog
+  showed "1 waiting for tonight"; **Back up now** uploaded it into TelePhotos/Screenshots.
+- The nightly run (made due in 90 s for the test, then put back), with the app closed: the background page backed up
+  the waiting screenshot ("Backed up 1 photo or video"). Android didn't start it on its own within a couple of minutes
+  of being due (it was then started by hand); at night there are hours for that.
 
 ## Phase 16: More
 - Albums (a photo in several albums without uploading again: album marker messages + album IDs on the file).

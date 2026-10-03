@@ -55,7 +55,9 @@ async function run(): Promise<object> {
   await rebuild()
 
   setBackupHost({ ready: () => true, drive: () => drive, driveName: () => undefined })
-  return JSON.parse(await backupRound())
+  // The nightly run (?scope=all) also backs up the "overnight" folders
+  const scope = new URLSearchParams(location.search).get('scope') === 'all' ? 'all' : 'instant'
+  return JSON.parse(await backupRound(scope))
 }
 
 if (isHeadless) {

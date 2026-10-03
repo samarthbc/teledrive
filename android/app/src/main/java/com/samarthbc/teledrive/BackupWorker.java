@@ -32,11 +32,15 @@ public class BackupWorker extends Worker {
         Context ctx = getApplicationContext();
         try {
             if (!BackupScheduler.enabled(ctx)) return Result.success();
-            if (MainActivity.inForeground) return Result.success();
-            if (!running.compareAndSet(false, true)) return Result.success();
+            String scope = getInputData().getString(BackupScheduler.KEY_SCOPE);
+            boolean nightly = "all".equals(scope);
+            // The app on screen backs up the "as taken" folders itself; the nightly run comes back a little later
+            if (MainActivity.inForeground) return nightly ? Result.retry() : Result.success();
+            if (!running.compareAndSet(false, true)) return nightly ? Result.retry() : Result.success();
             try {
                 TeleDriveNativePlugin app = TeleDriveNativePlugin.instance;
-                String result = app != null ? app.runBackupInApp(RUN_LIMIT_MS) : HeadlessRunner.run(ctx, RUN_LIMIT_MS);
+                String s = nightly ? "all" : "instant";
+                String result = app != null ? app.runBackupInApp(RUN_LIMIT_MS, s) : HeadlessRunner.run(ctx, RUN_LIMIT_MS, s);
                 BackupScheduler.record(ctx, result);
             } finally {
                 running.set(false);

@@ -26,7 +26,13 @@ export interface BackupSource {
   since: number
   /** Where it goes in the drive (created on first use). */
   folderId?: string
+  /** When it's backed up: as photos are taken (default), or once a day overnight. */
+  when?: BackupWhen
 }
+
+export type BackupWhen = 'instant' | 'overnight'
+/** Which folders a run backs up: the "as taken" ones, or all (overnight run, Back up now). */
+export type BackupScope = 'instant' | 'all'
 
 export interface BackupSettings {
   enabled: boolean
@@ -40,6 +46,8 @@ export interface BackupSettings {
   sources?: BackupSource[]
   /** No longer used: backup always runs in the background too. */
   background?: boolean
+  /** The overnight run waits until the phone is charging. */
+  charging?: boolean
 }
 
 export const CAMERA_PATH = 'DCIM/Camera/'
@@ -78,6 +86,8 @@ interface BackupState {
   lastCheck?: number
   /** New photos/videos not backed up because another drive is open (shown in that drive). */
   waiting: number
+  /** New photos/videos in "overnight" folders, waiting for tonight. */
+  tonight: number
 }
 
 export const useBackup = create<BackupState>(() => ({
@@ -86,6 +96,7 @@ export const useBackup = create<BackupState>(() => ({
   running: false,
   backedUp: 0,
   waiting: 0,
+  tonight: 0,
 }))
 
 let done = new Set<string>()
@@ -95,6 +106,12 @@ let loaded = false
 /** The folders being backed up (older settings: just the camera). */
 export function sourcesOf(s: BackupSettings): BackupSource[] {
   return s.sources ?? [{ path: CAMERA_PATH, since: s.since }]
+}
+
+/** The folders a run backs up. */
+function sourcesFor(s: BackupSettings, scope: BackupScope): BackupSource[] {
+  const all = sourcesOf(s)
+  return scope === 'all' ? all : all.filter((x) => x.when !== 'overnight')
 }
 
 /** "DCIM/Screenshots/" → "Screenshots". */
@@ -138,17 +155,36 @@ export async function updateBackupSettings(changes: Partial<BackupSettings>): Pr
 export async function setSource(path: string, on: boolean, since = Math.floor(Date.now() / 1000)): Promise<void> {
   await load()
   const current = sourcesOf(useBackup.getState().settings)
+  // The camera is backed up as photos are taken; other folders (often lots of WhatsApp media) overnight
+  const when: BackupWhen = path === CAMERA_PATH ? 'instant' : 'overnight'
   const sources = on
-    ? [...current.filter((s) => s.path !== path), { path, since }]
+    ? [...current.filter((s) => s.path !== path), { path, since, when }]
     : current.filter((s) => s.path !== path)
   await updateBackupSettings({ sources })
 }
 
-/** Tell Android whether to back up in the background (always, while backup is on). */
+/** Back up a folder as photos are taken, or overnight. */
+export async function setSourceWhen(path: string, when: BackupWhen): Promise<void> {
+  await load()
+  const sources = sourcesOf(useBackup.getState().settings).map((s) => (s.path === path ? { ...s, when } : s))
+  await updateBackupSettings({ sources })
+}
+
+/**
+ * Tell Android when to back up in the background (always, while backup is on): when photos are added, if some folder
+ * is "as taken"; every night, if some folder is "overnight".
+ */
 async function syncBackgroundSchedule() {
   if (!isAndroid || isHeadless) return
-  const { enabled, wifiOnly } = useBackup.getState().settings
-  await Native.scheduleBackgroundBackup({ enabled, wifiOnly }).catch((e) =>
+  const settings = useBackup.getState().settings
+  const sources = sourcesOf(settings)
+  await Native.scheduleBackgroundBackup({
+    enabled: settings.enabled,
+    wifiOnly: settings.wifiOnly,
+    instant: sources.some((s) => s.when !== 'overnight'),
+    overnight: sources.some((s) => s.when === 'overnight'),
+    charging: !!settings.charging,
+  }).catch((e) =>
     console.warn('Could not schedule background backup', e),
   )
 }
@@ -170,8 +206,11 @@ async function network(): Promise<{ connected: boolean; wifi: boolean }> {
   return { connected: s.connected, wifi: s.connectionType === 'wifi' }
 }
 
-/** Look for new media in the chosen folders and queue uploads. Safe to call often. Returns how many were queued. */
-export async function runBackup(): Promise<number> {
+/**
+ * Look for new media in the chosen folders and queue uploads. Safe to call often. Returns how many were queued.
+ * `scope`: only the "as taken" folders (automatic checks), or all of them (overnight run, Back up now).
+ */
+export async function runBackup(scope: BackupScope = 'instant'): Promise<number> {
   await load()
   const { settings, running } = useBackup.getState()
   if (!isAndroid || !settings.enabled || running || !host?.ready()) return 0
@@ -185,7 +224,9 @@ export async function runBackup(): Promise<number> {
     if (!settings.driveId) await updateSettingsQuietly({ driveId: currentDriveId() ?? undefined })
     else if (settings.driveId !== currentDriveId()) {
       const name = host.driveName(settings.driveId)
-      useBackup.setState({ status: `Paused: open the “${name ?? 'backup'}” drive to back up`, waiting: await countWaiting() })
+      const waiting = await countWaiting(scope)
+      // Nothing to back up: not really paused
+      useBackup.setState({ status: waiting ? `Paused: open the “${name ?? 'backup'}” drive to back up` : 'Up to date', waiting })
       return 0
     }
     useBackup.setState({ waiting: 0 })
@@ -193,11 +234,13 @@ export async function runBackup(): Promise<number> {
       useBackup.setState({ status: 'Waiting: enter your TeleDrive password in the app' })
       return 0
     }
-    const sources = sourcesOf(useBackup.getState().settings)
-    if (!sources.length) {
+    if (!sourcesOf(useBackup.getState().settings).length) {
       useBackup.setState({ status: 'No folders chosen' })
       return 0
     }
+    const sources = sourcesFor(useBackup.getState().settings, scope)
+    // What the "overnight" folders have waiting (an overnight run takes them all)
+    void countTonight(scope)
     const net = await network()
     if (!net.connected) {
       useBackup.setState({ status: 'Waiting for internet' })
@@ -237,11 +280,19 @@ export async function runBackup(): Promise<number> {
   }
 }
 
-/** How many photos/videos in the chosen folders aren't backed up yet. */
-async function countWaiting(): Promise<number> {
+/** How many photos/videos in the run's folders aren't backed up yet. */
+async function countWaiting(scope: BackupScope): Promise<number> {
   let n = 0
-  for (const source of sourcesOf(useBackup.getState().settings)) n += (await listNew(source)).length
+  for (const source of sourcesFor(useBackup.getState().settings, scope)) n += (await listNew(source)).length
   return n
+}
+
+async function countTonight(scope: BackupScope) {
+  if (scope === 'all') return useBackup.setState({ tonight: 0 })
+  const overnight = sourcesOf(useBackup.getState().settings).filter((s) => s.when === 'overnight')
+  let n = 0
+  for (const source of overnight) n += (await listNew(source).catch(() => [])).length
+  useBackup.setState({ tonight: n })
 }
 
 /** New (not yet backed up or queued) media in one folder. */
@@ -344,13 +395,13 @@ export function transfersIdle(): Promise<Transfer[]> {
  * In the app (in the background) with another drive open, it opens the backup drive for the round and goes back
  * to the open one afterwards.
  */
-export async function backupRound(): Promise<string> {
+export async function backupRound(scope: BackupScope = 'instant'): Promise<string> {
   await load()
   const before = useBackup.getState().backedUp
-  const switched = await openBackupDrive()
+  const switched = await openBackupDrive(scope)
   let list: Transfer[]
   try {
-    await runBackup()
+    await runBackup(scope)
     list = await transfersIdle()
   } finally {
     if (switched) await host?.returnFromBackup?.()
@@ -360,14 +411,14 @@ export async function backupRound(): Promise<string> {
 }
 
 /** Open the backup drive for a round, if another one is open and there's something to back up now. */
-async function openBackupDrive(): Promise<boolean> {
+async function openBackupDrive(scope: BackupScope): Promise<boolean> {
   const { settings } = useBackup.getState()
   if (!host?.openForBackup || !settings.enabled || !settings.driveId || settings.driveId === currentDriveId()) return false
   // Switching drives costs a reload: only when the round would really upload something
   if (!host.ready() || !hasAccountKeys() || !(await Native.mediaPermission({})).granted) return false
   const net = await network()
   if (!net.connected || (settings.wifiOnly && !net.wifi)) return false
-  if (!(await countWaiting())) return false
+  if (!(await countWaiting(scope))) return false
   return host.openForBackup(settings.driveId)
 }
 
@@ -403,8 +454,8 @@ export function initCameraBackup(h: BackupHost): void {
     if (s.connected) autoCheck()
   })
   // Android's background job, while the app is still running in the background
-  void Native.addListener('backgroundBackup', () => {
-    backupRound().then(
+  void Native.addListener('backgroundBackup', (data) => {
+    backupRound(data?.scope === 'all' ? 'all' : 'instant').then(
       (result) => Native.backgroundBackupDone({ result }),
       (e) => Native.backgroundBackupDone({ result: JSON.stringify({ status: `Error: ${String(e)}` }) }),
     )

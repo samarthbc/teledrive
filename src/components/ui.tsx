@@ -151,17 +151,19 @@ export function Segmented<T extends string | number>(props: {
   value: T
   options: { value: T; label: string }[]
   onChange: (v: T) => void
+  /** Smaller, for inside lists. */
+  small?: boolean
 }) {
-  const { label, value, options, onChange } = props
+  const { label, value, options, onChange, small } = props
   return (
-    <div className="flex h-11 shrink-0 gap-1 rounded-md p-1 pressed" role="radiogroup" aria-label={label}>
+    <div className={`flex shrink-0 gap-1 rounded-md p-1 pressed ${small ? 'h-9' : 'h-11'}`} role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button
           key={String(o.value)}
           role="radio"
           aria-checked={o.value === value}
           onClick={() => onChange(o.value)}
-          className={`min-w-0 flex-1 rounded-md px-3 text-[13px] whitespace-nowrap transition-[box-shadow,color] duration-120 sm:flex-none ${
+          className={`min-w-0 flex-1 rounded-md px-3 ${small ? 'text-xs' : 'text-[13px]'} whitespace-nowrap transition-[box-shadow,color] duration-120 sm:flex-none ${
             o.value === value ? 'bg-surface font-extrabold text-brand-ink raised-sm' : 'font-semibold text-muted hover:text-ink'
           }`}
         >

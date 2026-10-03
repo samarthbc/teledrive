@@ -187,8 +187,8 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [x] Camera backup lives in TelePhotos (camera → Camera, other phone folders → their own folder)
 - [x] Backup keeps working whichever drive was left open
 - [x] Timeline by date taken, source filters, favorites, trash, locked
-- [ ] Move existing Camera Backup folders from My Drive to TelePhotos
-- [ ] Backup modes: as photos are taken, or once a day overnight
+- [x] ~~Move existing Camera Backup folders from My Drive to TelePhotos~~ (not needed: none exist)
+- [x] Each folder backed up as photos are taken, or once a day overnight (optionally only while charging)
 - [ ] Later: albums, free up space, on this day, share an album, map, search
 
 ---
@@ -229,6 +229,6 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **11** | TelePhotos: the drive, photos only, camera backup moved there |
 | **12** | TelePhotos: backup from anywhere (app in the background with another drive open) |
 | **13** | TelePhotos: date taken, timeline and photo screens |
-| **14** | TelePhotos: move existing Camera Backup folders |
-| **15** | TelePhotos: backup modes (as taken / overnight) |
+| **14** | TelePhotos: move existing Camera Backup folders (skipped, not needed) |
+| **15** | TelePhotos: per-folder backup timing (as taken / overnight) |
 | **16** | TelePhotos: albums, free up space, and more |

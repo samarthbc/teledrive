@@ -54,7 +54,7 @@ interface TeleDriveNativePlugin {
   thumbnail(o: { uri: string }): Promise<{ data?: string }>
   listMedia(o: { paths: string[]; since: number; limit?: number }): Promise<{ items: CameraItem[] }>
   listMediaFolders(): Promise<{ folders: MediaFolder[] }>
-  scheduleBackgroundBackup(o: { enabled: boolean; wifiOnly: boolean }): Promise<void>
+  scheduleBackgroundBackup(o: { enabled: boolean; wifiOnly: boolean; instant: boolean; overnight: boolean; charging: boolean }): Promise<void>
   backgroundBackupStatus(): Promise<{ lastRun: number; lastResult: string }>
   backgroundBackupDone(o: { result: string }): Promise<void>
   openAppSettings(): Promise<void>
@@ -66,7 +66,9 @@ interface TeleDriveNativePlugin {
   log(o: { message: string }): Promise<void>
   keepAlive(o: { title: string; text: string; progress: number }): Promise<void>
   stopKeepAlive(): Promise<void>
-  addListener(event: 'shared' | 'backgroundBackup', fn: () => void): Promise<PluginListenerHandle>
+  addListener(event: 'shared', fn: () => void): Promise<PluginListenerHandle>
+  /** Android's background job, with the app running: `scope` "all" for the nightly run. */
+  addListener(event: 'backgroundBackup', fn: (e?: { scope?: string }) => void): Promise<PluginListenerHandle>
   /** App updates from GitHub Releases. */
   downloadUpdate(o: { version: string; size: number; sha256?: string }): Promise<void>
   installUpdate(): Promise<{ needsPermission: boolean }>
