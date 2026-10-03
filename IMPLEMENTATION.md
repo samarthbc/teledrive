@@ -1123,7 +1123,7 @@ no separate password to set.
   + Add, Also remove from this phone.
 
 
-## Phase 18: Back up a date range 📝 (planned)
+## Phase 18: Back up a date range 🚧 (implemented; the upload itself still needs checking)
 
 Today camera backup offers two starting points: **only new** photos (from now on) or **everything** in the folder.
 This phase adds a third: **every photo and video taken between two dates**, for example "all of 2024" or "the trip,
@@ -1141,8 +1141,9 @@ photos without uploading the whole folder).
   what the folder already backs up, so new photos keep coming either way.
 - Quick picks next to the pickers: *Last 30 days*, *This year*, *Last year*. The **To** date can't be before
   **From**, and neither can be in the future.
-- The status line counts the range like any other waiting photos ("Backing up 120 of 3,400"). When the range is
-  done, it's dropped from the settings (and shows as a short "Backed up 2024" toast or line, not a permanent setting).
+- The status line counts the range like any other waiting photos. Under the folder, "Also photos from 1 Jan – 31 Dec
+  2025" (or "Only photos from …" without new photos) while a range is being backed up; when it's done, the range is
+  dropped from the settings and the line goes away (a range-only folder is switched off).
 
 ### 18.2 Which date
 - The **date taken** (`dateTaken`, from the photo library/EXIF), falling back to the date it was added to the phone
@@ -1182,6 +1183,20 @@ photos without uploading the whole folder).
 4. Check on the phone: a range of a few days in Camera uploads exactly those photos; a range overlapping what's
    backed up uploads only the rest; "only the range" stops afterwards; a range added to a folder that's on keeps new
    photos coming; counts match; Free up space still offers only backed-up photos.
+
+### 18.6 Done so far
+- Code: `native/backupRange.ts` (pure: `takenAt`, `inRange`, `inScope`, `listStart`, `dayRange`, `quickRanges`,
+  `rangeLabel`, `NO_NEW`); `native/backup.ts` (`BackupSource.ranges`, `listSince` lists from 0 with ranges and keeps
+  what's in scope, `setSource(…, range)`, `addRange`, `countRange`, finished ranges dropped after each check and after
+  the last upload: `dropFinishedRanges` / `checkRangesDone`); `components/DateRangePicker.tsx` (From/To, quick picks,
+  live count); `CameraBackupSettings.tsx` (third choice when turning on, with *Also back up new photos and videos*;
+  *Date range…* when switching a folder on; *Back up older photos…* on a folder that's on; the "Also/Only photos
+  from …" line). Unit tests: `native/backupRange.test.ts` (6).
+- Checked on the phone (Redmi, release build): *Back up older photos…* under Camera opens the pickers; the count
+  updates live (last 30 days: 50 items, 472 MB; from 30 Sep: 21 items, 55 MB); the native date dialog works;
+  *Date range…* on Screenshots shows the pickers with *Also back up new photos and videos*; Cancel leaves the
+  settings unchanged. Not pressed **Back up** (that uploads real photos): still to check that a range uploads exactly
+  its photos and is dropped when done.
 
 ## Later (ideas, not planned yet)
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).

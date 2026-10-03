@@ -10,6 +10,7 @@ import { uploadFile } from '../drive/upload'
 import { hasAccountKeys, ROOT_LEVEL } from '../drive/keyring'
 import { currentDrive, currentDriveId, isPhotosDrive } from '../telegram/channel'
 import { isAndroid, isHeadless, Native, PhoneFile, type CameraItem } from './android'
+import { inRange, inScope, listStart, NO_NEW, type DateRange } from './backupRange'
 
 /**
  * Camera backup: uploads new photos/videos from chosen folders (DCIM/Camera by default). In TelePhotos each folder
@@ -22,8 +23,10 @@ import { isAndroid, isHeadless, Native, PhoneFile, type CameraItem } from './and
 export interface BackupSource {
   /** MediaStore relative path, e.g. "DCIM/Camera/". */
   path: string
-  /** Only media added at or after this time (unix seconds). */
+  /** Media added at or after this time (unix seconds); `NO_NEW` when it backs up only its ranges. */
   since: number
+  /** Also photos taken in these ranges (dropped once they're backed up). */
+  ranges?: DateRange[]
   /** Where it goes in the drive (created on first use). */
   folderId?: string
   /** When it's backed up: as photos are taken (default), or once a day overnight. */
@@ -166,16 +169,73 @@ export async function enableBackup(changes: Partial<BackupSettings> = {}): Promi
   })
 }
 
-/** Start or stop backing up a folder. `since`: only media added from then on (0 = everything). */
-export async function setSource(path: string, on: boolean, since = Math.floor(Date.now() / 1000)): Promise<void> {
+/**
+ * Start or stop backing up a folder. `since`: only media added from then on (0 = everything, `NO_NEW` = none);
+ * `range`: also the photos taken in it.
+ */
+export async function setSource(path: string, on: boolean, since = Math.floor(Date.now() / 1000), range?: DateRange): Promise<void> {
   await load()
   const current = sourcesOf(useBackup.getState().settings)
   // The camera is backed up as photos are taken; other folders (often lots of WhatsApp media) overnight
   const when: BackupWhen = path === CAMERA_PATH ? 'instant' : 'overnight'
   const sources = on
-    ? [...current.filter((s) => s.path !== path), { path, since, when }]
+    ? [...current.filter((s) => s.path !== path), { path, since, when, ...(range && { ranges: [range] }) }]
     : current.filter((s) => s.path !== path)
   await updateBackupSettings({ sources })
+}
+
+/** A folder that's backed up: also back up the photos taken in `range`. */
+export async function addRange(path: string, range: DateRange): Promise<void> {
+  await load()
+  const sources = sourcesOf(useBackup.getState().settings).map((s) => (s.path === path ? { ...s, ranges: [...(s.ranges ?? []), range] } : s))
+  await updateBackupSettings({ sources })
+}
+
+/** Photos and videos in a phone folder taken in `range` that aren't backed up yet, and their size. */
+export async function countRange(path: string, range: DateRange): Promise<{ count: number; bytes: number }> {
+  await load()
+  const items = await listSince({ path, since: NO_NEW, ranges: [range] }, (i) => !done.has(i.id))
+  return { count: items.length, bytes: items.reduce((n, i) => n + i.size, 0) }
+}
+
+/**
+ * Drop ranges with nothing left to back up (given each folder's not-yet-backed-up media); a folder that backed up
+ * only its ranges is then turned off.
+ */
+async function dropFinishedRanges(pending: Map<string, CameraItem[]>) {
+  const current = sourcesOf(useBackup.getState().settings)
+  let changed = false
+  const sources: BackupSource[] = []
+  for (const s of current) {
+    const left = pending.get(s.path)
+    if (!s.ranges?.length || !left) {
+      sources.push(s)
+      continue
+    }
+    const ranges = s.ranges.filter((r) => left.some((i) => inRange(r, i)))
+    if (ranges.length === s.ranges.length) {
+      sources.push(s)
+      continue
+    }
+    changed = true
+    if (ranges.length || s.since !== NO_NEW) sources.push({ ...s, ranges: ranges.length ? ranges : undefined })
+  }
+  if (!changed) return
+  await updateSettingsQuietly({ sources })
+  await syncBackgroundSchedule()
+}
+
+/** After the last upload: drop the ranges that are now done (else they'd only go at the next check). */
+async function checkRangesDone() {
+  try {
+    const pending = new Map<string, CameraItem[]>()
+    for (const s of sourcesOf(useBackup.getState().settings)) {
+      if (s.ranges?.length) pending.set(s.path, await listSince(s, (i) => !done.has(i.id)))
+    }
+    if (pending.size) await dropFinishedRanges(pending)
+  } catch (e) {
+    console.warn('Could not check the backup ranges', e)
+  }
 }
 
 /** Back up a folder as photos are taken, or overnight. */
@@ -268,8 +328,11 @@ export async function runBackup(scope: BackupScope = 'instant'): Promise<number>
 
     const rootId = await ensureRootFolder()
     const jobs: { item: CameraItem; folderId: string }[] = []
+    const pending = new Map<string, CameraItem[]>()
     for (const source of sources) {
-      const items = await listNew(source)
+      const left = await listSince(source, (i) => !done.has(i.id))
+      pending.set(source.path, left)
+      const items = left.filter((i) => !queued.has(i.id))
       if (!items.length) continue
       const folderId = await ensureSourceFolder(source, rootId)
       for (const item of items) jobs.push({ item, folderId })
@@ -279,6 +342,7 @@ export async function runBackup(scope: BackupScope = 'instant'): Promise<number>
 
     // Turned off while we were looking? Then don't start anything.
     if (!useBackup.getState().settings.enabled) return 0
+    await dropFinishedRanges(pending)
 
     for (const { item, folderId } of unique) queue(item, folderId)
     useBackup.setState({
@@ -315,15 +379,16 @@ function listNew(source: BackupSource): Promise<CameraItem[]> {
   return listSince(source, (i) => !done.has(i.id) && !queued.has(i.id))
 }
 
-/** The folder's media added since it's been backed up (that `keep` accepts). */
+/** The folder's media it backs up (added since it's been on, or taken in one of its ranges) that `keep` accepts. */
 async function listSince(source: BackupSource, keep: (i: CameraItem) => boolean): Promise<CameraItem[]> {
-  let since = source.since
+  let since = listStart(source)
+  if (since === NO_NEW) return []
   const out: CameraItem[] = []
   for (;;) {
     const { items } = await Native.listMedia({ paths: [source.path], since, limit: BATCH })
     // Safety net: the list must only contain items from `since` on, and each page must move forward
     if (items.some((i) => i.dateAdded < since)) throw new Error('Photo list returned items older than requested')
-    out.push(...items.filter(keep))
+    out.push(...items.filter((i) => inScope(source, i) && keep(i)))
     if (items.length < BATCH) break
     const next = items[items.length - 1].dateAdded + 1
     if (next <= since) break
@@ -404,7 +469,10 @@ function queue(item: CameraItem, folderId: string) {
       // Failed items are picked up again on the next check
       queued.delete(item.id)
       if (failed) useBackup.setState({ status: 'Some items failed; will retry' })
-      else if (!queued.size) useBackup.setState({ status: 'Up to date', lastCheck: Date.now() })
+      else if (!queued.size) {
+        useBackup.setState({ status: 'Up to date', lastCheck: Date.now() })
+        void checkRangesDone()
+      }
     }
   })
 }

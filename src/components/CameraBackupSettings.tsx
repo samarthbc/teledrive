@@ -2,13 +2,15 @@ import { ChevronRight, ExternalLink, Folder, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Native, type MediaFolder } from '../native/android'
 import {
-  CAMERA_PATH, enableBackup, folderLabel, requestMediaPermission, runBackup, setSource, setSourceWhen, sourcesOf,
-  updateBackupSettings, useBackup, type BackupWhen,
+  addRange, CAMERA_PATH, enableBackup, folderLabel, requestMediaPermission, runBackup, setSource, setSourceWhen, sourcesOf,
+  updateBackupSettings, useBackup, type BackupSource, type BackupWhen,
 } from '../native/backup'
+import { dayRange, NO_NEW, rangeLabel } from '../native/backupRange'
+import DateRangePicker, { initialDays, validDays, type Days } from './DateRangePicker'
 import { driveName, isPhotosDrive, PHOTOS_NAME } from '../telegram/channel'
 import { useDrive } from '../store/useDrive'
 import { toastError } from '../store/useToast'
-import { Choice as UiChoice, Segmented, Toggle as Switch } from './ui'
+import { Checkbox, Choice as UiChoice, Segmented, Toggle as Switch } from './ui'
 
 const time = (ms: number) => new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
@@ -22,7 +24,10 @@ export default function CameraBackupSettings() {
     const d = settings.driveId ? s.drives.find((x) => x.id === settings.driveId) : undefined
     return d && !isPhotosDrive(d) ? driveName(d) : null
   })
-  const [scope, setScope] = useState<'new' | 'all'>('new')
+  const [scope, setScope] = useState<'new' | 'all' | 'range'>('new')
+  const [days, setDays] = useState<Days>(initialDays)
+  const [alsoNew, setAlsoNew] = useState(true)
+  const [canRead, setCanRead] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -38,10 +43,18 @@ export default function CameraBackupSettings() {
         setError('TeleDrive needs permission to read your photos and videos. Allow it in Android Settings → Apps → TeleDrive → Permissions.')
         return
       }
-      const since = scope === 'new' ? Math.floor(Date.now() / 1000) : 0
+      const now = Math.floor(Date.now() / 1000)
+      const since = scope === 'all' ? 0 : scope === 'range' && !alsoNew ? NO_NEW : now
       // Keep the folders chosen before (if any), otherwise start with the camera
-      const sources = settings.sources?.length ? settings.sources : [{ path: CAMERA_PATH, since }]
-      await enableBackup({ since, sources })
+      let sources: BackupSource[] = settings.sources?.length ? settings.sources : [{ path: CAMERA_PATH, since }]
+      if (scope === 'range') {
+        const range = dayRange(days.from, days.to)
+        const camera = sources.find((s) => s.path === CAMERA_PATH)
+        sources = camera
+          ? sources.map((s) => (s === camera ? { ...s, ranges: [...(s.ranges ?? []), range] } : s))
+          : [...sources, { path: CAMERA_PATH, since, ranges: [range] }]
+      }
+      await enableBackup({ since: since === NO_NEW ? now : since, sources })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -111,7 +124,29 @@ export default function CameraBackupSettings() {
             <fieldset className="space-y-2">
               <Choice checked={scope === 'new'} onChange={() => setScope('new')} label="Only new photos and videos" hint="Taken from now on" />
               <Choice checked={scope === 'all'} onChange={() => setScope('all')} label="Everything in the camera folder" hint="Can be a lot of data" />
+              <Choice
+                checked={scope === 'range'}
+                onChange={() => {
+                  setScope('range')
+                  // Counting what's in the dates needs to read the photos
+                  void requestMediaPermission().then(setCanRead, () => setCanRead(false))
+                }}
+                label="From a date range"
+                hint="Photos and videos taken between two dates"
+              />
             </fieldset>
+            {scope === 'range' && (
+              <div className="space-y-3 rounded-md p-3.5 pressed">
+                {canRead ? (
+                  <DateRangePicker path={CAMERA_PATH} value={days} onChange={setDays} />
+                ) : (
+                  <p className="text-xs text-muted">TeleDrive needs permission to read your photos and videos.</p>
+                )}
+                <Checkbox checked={alsoNew} onChange={setAlsoNew}>
+                  Also back up new photos and videos
+                </Checkbox>
+              </div>
+            )}
             <Toggle
               label="Only on Wi-Fi"
               hint="Don't use mobile data for backups"
@@ -124,7 +159,7 @@ export default function CameraBackupSettings() {
             </p>
             {error && <p className="font-semibold text-brand-ink">{error}</p>}
             <div className="flex justify-end">
-              <button className="btn-primary" disabled={busy} onClick={enable}>
+              <button className="btn-primary" disabled={busy || (scope === 'range' && !validDays(days))} onClick={enable}>
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                 Turn on
               </button>
@@ -142,6 +177,23 @@ function FolderList() {
   const [error, setError] = useState<string | null>(null)
   /** A folder just switched on: ask whether to include what's already in it. */
   const [asking, setAsking] = useState<MediaFolder | null>(null)
+  /** Choosing dates: for a folder being switched on (`asking`), or older photos for one that's on. */
+  const [ranging, setRanging] = useState<{ path: string; adding: boolean } | null>(null)
+  const [days, setDays] = useState<Days>(initialDays)
+  const [alsoNew, setAlsoNew] = useState(true)
+  const startRange = (path: string, adding: boolean) => {
+    setDays(initialDays())
+    setAlsoNew(true)
+    setRanging({ path, adding })
+  }
+  const saveRange = () => {
+    if (!ranging) return
+    const range = dayRange(days.from, days.to)
+    if (ranging.adding) void addRange(ranging.path, range)
+    else void setSource(ranging.path, true, alsoNew ? undefined : NO_NEW, range)
+    setRanging(null)
+    setAsking(null)
+  }
   const chosen = new Map(sourcesOf(settings).map((s) => [s.path, s]))
 
   useEffect(() => {
@@ -183,12 +235,16 @@ function FolderList() {
                 checked={chosen.has(f.path) || asking?.path === f.path}
                 onChange={(e) => {
                   if (e.target.checked) setAsking(f)
-                  else void setSource(f.path, false)
+                  else {
+                    if (asking?.path === f.path) setAsking(null)
+                    if (ranging?.path === f.path) setRanging(null)
+                    void setSource(f.path, false)
+                  }
                 }}
               />
             </label>
             {chosen.has(f.path) && (
-              <div className="mt-2 pl-12">
+              <div className="mt-2 flex flex-wrap items-center gap-2 pl-12">
                 <Segmented<BackupWhen>
                   small
                   label={`When to back up ${f.path === CAMERA_PATH ? 'Camera' : folderLabel(f.path)}`}
@@ -199,13 +255,43 @@ function FolderList() {
                   ]}
                   onChange={(when) => void setSourceWhen(f.path, when)}
                 />
+                {ranging?.path !== f.path && (
+                  <button className="btn-ghost h-8 px-2.5 text-xs" onClick={() => startRange(f.path, true)}>
+                    Back up older photos…
+                  </button>
+                )}
+                <RangesNote source={chosen.get(f.path)!} />
               </div>
             )}
-            {asking?.path === f.path && (
-              <div className="mt-2 flex flex-wrap items-center gap-2 pl-12">
+            {ranging?.path === f.path && (
+              <div className="mt-3 space-y-3 rounded-md p-3 raised-sm">
+                <DateRangePicker path={f.path} value={days} onChange={setDays} />
+                {!ranging.adding && (
+                  <Checkbox checked={alsoNew} onChange={setAlsoNew}>
+                    Also back up new photos and videos
+                  </Checkbox>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    className="btn-ghost h-9 text-xs text-muted"
+                    onClick={() => {
+                      setRanging(null)
+                      setAsking(null)
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button className="btn-primary h-9 text-xs" disabled={!validDays(days)} onClick={saveRange}>
+                    Back up
+                  </button>
+                </div>
+              </div>
+            )}
+            {asking?.path === f.path && ranging?.path !== f.path && (
+              <div className="mt-2 flex flex-wrap items-center gap-1 pl-12">
                 <span className="text-xs text-muted">Back up:</span>
                 <button
-                  className="btn-ghost py-1 text-xs"
+                  className="btn-ghost h-8 px-2.5 text-xs"
                   onClick={() => {
                     setAsking(null)
                     void setSource(f.path, true)
@@ -214,7 +300,7 @@ function FolderList() {
                   Only new
                 </button>
                 <button
-                  className="btn-ghost py-1 text-xs"
+                  className="btn-ghost h-8 px-2.5 text-xs"
                   onClick={() => {
                     setAsking(null)
                     void setSource(f.path, true, 0)
@@ -222,7 +308,10 @@ function FolderList() {
                 >
                   All {f.count} items
                 </button>
-                <button className="btn-ghost py-1 text-xs text-muted" onClick={() => setAsking(null)}>
+                <button className="btn-ghost h-8 px-2.5 text-xs" onClick={() => startRange(f.path, false)}>
+                  Date range…
+                </button>
+                <button className="btn-ghost h-8 px-2.5 text-xs text-muted" onClick={() => setAsking(null)}>
                   Cancel
                 </button>
               </div>
@@ -231,6 +320,17 @@ function FolderList() {
         ))}
       </ul>
     </div>
+  )
+}
+
+/** A folder's date ranges still being backed up ("Also 12 Aug – 20 Aug 2024"), or "Only …" without new photos. */
+function RangesNote({ source }: { source: BackupSource }) {
+  if (!source.ranges?.length) return null
+  const labels = source.ranges.map(rangeLabel).join(', ')
+  return (
+    <span className="basis-full text-xs text-muted">
+      {source.since === NO_NEW ? 'Only' : 'Also'} photos from {labels}
+    </span>
   )
 }
 
