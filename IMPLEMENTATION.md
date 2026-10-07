@@ -1535,32 +1535,34 @@ password.
   the import dialog with a Chrome CSV (1 duplicate skipped, 2 added). Not yet: the Windows app's CSP (19.7);
   checking Bitwarden opens our protected file (built from Bitwarden's documented format, not tried against Bitwarden).
 
-## Phase 22: TeleWarden, security report ⬜
+## Phase 22: TeleWarden, security report ✅ (built; the user tests it on the phone)
+
+Scope (decided 2026-10-07): **weak, reused and old** passwords. Exposed passwords (Have I Been Pwned) and unsecured
+(http://) websites were left out.
 
 ### 22.1 What the user sees
-- **Security report** (sidebar, and a phone tab): "5 logins need attention", then rows with counts: Exposed in data
-  breaches, Reused passwords, Weak passwords, Not changed in over a year, Unsecured websites (http://). Tapping a row
-  lists those logins (breadcrumb "Security report / Weak passwords").
-- On a login: a red-ruled warning per problem; **Change password** opens the editor with a new generated password
-  (the user opens the site, changes it there, then saves).
-- Badges in the list: EXPOSED, REUSED, WEAK (the most serious one only).
-- **Check for breaches** runs the breach check. Settings → *Check for breached passwords*: asked once the first time
-  the report opens; off means it never runs.
+- **Security report** (sidebar under Tools with the number of logins to look at; a **Report** tab on phones): "5 logins
+  need attention" (or "All your logins look fine"), then three tiles with counts: Reused passwords, Weak passwords,
+  Not changed in over a year. A tile opens those logins (breadcrumb "Security report / Weak passwords").
+- On a login: a red-ruled warning listing its problems ("Reused on Instagram" with the other logins as links, "Weak
+  password", "Not changed for 14 months") and **Change password**, which opens the editor with a new generated
+  password (the user changes it on the site, then saves).
+- Badges in the list: REUSED or WEAK (the more serious one; old passwords only show in the report).
 
 ### 22.2 How it works
-- `vault/report.ts` (pure): weak (strength score ≤ 1), reused (same password, compared by SHA-256 in memory), old
-  (`pc` over 365 days ago), unsecured (an `http://` website), exposed (from the breach check). Unit tests.
-- **Breach check** (`vault/hibp.ts`): SHA-1 of each password; `GET https://api.pwnedpasswords.com/range/<first 5 hex>`
-  with `Add-Padding: true`; match the rest locally. One request per distinct prefix, 4 at a time; results kept in
-  memory until the vault locks. Only the prefix leaves the device.
-- Strength: optionally swap the Phase 19 estimator for `@zxcvbn-ts/core` + its common dictionary, loaded only when the
-  report or a form opens (it's large).
-- Later: "2FA available" (sites that support 2FA but have no code saved, from the 2fa.directory list).
+- `vault/report.ts` (pure, `report.test.ts`): logins not in the trash with a password. Reused: the same password on
+  another login (compared in memory). Weak: zxcvbn score ≤ 1, with the username and the item's name as hints; each
+  distinct password is scored once. Old: `pc` (or `ct` if never changed) more than 365 days ago. Problems are listed
+  most serious first (reused, weak, old).
+- `components/vault/Report.tsx`: `useReport()` (one report per items list, cached in a WeakMap; null while zxcvbn
+  loads), the page, `ReportWarnings`, `ReportBadge`. Routes `/report` and `/report/(reused|weak|old)`.
+- Nothing leaves the device.
 
-### 22.3 Steps
-1. `report.ts` and `hibp.ts` with tests (mocked fetch).
-2. Report page, filtered lists, warnings and badges, Change password.
-3. Check: a known-breached password ("password123") shows as exposed; nothing but prefixes is sent (network log).
+### 22.3 Done
+- Checked in the browser (mock vault): 2 reused, 3 weak, 3 old, 5 logins in all; the weak list with badges; the
+  warning's link opens the other login; Change password generated a 20-character password and, once saved, the login
+  left the weak and reused lists and the count dropped to 4; phone width (360 px) with the Report tab, the tiles and
+  the item sheet, nothing overflowing.
 
 ---
 

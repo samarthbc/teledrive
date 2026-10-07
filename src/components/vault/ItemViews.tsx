@@ -1,6 +1,6 @@
 import {
   ChevronDown, ChevronUp, Copy, CopyPlus, ExternalLink, FolderInput, History, MoreVertical, Pencil, RotateCcw, Star, StarOff, Trash2,
-  TriangleAlert, UserRound,
+  UserRound,
 } from 'lucide-react'
 import { useState } from 'react'
 import { formatDate } from '../../lib/format'
@@ -13,7 +13,8 @@ import {
 import type { MenuEntry } from '../Menu'
 import { useSettings } from '../../lib/settings'
 import { OtpRow, RowCode } from './Otp'
-import { FieldRow, ItemTile, SecretText, StrengthMeter } from './parts'
+import { ReportBadge, ReportWarnings } from './Report'
+import { FieldRow, ItemTile, SecretText, StrengthMeter, Warning } from './parts'
 
 const nowSec = () => Math.floor(Date.now() / 1000)
 const daysLeft = (tr: number) => Math.max(0, TRASH_DAYS - Math.floor((nowSec() - tr) / 86_400))
@@ -56,7 +57,9 @@ export function ItemRow(props: { item: VaultItem; selected: boolean; onOpen: () 
             <span className="shrink-0 rounded-md border-[1.5px] border-brand-ink px-1.5 py-px text-[10.5px] font-extrabold tracking-[0.08em] text-brand-ink uppercase">
               {daysLeft(item.tr)}d left
             </span>
-          ) : null}
+          ) : (
+            <ReportBadge item={item} />
+          )}
         </p>
         <div className="flex min-w-0 items-center gap-2">
           <p className="min-w-0 truncate text-[13px] text-muted">{subtitleOf(item)}</p>
@@ -123,8 +126,12 @@ export function ItemDetail(props: {
   onEdit: () => void
   onMenu: (e: React.MouseEvent) => void
   onDeleteForever: () => void
+  /** Security report → Change password: the editor with a new generated password. */
+  onChangePassword: () => void
+  /** Open another item (a login that shares this password). */
+  onOpen: (id: string) => void
 }) {
-  const { item, onEdit, onMenu, onDeleteForever } = props
+  const { item, onEdit, onMenu, onDeleteForever, onChangePassword, onOpen } = props
   const folders = useVault((s) => s.folders)
   const rolledBack = useVault((s) => s.rollbacks.includes(item.id))
   const [history, setHistory] = useState(false)
@@ -162,6 +169,7 @@ export function ItemDetail(props: {
           In the trash for {Math.floor((nowSec() - item.tr) / 86_400)} days. Deleted forever in {daysLeft(item.tr)} days.
         </Warning>
       ) : null}
+      {!item.tr && <ReportWarnings item={item} onChangePassword={onChangePassword} onOpen={onOpen} />}
       {rolledBack && (
         <Warning>
           <span>An older version of this item came back (someone may have restored an old copy). Check it before you use it.</span>
@@ -225,15 +233,6 @@ export function ItemDetail(props: {
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-function Warning({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex gap-3 border-l-[3px] border-brand py-1 pl-3.5 text-[13px] leading-relaxed">
-      <TriangleAlert className="mt-0.5 size-5 shrink-0 text-brand-ink" strokeWidth={2} />
-      <div className="flex min-w-0 flex-col">{children}</div>
     </div>
   )
 }

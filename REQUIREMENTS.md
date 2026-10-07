@@ -248,9 +248,9 @@ A third built-in drive, **TeleWarden**, next to My Drive and TelePhotos. UI prot
 - [ ] Export: password-protected file (opens in Bitwarden too), plain .json, .csv; asks the master password first
 
 **Security report (Phase 22)**
-- [ ] Weak, reused, old (over a year), unsecured (http://) and exposed passwords (Have I Been Pwned, opt-in; only a
-      5-character hash prefix is sent)
-- [ ] Badges in the list, warnings on the item, **Change password** opens the editor with a new generated password
+- [x] Weak, reused and old (not changed in over a year) passwords, worked out on the device
+- [x] Badges in the list, warnings on the item, **Change password** opens the editor with a new generated password
+- Left out (decided 2026-10-07): exposed passwords (Have I Been Pwned) and unsecured (http://) websites
 
 **Android autofill (Phase 23)**
 - [ ] Fills logins in other apps and in Chrome (TeleDrive as Android's autofill service); unlock with fingerprint first

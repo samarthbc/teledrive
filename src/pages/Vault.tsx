@@ -1,6 +1,6 @@
 import {
   Dices, Download, Folder, FolderPlus, KeyRound, LayoutGrid, Lock, LockOpen, LogOut, Menu as MenuIcon, MonitorSmartphone, MousePointerClick, Pencil, Plus,
-  ScanQrCode, Search, Settings, Star, Trash2, X, type LucideIcon,
+  ScanQrCode, Search, Settings, ShieldCheck, Star, Trash2, X, type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
@@ -20,6 +20,8 @@ import { AddCodeDialog, CodesPanel, ImportGoogleDialog } from '../components/vau
 import { TYPE_ICONS } from '../components/vault/parts'
 import { RecoverDialog, ReminderDialog, reminderDue, ResetDialog, VaultLock, VaultSetup } from '../components/vault/VaultGate'
 import { GeneratorPanel, VaultSettings } from '../components/vault/VaultPanels'
+import { PROBLEM_INFO, ReportPanel, useReport } from '../components/vault/Report'
+import type { Problem } from '../vault/report'
 import { useSettings } from '../lib/settings'
 import { isAndroid } from '../native/android'
 import { useBackHandler } from '../native/backButton'
@@ -35,7 +37,8 @@ import SettingsView from './Settings'
 
 type ListFilter = 'all' | 'fav' | 'trash' | ItemType
 type View =
-  | { kind: 'list'; filter: ListFilter; folder?: string }
+  | { kind: 'list'; filter: ListFilter; folder?: string; problem?: Problem }
+  | { kind: 'report' }
   | { kind: 'generator' }
   | { kind: 'codes' }
   | { kind: 'settings' }
@@ -47,6 +50,9 @@ function viewOf(pathname: string): View {
   if (pathname === '/generator') return { kind: 'generator' }
   if (pathname === '/codes') return { kind: 'codes' }
   if (pathname === '/settings') return { kind: 'settings' }
+  if (pathname === '/report') return { kind: 'report' }
+  const problem = pathname.match(/^\/report\/(reused|weak|old)$/)
+  if (problem) return { kind: 'list', filter: 'all', problem: problem[1] as Problem }
   const folder = pathname.match(/^\/v\/folder\/([^/]+)$/)
   if (folder) return { kind: 'list', filter: 'all', folder: decodeURIComponent(folder[1]) }
   const f = pathname.match(/^\/v\/(fav|trash|login|card|identity|note)$/)
@@ -152,18 +158,21 @@ export default function VaultPage() {
 
   const filter = view.kind === 'list' ? view.filter : null
   const folder = view.kind === 'list' ? view.folder : undefined
+  const problem = view.kind === 'list' ? view.problem : undefined
+  const report = useReport()
   /** `scope`: what this place holds (for the chips); `shown`: after the chip and the search. */
   const { shown, scope } = useMemo(() => {
     if (!filter) return { shown: [], scope: [] }
     let l = items.filter((i) => (filter === 'trash' ? !!i.tr : !i.tr))
     if (folder) l = l.filter((i) => i.f === folder)
+    else if (problem) l = l.filter((i) => report?.problems.get(i.id)?.includes(problem))
     else if (filter === 'fav') l = l.filter((i) => i.fav)
     else if (filter !== 'all' && filter !== 'trash') l = l.filter((i) => i.ty === filter)
     const scope = l
     if (chip !== 'all') l = l.filter((i) => i.ty === chip)
     if (query) l = l.filter((i) => matchesSearch(i, query))
     return { shown: [...l].sort(byName), scope }
-  }, [items, filter, folder, chip, query])
+  }, [items, filter, folder, problem, report, chip, query])
   const selectedItem = items.find((i) => i.id === selected) ?? null
   const visibleSelected = selectedItem && shown.some((i) => i.id === selectedItem.id) ? selectedItem : null
 
@@ -211,18 +220,29 @@ export default function VaultPage() {
       select(id)
     },
   })
+  /** Another item from an item's details (a login sharing its password): shown in All items if not in this list. */
+  const openOther = (id: string) => {
+    waitingFor.current = id
+    if (shown.some((i) => i.id === id)) return select(id)
+    navigate('/')
+    setTimeout(() => select(id))
+  }
 
   const title =
     view.kind === 'generator'
       ? 'Generator'
+      : view.kind === 'report'
+        ? 'Security report'
       : view.kind === 'codes'
         ? '2FA codes'
       : view.kind === 'settings'
         ? 'Settings'
+        : view.problem
+          ? PROBLEM_INFO[view.problem].title
         : view.folder
           ? (folders.find((f) => f.id === view.folder)?.n ?? 'Folder')
           : { all: 'All items', fav: 'Favorites', trash: 'Trash', login: 'Logins', card: 'Cards', identity: 'Identities', note: 'Notes' }[view.filter]
-  const showChips = view.kind === 'list' && (view.filter === 'all' || view.filter === 'fav' || !!view.folder)
+  const showChips = view.kind === 'list' && !view.problem && (view.filter === 'all' || view.filter === 'fav' || !!view.folder)
   const searchBox = (
     <div className="relative min-w-0 flex-1">
       <Search className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted" />
@@ -265,6 +285,13 @@ export default function VaultPage() {
   if (status === 'none' || pendingCode === 'setup') content = <VaultSetup />
   else if (status === 'locked' || pendingCode === 'recover') content = <VaultLock />
   else if (view.kind === 'generator') content = <GeneratorPanel />
+  else if (view.kind === 'report')
+    content = (
+      <>
+        <h1 className="h-display mb-5">Security report</h1>
+        <ReportPanel onOpen={(p) => navigate(`/report/${p}`)} />
+      </>
+    )
   else if (view.kind === 'codes')
     content = (
       <>
@@ -324,8 +351,16 @@ export default function VaultPage() {
                     Folders <span className="text-brand-ink">/</span>
                   </p>
                 )}
+                {view.kind === 'list' && view.problem && (
+                  <p className="mb-2 text-[15px] font-bold text-muted">
+                    <button type="button" className="hover:text-ink" onClick={() => navigate('/report')}>
+                      Security report
+                    </button>{' '}
+                    <span className="text-brand-ink">/</span>
+                  </p>
+                )}
                 <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-                  <h1 className="h-display min-w-0 truncate">{title}</h1>
+                  <h1 className="h-display min-w-0 truncate max-md:whitespace-normal">{title}</h1>
                   {view.kind === 'list' && <span className="pb-0.5 text-sm text-muted">{shown.length} item{shown.length === 1 ? '' : 's'}</span>}
                   {view.kind === 'list' && view.filter === 'trash' && shown.length > 0 && (
                     <button className="btn-danger-solid ml-auto" onClick={() => setModal({ type: 'emptyTrash' })}>
@@ -368,6 +403,8 @@ export default function VaultPage() {
                       onEdit={() => setModal({ type: 'edit', item: visibleSelected })}
                       onMenu={(e) => openMenu(e, itemMenu(visibleSelected, detailActions(visibleSelected)))}
                       onDeleteForever={() => setModal({ type: 'deleteForever', items: [visibleSelected] })}
+                      onChangePassword={() => setModal({ type: 'edit', item: visibleSelected, generate: true })}
+                      onOpen={openOther}
                     />
                   ) : (
                     <div className="m-5.5 flex flex-col items-center gap-3 rounded-md px-7 py-11 text-center pressed-lg">
@@ -400,6 +437,8 @@ export default function VaultPage() {
               onEdit={() => setModal({ type: 'edit', item: visibleSelected })}
               onMenu={(e) => openMenu(e, itemMenu(visibleSelected, detailActions(visibleSelected)))}
               onDeleteForever={() => setModal({ type: 'deleteForever', items: [visibleSelected] })}
+              onChangePassword={() => setModal({ type: 'edit', item: visibleSelected, generate: true })}
+              onOpen={openOther}
             />
           </div>
         </div>
@@ -613,6 +652,7 @@ function VaultSidebar(props: {
   const items = useVault((s) => s.items)
   const folders = useVault((s) => s.folders)
   const navigate = useNavigate()
+  const report = useReport()
   const live = items.filter((i) => !i.tr)
   const count = (t?: ItemType) => (t ? live.filter((i) => i.ty === t).length : live.length)
 
@@ -682,6 +722,7 @@ function VaultSidebar(props: {
       <nav className="space-y-1">
         {link('/codes', ScanQrCode, '2FA codes', live.filter((i) => i.ty === 'login' && i.d.otp).length)}
         {link('/generator', Dices, 'Generator')}
+        {link('/report', ShieldCheck, 'Security report', report?.total)}
         {link('/v/trash', Trash2, 'Trash', items.filter((i) => i.tr).length)}
       </nav>
 
@@ -732,6 +773,7 @@ function BottomNav({ pathname, go }: { pathname: string; go: (to: string) => voi
     { label: 'Vault', icon: KeyRound, to: '/', on: pathname === '/' || pathname.startsWith('/v/') },
     { label: '2FA codes', icon: ScanQrCode, to: '/codes', on: pathname === '/codes' },
     { label: 'Generator', icon: Dices, to: '/generator', on: pathname === '/generator' },
+    { label: 'Report', icon: ShieldCheck, to: '/report', on: pathname.startsWith('/report') },
     { label: 'Settings', icon: Settings, to: '/settings', on: pathname === '/settings' },
   ]
   return (
@@ -741,7 +783,7 @@ function BottomNav({ pathname, go }: { pathname: string; go: (to: string) => voi
           key={t.label}
           onClick={() => go(t.to)}
           aria-current={t.on ? 'page' : undefined}
-          className={`flex min-w-16 flex-col items-center gap-1 text-[11px] ${t.on ? 'font-extrabold text-brand-ink' : 'font-semibold text-muted'}`}
+          className={`flex min-w-14 flex-col items-center gap-1 text-[11px] ${t.on ? 'font-extrabold text-brand-ink' : 'font-semibold text-muted'}`}
         >
           <span className={`flex h-8 w-14 items-center justify-center rounded-md ${t.on ? 'pressed-xs' : ''}`}>
             <t.icon className="size-5" strokeWidth={t.on ? 2 : 1.8} />

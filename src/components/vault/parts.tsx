@@ -1,4 +1,4 @@
-import { Check, Copy, CreditCard, Dices, Eye, EyeOff, FileDown, IdCard, KeyRound, StickyNote, X, type LucideIcon } from 'lucide-react'
+import { Check, Copy, CreditCard, Dices, Eye, EyeOff, FileDown, IdCard, KeyRound, StickyNote, TriangleAlert, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { pickSaveTarget } from '../../drive/download'
 import { verifyPassword } from '../../drive/vault'
@@ -275,5 +275,15 @@ export function NoRecoveryNote() {
     <Note>
       <b>Nobody can reset this password.</b> Not Telegram, not TeleDrive. Your recovery code is the only way back in.
     </Note>
+  )
+}
+
+/** A red-ruled warning (an item in the trash, an old version back, a weak password…). */
+export function Warning({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3 border-l-[3px] border-brand py-1 pl-3.5 text-[13px] leading-relaxed">
+      <TriangleAlert className="mt-0.5 size-5 shrink-0 text-brand-ink" strokeWidth={2} />
+      <div className="flex min-w-0 flex-col">{children}</div>
+    </div>
   )
 }
