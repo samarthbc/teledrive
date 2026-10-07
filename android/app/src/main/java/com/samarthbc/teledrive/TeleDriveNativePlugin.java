@@ -3,14 +3,21 @@ package com.samarthbc.teledrive;
 import android.Manifest;
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.content.ClipData;
+import android.content.ClipDescription;
+import android.content.ClipboardManager;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.PersistableBundle;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
@@ -507,6 +514,43 @@ public class TeleDriveNativePlugin extends Plugin {
             bars.setAppearanceLightNavigationBars(!dark);
         });
         call.resolve();
+    }
+
+    // ---- TeleWarden ----
+
+    /** Which copy is the latest (a newer copy cancels the older one's clearing). */
+    private int clipSerial = 0;
+
+    /**
+     * Copy a secret: marked sensitive, so the keyboard's clipboard strip and Android's preview don't show it, and
+     * cleared after `clearAfter` seconds (0 = never) if it's still what's on the clipboard.
+     */
+    @PluginMethod
+    public void copySecret(PluginCall call) {
+        String text = call.getString("text", "");
+        long clearAfter = longArg(call, "clearAfter", 0);
+        getActivity().runOnUiThread(() -> {
+            ClipboardManager cm = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData clip = ClipData.newPlainText("TeleWarden", text);
+            PersistableBundle extras = new PersistableBundle();
+            // ClipDescription.EXTRA_IS_SENSITIVE from Android 13; keyboards read the same key on older versions
+            extras.putBoolean(Build.VERSION.SDK_INT >= 33 ? ClipDescription.EXTRA_IS_SENSITIVE : "android.content.extra.IS_SENSITIVE", true);
+            clip.getDescription().setExtras(extras);
+            cm.setPrimaryClip(clip);
+            int mine = ++clipSerial;
+            if (clearAfter > 0) {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (mine != clipSerial) return;
+                    // In the background Android may not let the app read the clipboard: then it's cleared anyway
+                    ClipData now = cm.getPrimaryClip();
+                    CharSequence current = now != null && now.getItemCount() > 0 ? now.getItemAt(0).getText() : null;
+                    if (now != null && (current == null || !current.toString().equals(text))) return;
+                    if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip();
+                    else cm.setPrimaryClip(ClipData.newPlainText("", ""));
+                }, clearAfter * 1000);
+            }
+            call.resolve();
+        });
     }
 
     // ---- Keeping transfers alive ----

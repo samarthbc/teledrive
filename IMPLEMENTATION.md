@@ -1201,7 +1201,7 @@ details one tap deeper).
   settings unchanged. Not pressed **Back up** (that uploads real photos): still to check that a range uploads exactly
   its photos and is dropped when done.
 
-## Phase 19: TeleWarden, the vault ⬜
+## Phase 19: TeleWarden, the vault 🚧 (implemented; checking with real Telegram and on the phone)
 
 A third built-in drive, **TeleWarden**: a password manager in the style of Bitwarden, kept in its own Telegram channel
 and encrypted like everything else. Phases 19–23 build it; this phase is the drive, its key and lock, and the four
@@ -1343,14 +1343,12 @@ VAULT KEY ─▶ every item (AES-256-GCM)
   meter while typing. Phase 22 may replace it with zxcvbn.
 
 ### 19.7 Website hardening
-- Today the website's only security header is `frame-ancestors 'none'`. Once it holds passwords, anything able to
-  inject a script (a compromised dependency, an injected tag) could read them, so `vercel.json` gets a strict
-  Content-Security-Policy: `default-src 'self'`; `script-src 'self' 'wasm-unsafe-eval'` (Argon2); `connect-src 'self'`
-  plus Telegram's WebSocket/HTTPS hosts, `api.pwnedpasswords.com` and whatever the update check uses;
-  `img-src 'self' blob: data:`; `worker-src 'self' blob:`; `object-src 'none'`; `base-uri 'none'`. First list what the
-  site really loads (network log on every page), then set it, then check nothing breaks.
-- The Windows app gets the same policy (Electron `session.webRequest` headers); the Android app's WebView loads only
-  its bundled files already.
+- Already in place (found while building this): website builds get a strict Content-Security-Policy from
+  `vite.config.ts` (`contentSecurityPolicy()`): `default-src 'self'`; `script-src 'self' 'wasm-unsafe-eval'` plus the
+  document viewer's hash (Argon2 runs as WebAssembly, so it's covered); `connect-src` only Telegram and GitHub;
+  `object-src 'none'`. Phase 22 adds `https://api.pwnedpasswords.com` to `connect-src`.
+- Still to do: the same policy for the Windows app (Electron `session.webRequest` headers), in Phase 21 with the other
+  Electron change (content protection). The Android app's WebView loads only its bundled files.
 
 ### 19.8 Steps
 1. `vault/items.ts`: item types, defaults, validation (Aadhaar 12 digits, PAN `AAAAA9999A`, PIN code 6 digits,
@@ -1375,6 +1373,32 @@ VAULT KEY ─▶ every item (AES-256-GCM)
     clipboard clear, auto-lock, nothing decrypted in IndexedDB, the CSP blocks an injected script.
 
 ---
+
+### 19.9 Done so far
+- Code: `vault/vaultCrypto.ts` (Argon2id with hash-wasm, the two-layer wrap, recovery code in Crockford base32 with
+  HKDF, sealed hint, items sealed with the ID as AES-GCM additional data, deflate-raw and 256-byte padding);
+  `vault/items.ts` (types; the type's fields sit under `d` in the sealed item; card brands incl. RuPay; Aadhaar, PAN,
+  PIN code checks); `vault/generator.ts` + `vault/effWords.ts` (EFF large wordlist, loaded on demand);
+  `vault/strength.ts` (zxcvbn-ts, loaded on demand; the master password rules); `vault/clipboard.ts` (web: clears on
+  focus; Android: native `copySecret`, marked sensitive); `vault/backend.ts` (Telegram) and `vault/memoryBackend.ts`
+  (tests, dev mock); `store/useVault.ts` (records → decrypted items in memory, idle lock, wrong-try waits stored on the
+  device, conflict check on save, rollback warning, 30-day trash purge, folders, recovery, change password, new code,
+  reset, `pendingCode` so the recovery code screen stays until it's saved). Drive: `isVaultDrive`,
+  `createVaultDrive`, `useDrive.openVault`, `useInVault`; `components/DrivePicker.tsx` (shared with the file sidebar).
+  Screens: `pages/Vault.tsx` (sidebar, list/detail, phone tabs, sheet, + button, dialogs),
+  `components/vault/VaultGate.tsx` (first run, lock, recover, reset, change password, new code, one-week reminder),
+  `ItemForm.tsx`, `ItemViews.tsx`, `VaultPanels.tsx` (generator, TeleWarden settings), `parts.tsx`. Settings:
+  `vaultLockMinutes`, `clipboardSeconds`. Dev mock: `?mock&vault` (first run), `&vault=locked`, `&vault=open`.
+- Tests: `vault/vaultCrypto.test.ts` (codes, wraps, recovery, password change, new code, swapped ciphertext, padding),
+  `vault/items.test.ts` (brands, Indian documents, history, generator, master rules), `store/useVault.test.ts` (the
+  whole lifecycle against the memory backend, incl. conflicts, trash purge, rollback, reset).
+- Checked in the browser (mock): list, detail, chips, folders, new login with the dice, saving; lock, wrong password
+  with the count, hint; first run (Password1234! refused as not strong; a passphrase accepted; the code screen can't be
+  skipped); recovery (a wrong code refused, the right one in lowercase with spaces accepted, a new code, the old one
+  refused afterwards, the new password opens it); Settings → Change master password; phone width (390 px: no
+  overflow, four tabs, + button, item sheet with the card picture).
+- Not yet: very long items as a document message (today: "This item is too long" past ~2.9 KB compressed); the Windows
+  app's CSP (19.7). Still to check: real Telegram (create the channel, two devices), Android (native copy, layout).
 
 ## Phase 20: TeleWarden, authenticator ⬜
 

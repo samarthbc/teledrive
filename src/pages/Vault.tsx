@@ -16,7 +16,7 @@ import { Choice } from '../components/ui'
 import ItemForm from '../components/vault/ItemForm'
 import { ItemDetail, ItemRow, itemMenu } from '../components/vault/ItemViews'
 import { TYPE_ICONS } from '../components/vault/parts'
-import { VaultLock, VaultSetup } from '../components/vault/VaultGate'
+import { RecoverDialog, ReminderDialog, reminderDue, ResetDialog, VaultLock, VaultSetup } from '../components/vault/VaultGate'
 import { GeneratorPanel, VaultSettings } from '../components/vault/VaultPanels'
 import { useSettings } from '../lib/settings'
 import { isAndroid } from '../native/android'
@@ -60,6 +60,9 @@ type Modal =
   | { type: 'logout' }
   | { type: 'getApps' }
   | { type: 'newDrive' }
+  | { type: 'reminder' }
+  | { type: 'recover' }
+  | { type: 'reset' }
 
 function useWide() {
   const query = '(min-width: 768px)'
@@ -107,6 +110,12 @@ export default function VaultPage() {
       for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) window.removeEventListener(ev, touch, { capture: true })
     }
   }, [open])
+
+  // A week after setting up, once: does the person still know the master password?
+  const config = useVault((s) => s.config)
+  useEffect(() => {
+    if (open && reminderDue(config)) setModal({ type: 'reminder' })
+  }, [open, config])
 
   useEffect(() => {
     if (!lockedBecause) return
@@ -433,6 +442,11 @@ export default function VaultPage() {
           onClose={() => setModal(null)}
         />
       )}
+      {modal?.type === 'reminder' && config && (
+        <ReminderDialog ct={config.ct} onClose={() => setModal(null)} onRecover={() => setModal({ type: 'recover' })} />
+      )}
+      {modal?.type === 'recover' && <RecoverDialog onClose={() => setModal(null)} onReset={() => setModal({ type: 'reset' })} />}
+      {modal?.type === 'reset' && <ResetDialog onClose={() => setModal(null)} />}
       {modal?.type === 'getApps' && (
         <Dialog title="Get the app" icon={MonitorSmartphone} subtitle="TeleDrive for Windows and Android" onClose={() => setModal(null)}>
           <GetApps heading={false} />

@@ -1,4 +1,5 @@
 import { getSettings } from '../lib/settings'
+import { isAndroid, Native } from '../native/android'
 import { toast, toastError } from '../store/useToast'
 
 // Copying secrets (IMPLEMENTATION.md → "Phase 19.5"): the clipboard is cleared after the time chosen in Settings.
@@ -27,6 +28,17 @@ async function write(text: string): Promise<void> {
 
 /** Copy a secret and clear it from the clipboard later. */
 export async function copySecret(text: string, label: string): Promise<void> {
+  const seconds = getSettings().clipboardSeconds
+  // Android: marked sensitive and cleared by the app itself (also when TeleDrive is in the background)
+  if (isAndroid) {
+    try {
+      await Native.copySecret({ text, clearAfter: seconds })
+      toast(seconds ? `${label} copied · clears in ${seconds} s` : `${label} copied`)
+    } catch (e) {
+      toastError(e)
+    }
+    return
+  }
   try {
     await write(text)
   } catch (e) {
@@ -36,7 +48,6 @@ export async function copySecret(text: string, label: string): Promise<void> {
   clearTimeout(timer)
   if (pendingFocus) window.removeEventListener('focus', pendingFocus)
   pendingFocus = null
-  const seconds = getSettings().clipboardSeconds
   if (!seconds) return toast(`${label} copied`)
   toast(`${label} copied · clears in ${seconds} s`)
   timer = setTimeout(() => {

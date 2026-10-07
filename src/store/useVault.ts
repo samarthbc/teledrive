@@ -67,6 +67,8 @@ interface VaultState {
   create: (password: string, hint: string) => Promise<string>
   unlock: (password: string) => Promise<void>
   checkCode: (code: string) => Promise<boolean>
+  /** Is this the master password? (Changes nothing; for the one-week reminder.) */
+  checkPassword: (password: string) => Promise<boolean>
   recover: (code: string, newPassword: string) => Promise<string>
   changePassword: (current: string, next: string) => Promise<void>
   newCode: (password: string) => Promise<string>
@@ -278,6 +280,16 @@ export const useVault = create<VaultState>((set, get) => {
     },
 
     checkCode: async (code) => vc.checkRecoveryCode(needConfig(), needRoot(), code),
+
+    checkPassword: async (password) => {
+      try {
+        await vc.openWithPassword(needConfig(), needRoot(), password)
+        return true
+      } catch (e) {
+        if (e instanceof WrongPasswordError) return false
+        throw e
+      }
+    },
 
     recover: async (code, newPassword) => {
       const { config, key: k, code: next } = await vc.recover(needConfig(), needRoot(), code, newPassword)

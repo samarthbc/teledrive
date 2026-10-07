@@ -336,6 +336,84 @@ export function ResetDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
+const REMINDED_KEY = 'teledrive.vaultReminded'
+
+/** A week after setting up, once: the vault's creation time when it's due, else null. */
+export function reminderDue(config: { ct: number } | null): boolean {
+  if (!config || Date.now() / 1000 - config.ct < 7 * 86_400) return false
+  try {
+    return localStorage.getItem(REMINDED_KEY) !== String(config.ct)
+  } catch {
+    return false
+  }
+}
+
+function markReminded(ct: number) {
+  try {
+    localStorage.setItem(REMINDED_KEY, String(ct))
+  } catch {
+    // Storage blocked: asked again next time
+  }
+}
+
+/** "Do you still remember your master password?" (once, a week after setting up). Nothing changes either way. */
+export function ReminderDialog({ ct, onClose, onRecover }: { ct: number; onClose: () => void; onRecover: () => void }) {
+  const [password, setPassword] = useState('')
+  const [result, setResult] = useState<'right' | 'wrong' | null>(null)
+  const [busy, setBusy] = useState(false)
+  const done = () => {
+    markReminded(ct)
+    onClose()
+  }
+  const check = async () => {
+    setBusy(true)
+    try {
+      setResult((await useVault.getState().checkPassword(password)) ? 'right' : 'wrong')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog
+      title="Do you still remember your master password?"
+      subtitle="A quick check, once. Nothing changes."
+      icon={KeyRound}
+      onClose={done}
+      footer={
+        result === 'right' ? (
+          <button className="btn-primary" onClick={done}>Done</button>
+        ) : (
+          <>
+            <button className="btn-ghost" onClick={done}>Not now</button>
+            <button className="btn-primary" disabled={busy || !password} onClick={() => void check()}>
+              {busy && <Loader2 className="animate-spin" />} Check
+            </button>
+          </>
+        )
+      }
+    >
+      <div className="space-y-4 pb-1">
+        {result === 'right' ? (
+          <p className="text-sm">That’s it. Keep your recovery code somewhere safe too.</p>
+        ) : (
+          <>
+            <PasswordField label="Master password" value={password} onChange={(v) => (setPassword(v), setResult(null))} icon={KeyRound} autoComplete="current-password" autoFocus />
+            {result === 'wrong' && (
+              <>
+                <ErrorText>That’s not it.</ErrorText>
+                <p className="text-sm">Set a new one now with your recovery code, so you aren’t locked out later.</p>
+                <button className="btn-secondary" onClick={() => (markReminded(ct), onRecover())}>
+                  <LifeBuoy /> Use recovery code
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </Dialog>
+  )
+}
+
 /** Settings → Change master password. */
 export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState('')
