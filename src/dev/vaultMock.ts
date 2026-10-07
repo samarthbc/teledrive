@@ -1,5 +1,6 @@
 // Development only: TeleWarden without Telegram. `?mock&vault` starts at the first-run screen; `&vault=locked` has
-// example items and is locked (master password below); `&vault=open` has them and is open. Everything runs through
+// example items and is locked (master password below); `&vault=open` has them and is open; `&vault=pin` is locked
+// with the PIN 4821 set. Everything runs through
 // the real crypto and store, with the messages kept in memory (vault/memoryBackend.ts).
 import { importAes, randomBytes } from '../drive/crypto'
 import { configureVault, feedVault, useVault } from '../store/useVault'
@@ -63,11 +64,12 @@ export async function startVaultMock(mode: string): Promise<void> {
   const mem = memoryBackend(feedVault)
   configureVault({ backend: mem.backend, rootKey: () => root, drive: () => ({}) as never })
   mem.emit()
-  if (mode !== 'locked' && mode !== 'open') return
+  if (mode !== 'locked' && mode !== 'open' && mode !== 'pin') return
   const vault = useVault.getState()
   await vault.create(MOCK_MASTER_PASSWORD, 'the fruit, the river, the animal, a number, a light')
   useVault.setState({ pendingCode: null })
   for (const f of folders) await vault.saveFolder(f)
   for (const i of items) await vault.save(i)
-  if (mode === 'locked') vault.lock()
+  if (mode === 'pin') await vault.setPin(MOCK_MASTER_PASSWORD, '4821')
+  if (mode === 'locked' || mode === 'pin') vault.lock()
 }

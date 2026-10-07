@@ -22,10 +22,17 @@ import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyPermanentlyInvalidatedException;
+import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.view.Window;
+import android.view.WindowManager;
 
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.fragment.app.FragmentActivity;
 import androidx.activity.result.IntentSenderRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
@@ -55,6 +62,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -63,6 +71,12 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 /**
  * Android-only features for TeleDrive:
@@ -554,6 +568,152 @@ public class TeleDriveNativePlugin extends Plugin {
             }
             call.resolve();
         });
+    }
+
+    /** Keep TeleWarden out of screenshots, screen recordings and the app switcher (FLAG_SECURE). */
+    @PluginMethod
+    public void setSecure(PluginCall call) {
+        boolean on = call.getBoolean("on", false);
+        getActivity().runOnUiThread(() -> {
+            if (on) getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            else getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        });
+        call.resolve();
+    }
+
+    // Fingerprint unlock: the vault key is encrypted with a Keystore key that only works right after a fingerprint
+    // (BiometricPrompt with a CryptoObject). Adding a fingerprint to the phone makes that key unusable.
+
+    private static final String BIO_ALIAS = "telewarden_bio";
+    private static final String BIO_PREFS = "telewarden_bio";
+
+    @PluginMethod
+    public void biometricAvailable(PluginCall call) {
+        int r = BiometricManager.from(getContext()).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG);
+        JSObject res = new JSObject();
+        res.put("available", r == BiometricManager.BIOMETRIC_SUCCESS);
+        res.put("enrolled", r != BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED);
+        call.resolve(res);
+    }
+
+    private SecretKey bioKey(boolean fresh) throws Exception {
+        KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+        ks.load(null);
+        if (!fresh && ks.containsAlias(BIO_ALIAS)) return (SecretKey) ks.getKey(BIO_ALIAS, null);
+        KeyGenerator kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+        KeyGenParameterSpec.Builder spec = new KeyGenParameterSpec.Builder(BIO_ALIAS, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .setUserAuthenticationRequired(true)
+            .setInvalidatedByBiometricEnrollment(true);
+        if (Build.VERSION.SDK_INT >= 30) spec.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG);
+        kg.init(spec.build());
+        return kg.generateKey();
+    }
+
+    private void bioPrompt(String title, Cipher cipher, PluginCall call, Consumer<Cipher> done) {
+        getActivity().runOnUiThread(() -> {
+            BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
+                .setTitle(title)
+                .setSubtitle("TeleWarden")
+                .setNegativeButtonText("Use master password")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+                .build();
+            BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), ContextCompat.getMainExecutor(getContext()),
+                new BiometricPrompt.AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                        BiometricPrompt.CryptoObject crypto = result.getCryptoObject();
+                        if (crypto == null || crypto.getCipher() == null) call.reject("Fingerprint unlock failed");
+                        else done.accept(crypto.getCipher());
+                    }
+
+                    @Override
+                    public void onAuthenticationError(int code, CharSequence message) {
+                        if (code == BiometricPrompt.ERROR_NEGATIVE_BUTTON || code == BiometricPrompt.ERROR_USER_CANCELED || code == BiometricPrompt.ERROR_CANCELED) {
+                            JSObject res = new JSObject();
+                            res.put("cancelled", true);
+                            call.resolve(res);
+                        } else call.reject(message.toString());
+                    }
+                });
+            prompt.authenticate(info, new BiometricPrompt.CryptoObject(cipher));
+        });
+    }
+
+    private void clearBio() {
+        try {
+            KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+            ks.deleteEntry(BIO_ALIAS);
+        } catch (Exception ignored) {
+        }
+        getContext().getSharedPreferences(BIO_PREFS, Context.MODE_PRIVATE).edit().clear().apply();
+    }
+
+    /** Turn on fingerprint unlock: encrypt `data` (the vault key, base64) after a fingerprint. */
+    @PluginMethod
+    public void biometricEnable(PluginCall call) {
+        byte[] data = Base64.decode(call.getString("data", ""), Base64.NO_WRAP);
+        try {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, bioKey(true));
+            bioPrompt("Turn on fingerprint unlock", cipher, call, c -> {
+                try {
+                    byte[] ct = c.doFinal(data);
+                    getContext().getSharedPreferences(BIO_PREFS, Context.MODE_PRIVATE).edit()
+                        .putString("iv", Base64.encodeToString(c.getIV(), Base64.NO_WRAP))
+                        .putString("ct", Base64.encodeToString(ct, Base64.NO_WRAP))
+                        .apply();
+                    call.resolve();
+                } catch (Exception e) {
+                    call.reject(e.getMessage());
+                } finally {
+                    java.util.Arrays.fill(data, (byte) 0);
+                }
+            });
+        } catch (Exception e) {
+            java.util.Arrays.fill(data, (byte) 0);
+            call.reject(e.getMessage());
+        }
+    }
+
+    /** The vault key (base64) after a fingerprint; `cancelled` if the person chose the master password instead. */
+    @PluginMethod
+    public void biometricUnlock(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences(BIO_PREFS, Context.MODE_PRIVATE);
+        String iv = prefs.getString("iv", null);
+        String ct = prefs.getString("ct", null);
+        if (iv == null || ct == null) {
+            call.reject("Fingerprint unlock isn't set up", "NOT_SET");
+            return;
+        }
+        try {
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, bioKey(false), new GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)));
+            bioPrompt("Unlock TeleWarden", cipher, call, c -> {
+                try {
+                    JSObject res = new JSObject();
+                    res.put("data", Base64.encodeToString(c.doFinal(Base64.decode(ct, Base64.NO_WRAP)), Base64.NO_WRAP));
+                    call.resolve(res);
+                } catch (Exception e) {
+                    call.reject(e.getMessage());
+                }
+            });
+        } catch (KeyPermanentlyInvalidatedException e) {
+            // A fingerprint was added or removed: set it up again with the master password
+            clearBio();
+            call.reject("Fingerprints changed on this phone. Unlock with your master password and turn fingerprint unlock on again.", "INVALIDATED");
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void biometricDisable(PluginCall call) {
+        clearBio();
+        call.resolve();
     }
 
     /** Scan a QR code with Google's scanner screen (2FA setup codes, Google Authenticator exports). */

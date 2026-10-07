@@ -1,5 +1,5 @@
 import {
-  Dices, Folder, FolderPlus, KeyRound, LayoutGrid, Lock, LockOpen, LogOut, Menu as MenuIcon, MonitorSmartphone, MousePointerClick, Pencil, Plus,
+  Dices, Download, Folder, FolderPlus, KeyRound, LayoutGrid, Lock, LockOpen, LogOut, Menu as MenuIcon, MonitorSmartphone, MousePointerClick, Pencil, Plus,
   ScanQrCode, Search, Settings, Star, Trash2, X, type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -15,6 +15,7 @@ import Toasts from '../components/Toasts'
 import { Choice } from '../components/ui'
 import ItemForm from '../components/vault/ItemForm'
 import { ItemDetail, ItemRow, itemMenu } from '../components/vault/ItemViews'
+import { ImportDialog } from '../components/vault/DataDialogs'
 import { AddCodeDialog, CodesPanel, ImportGoogleDialog } from '../components/vault/Otp'
 import { TYPE_ICONS } from '../components/vault/parts'
 import { RecoverDialog, ReminderDialog, reminderDue, ResetDialog, VaultLock, VaultSetup } from '../components/vault/VaultGate'
@@ -22,7 +23,8 @@ import { GeneratorPanel, VaultSettings } from '../components/vault/VaultPanels'
 import { useSettings } from '../lib/settings'
 import { isAndroid } from '../native/android'
 import { useBackHandler } from '../native/backButton'
-import { isDesktop } from '../native/desktop'
+import { desktop, isDesktop } from '../native/desktop'
+import { Native } from '../native/android'
 import { useDrive } from '../store/useDrive'
 import { newVaultId, useVault } from '../store/useVault'
 import { toast, toastError } from '../store/useToast'
@@ -65,6 +67,7 @@ type Modal =
   | { type: 'newDrive' }
   | { type: 'reminder' }
   | { type: 'addCode' }
+  | { type: 'import' }
   | { type: 'importGoogle' }
   | { type: 'recover' }
   | { type: 'reset' }
@@ -121,6 +124,18 @@ export default function VaultPage() {
   useEffect(() => {
     if (open && reminderDue(config)) setModal({ type: 'reminder' })
   }, [open, config])
+
+  // Screenshots blocked while TeleWarden is on screen (Android: FLAG_SECURE; Windows: content protection)
+  const blockShots = useSettings((s) => s.vaultBlockScreenshots)
+  useEffect(() => {
+    if (!blockShots) return
+    if (isAndroid) void Native.setSecure({ on: true }).catch(() => {})
+    desktop?.setContentProtection?.(true)
+    return () => {
+      if (isAndroid) void Native.setSecure({ on: false }).catch(() => {})
+      desktop?.setContentProtection?.(false)
+    }
+  }, [blockShots])
 
   useEffect(() => {
     if (!lockedBecause) return
@@ -183,6 +198,7 @@ export default function VaultPage() {
     const entries: MenuEntry[] = [
       ...TYPES.map((t) => ({ label: TYPE_NAMES[t].one, icon: TYPE_ICONS[t], onClick: () => setModal({ type: 'new', itemType: t }) })),
       { label: 'Folder', icon: FolderPlus, onClick: () => setModal({ type: 'newFolder' }) },
+      { label: 'Import passwords', icon: Download, onClick: () => setModal({ type: 'import' }) },
     ]
     setMenu({ x: r.left, y: r.bottom + 8, entries })
   }
@@ -341,7 +357,7 @@ export default function VaultPage() {
                   {shown.length ? (
                     shown.map((i) => <ItemRow key={i.id} item={i} selected={wide && i.id === visibleSelected?.id} onOpen={() => select(i.id)} />)
                   ) : (
-                    <Empty view={view} query={query} anyItems={items.some((i) => !i.tr)} onNew={(t) => setModal({ type: 'new', itemType: t })} />
+                    <Empty view={view} query={query} anyItems={items.some((i) => !i.tr)} onNew={(t) => setModal({ type: 'new', itemType: t })} onImport={() => setModal({ type: 'import' })} />
                   )}
                 </section>
                 <section className="panel sticky top-0 hidden md:block">
@@ -469,6 +485,7 @@ export default function VaultPage() {
         />
       )}
       {modal?.type === 'addCode' && <AddCodeDialog onClose={() => setModal(null)} />}
+      {modal?.type === 'import' && <ImportDialog onClose={() => setModal(null)} />}
       {modal?.type === 'importGoogle' && <ImportGoogleDialog onClose={() => setModal(null)} />}
       {modal?.type === 'reminder' && config && (
         <ReminderDialog ct={config.ct} onClose={() => setModal(null)} onRecover={() => setModal({ type: 'recover' })} />
@@ -498,8 +515,8 @@ export default function VaultPage() {
   )
 }
 
-function Empty(props: { view: View; query: string; anyItems: boolean; onNew: (t: ItemType) => void }) {
-  const { view, query, anyItems, onNew } = props
+function Empty(props: { view: View; query: string; anyItems: boolean; onNew: (t: ItemType) => void; onImport: () => void }) {
+  const { view, query, anyItems, onNew, onImport } = props
   const wrap = (icon: LucideIcon, title: string, text: string, actions?: React.ReactNode) => {
     const Icon = icon
     return (
@@ -519,10 +536,15 @@ function Empty(props: { view: View; query: string; anyItems: boolean; onNew: (t:
     return wrap(
       KeyRound,
       'Your vault is empty',
-      'Add your first login. Importing from Bitwarden, Chrome and others comes soon.',
-      <button className="btn-primary" onClick={() => onNew('login')}>
-        <Plus /> New login
-      </button>,
+      'Add your first login, or bring your passwords over from Bitwarden, Chrome or another manager.',
+      <>
+        <button className="btn-primary" onClick={() => onNew('login')}>
+          <Plus /> New login
+        </button>
+        <button className="btn-secondary" onClick={onImport}>
+          <Download /> Import passwords
+        </button>
+      </>,
     )
   const t = view.kind === 'list' && view.filter !== 'all' && view.filter !== 'fav' ? (view.filter as ItemType) : 'login'
   return wrap(

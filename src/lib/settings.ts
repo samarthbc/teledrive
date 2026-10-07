@@ -25,10 +25,12 @@ export interface Settings {
   clipboardSeconds: ClipboardSeconds
   /** TeleWarden: 2FA codes next to each login in the list. */
   vaultCodesInList: boolean
+  /** TeleWarden: keep it out of screenshots and the app switcher (Android, Windows app). */
+  vaultBlockScreenshots: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  density: 'comfortable', thumbnails: true, autoLockMinutes: 5, lockOnClose: false, vaultLockMinutes: 5, clipboardSeconds: 30, vaultCodesInList: true,
+  density: 'comfortable', thumbnails: true, autoLockMinutes: 5, lockOnClose: false, vaultLockMinutes: 5, clipboardSeconds: 30, vaultCodesInList: true, vaultBlockScreenshots: true,
 }
 
 const KEY = 'teledrive.settings'
@@ -56,6 +58,7 @@ export function parseSettings(raw: string | null): Settings {
       ? (saved.clipboardSeconds as ClipboardSeconds)
       : d.clipboardSeconds,
     vaultCodesInList: typeof saved.vaultCodesInList === 'boolean' ? saved.vaultCodesInList : d.vaultCodesInList,
+    vaultBlockScreenshots: typeof saved.vaultBlockScreenshots === 'boolean' ? saved.vaultBlockScreenshots : d.vaultBlockScreenshots,
   }
 }
 

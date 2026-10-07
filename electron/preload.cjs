@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('teledriveDesktop', {
   },
   installUpdate: () => ipcRenderer.send('td-update-install'),
   checkUpdate: () => ipcRenderer.invoke('td-update-check'),
+  /** TeleWarden: keep the window out of screenshots and screen sharing while it's open. */
+  setContentProtection: (on) => ipcRenderer.send('td-protect', !!on),
 })

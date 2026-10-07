@@ -9,6 +9,7 @@ vi.mock('./useDrive', () => ({ useDrive: { getState: () => ({ drive: {} }) } }))
 vi.mock('../drive/vault', () => ({ verifyPassword: async (p: string) => p === 'teledrive pw' }))
 vi.mock('../vault/backend', () => ({ telegramBackend: {} }))
 vi.mock('../drive/sync', () => ({ subscribe: () => () => {} }))
+vi.mock('../native/android', () => ({ isAndroid: false, Native: {} }))
 
 const { useVault, configureVault, feedVault, ConflictError } = await import('./useVault')
 
@@ -139,6 +140,24 @@ describe('TeleWarden store', () => {
     await settle()
     expect(vault().status).toBe('none')
     expect(mem.records().filter((r) => r.meta.t !== 'cfg')).toEqual([])
+  }, 60_000)
+
+  it('PIN: unlocks after a lock, five wrong PINs turn it off, a weak PIN is refused', async () => {
+    await vault().create(PW, '')
+    await expect(vault().setPin(PW, '12')).rejects.toThrow(/4 to 8 digits/)
+    await expect(vault().setPin('wrong master', '4821')).rejects.toBeInstanceOf(WrongPasswordError)
+    await vault().setPin(PW, '4821')
+    expect(vault().pinReady).toBe(true)
+    vault().lock()
+    await expect(vault().unlockWithPin('0000')).rejects.toThrow(/Wrong PIN · 4 tries left/)
+    await vault().unlockWithPin('4821')
+    expect(vault().status).toBe('open')
+    vault().lock()
+    for (let i = 0; i < 4; i++) await expect(vault().unlockWithPin('0000')).rejects.toThrow(/Wrong PIN/)
+    await expect(vault().unlockWithPin('0000')).rejects.toThrow(/Too many wrong PINs/)
+    expect(vault().pinReady).toBe(false)
+    await expect(vault().unlockWithPin('4821')).rejects.toThrow(/master password/)
+    vault().removePin()
   }, 60_000)
 
   it('folders: deleting one moves its items out', async () => {

@@ -11,6 +11,8 @@ interface DesktopBridge {
   installUpdate(): void
   /** Ask GitHub now (Settings → Check for updates); downloads a newer version. */
   checkUpdate(): Promise<'latest' | 'offline' | 'update'>
+  /** TeleWarden: keep the window out of screenshots (missing in apps from before it). */
+  setContentProtection?(on: boolean): void
 }
 
 export const desktop = (window as unknown as { teledriveDesktop?: DesktopBridge }).teledriveDesktop

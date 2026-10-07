@@ -9,7 +9,7 @@
 //   vault key ─▶ every item: AES-GCM with the item's ID as additional data, compressed and padded
 
 import { argon2id } from 'hash-wasm'
-import { fromB64, importAes, randomBytes, seal, toB64, unseal, unwrapBytes, wrapBytes, WrongPasswordError } from '../drive/crypto'
+import { fromB64, importAes, passwordKey, randomBytes, seal, toB64, unseal, unwrapBytes, wrapBytes, WrongPasswordError } from '../drive/crypto'
 
 export interface Kdf {
   a: 'argon2id'
@@ -176,7 +176,8 @@ export async function openWithPassword(config: VaultConfig, root: CryptoKey, pas
   return importAes(await rawWithPassword(config, root, password))
 }
 
-async function rawWithPassword(config: VaultConfig, root: CryptoKey, password: string) {
+/** The vault key's raw bytes (to wrap again for the PIN or the fingerprint; wipe them after). */
+export async function rawWithPassword(config: VaultConfig, root: CryptoKey, password: string): Promise<Uint8Array<ArrayBuffer>> {
   const key = await masterKey(password, fromB64(config.s), config.kdf)
   return unwrapTwice(root, key, config.k, () => new WrongPasswordError())
 }
@@ -244,6 +245,28 @@ export async function readHint(config: VaultConfig, root: CryptoKey): Promise<st
     return (await unseal<{ h: string }>(root, config.h)).h
   } catch {
     return null
+  }
+}
+
+// ---- PIN (Phase 21.2): the vault key wrapped with a key from the PIN, kept in memory only ----
+
+export interface PinWrap {
+  s: string
+  w: string
+}
+const PIN_ITERATIONS = 200_000
+
+export async function pinWrap(raw: Uint8Array<ArrayBuffer>, pin: string): Promise<PinWrap> {
+  const salt = randomBytes(16)
+  return { s: toB64(salt), w: await wrapBytes(await passwordKey(pin, salt, PIN_ITERATIONS), raw) }
+}
+
+/** Throws WrongPasswordError. */
+export async function pinUnwrap(wrap: PinWrap, pin: string): Promise<CryptoKey> {
+  try {
+    return await importAes(await unwrapBytes(await passwordKey(pin, fromB64(wrap.s), PIN_ITERATIONS), wrap.w))
+  } catch {
+    throw new WrongPasswordError()
   }
 }
 

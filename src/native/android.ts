@@ -64,6 +64,13 @@ interface TeleDriveNativePlugin {
   systemBars(o: { dark: boolean }): Promise<void>
   /** TeleWarden: copy marked sensitive, cleared after `clearAfter` seconds (0 = never) if still on the clipboard. */
   copySecret(o: { text: string; clearAfter: number }): Promise<void>
+  /** TeleWarden: keep the app out of screenshots and the app switcher. */
+  setSecure(o: { on: boolean }): Promise<void>
+  /** TeleWarden: fingerprint unlock. `data` is the vault key (base64). */
+  biometricAvailable(): Promise<{ available: boolean; enrolled: boolean }>
+  biometricEnable(o: { data: string }): Promise<{ cancelled?: boolean }>
+  biometricUnlock(): Promise<{ data?: string; cancelled?: boolean }>
+  biometricDisable(): Promise<void>
   /** TeleWarden: scan a QR code (Google's scanner). */
   scanQr(): Promise<{ text?: string; cancelled?: boolean }>
   /** Background backup page only. */

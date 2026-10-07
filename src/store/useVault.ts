@@ -1,12 +1,13 @@
 import { nanoid } from 'nanoid'
 import { create } from 'zustand'
-import { WrongPasswordError } from '../drive/crypto'
+import { fromB64, importAes, toB64, WrongPasswordError } from '../drive/crypto'
 import { accountKeys, onKeysChanged } from '../drive/keyring'
 import type { VaultFolderMeta, VaultItemMeta } from '../drive/meta'
 import { subscribe as subscribeRecords } from '../drive/sync'
 import type { Drive, MessageRecord } from '../drive/tree'
 import { verifyPassword } from '../drive/vault'
 import { getSettings, useSettings } from '../lib/settings'
+import { isAndroid, Native } from '../native/android'
 import { telegramBackend, type VaultBackend } from '../vault/backend'
 import { TRASH_DAYS, withPasswordHistory, type VaultFolder, type VaultItem } from '../vault/items'
 import { forgetOtpKeys } from '../vault/totp'
@@ -64,6 +65,24 @@ interface VaultState {
    * person says they saved it, although the vault is already open.
    */
   pendingCode: 'setup' | 'recover' | null
+  /** A PIN is set on this device. */
+  pinSet: boolean
+  /** The PIN can unlock now (after one master-password unlock since TeleDrive started). */
+  pinReady: boolean
+  /** Fingerprint unlock is on (Android). */
+  bioSet: boolean
+  /** The master password was entered since TeleDrive started (the fingerprint works from then on). */
+  sessionUnlocked: boolean
+
+  /** Settings → Unlock with a PIN (asks the master password). */
+  setPin: (master: string, pin: string) => Promise<void>
+  removePin: () => void
+  unlockWithPin: (pin: string) => Promise<void>
+  /** Settings → Unlock with fingerprint (asks the master password, then a fingerprint). False if cancelled. */
+  enableBio: (master: string) => Promise<boolean>
+  disableBio: () => Promise<void>
+  /** False if the person chose the master password instead. */
+  unlockWithBio: () => Promise<boolean>
 
   create: (password: string, hint: string) => Promise<string>
   unlock: (password: string) => Promise<void>
@@ -100,11 +119,18 @@ const where = new Map<string, Located>()
 /** Decrypted messages by `${id}:${sealed}`. */
 const cache = new Map<string, VaultItem | VaultFolder | null>()
 let seq = 0
+/** The PIN's copy of the vault key (memory only: gone when TeleDrive closes). */
+let pinWrapped: vc.PinWrap | null = null
+let pinTries = 0
 let idle: ReturnType<typeof setTimeout> | undefined
 /** The store's refresh (set when the store is made). */
 let refreshImpl: () => Promise<void> = async () => {}
 
 const TRIES_KEY = 'teledrive.vaultTries'
+/** The PIN, sealed with the vault key, so the PIN works again after the master password (Bitwarden does the same). */
+const PIN_KEY = 'teledrive.vaultPin'
+/** Fingerprint unlock is set up for this vault (its creation time). */
+const BIO_KEY = 'teledrive.vaultBio'
 const SEEN_KEY = 'teledrive.vaultSeen'
 const FREE_TRIES = 5
 
@@ -142,6 +168,7 @@ export const useVault = create<VaultState>((set, get) => {
   const refresh = async () => {
     const mine = ++seq
     const config = configOf(records)
+    deviceUnlocks(config)
     // Reset on another device (a new vault key): this key no longer fits
     if (key && config && keyFrom !== null && config.ct !== keyFrom) closeKey()
     if (!key) {
@@ -186,6 +213,16 @@ export const useVault = create<VaultState>((set, get) => {
     for (const i of items.values()) if (!seen[i.id] || i.rd > seen[i.id]) seen[i.id] = i.rd
     saveJson(SEEN_KEY, seen)
     set({ config, status: statusOf(config), items: [...items.values()], folders: [...folders.values()], damaged, rollbacks })
+  }
+
+  /** PIN and fingerprint set up on this device for this vault. */
+  const deviceUnlocks = (config: vc.VaultConfig | null) => {
+    if (!config) return
+    const pin = loadJson<{ ct: number } | null>(PIN_KEY, null)
+    const bio = loadJson<number | null>(BIO_KEY, null)
+    const pinSet = pin?.ct === config.ct
+    const bioSet = isAndroid && bio === config.ct
+    if (pinSet !== get().pinSet || bioSet !== get().bioSet) set({ pinSet, bioSet, pinReady: pinSet && !!pinWrapped })
   }
 
   refreshImpl = refresh
@@ -260,6 +297,10 @@ export const useVault = create<VaultState>((set, get) => {
     lastActive: Date.now(),
     lockedBecause: null,
     pendingCode: null,
+    pinSet: false,
+    pinReady: false,
+    bioSet: false,
+    sessionUnlocked: false,
 
     create: async (password, hint) => {
       if (get().config) throw new Error('TeleWarden is already set up')
@@ -273,12 +314,112 @@ export const useVault = create<VaultState>((set, get) => {
     unlock: async (password) => {
       if (get().waitUntil > Date.now()) throw new Error('Too many wrong tries. Wait a moment.')
       const config = needConfig()
+      let raw: Uint8Array<ArrayBuffer>
       try {
-        await opened(await vc.openWithPassword(config, needRoot(), password), config)
+        raw = await vc.rawWithPassword(config, needRoot(), password)
       } catch (e) {
         if (e instanceof WrongPasswordError) setTries(get().tries + 1)
         throw e
       }
+      const k = await importAes(raw.slice())
+      await opened(k, config)
+      set({ sessionUnlocked: true })
+      // A PIN set earlier: make its copy of the key again (it was in memory only)
+      const sealedPin = loadJson<{ ct: number; e: string } | null>(PIN_KEY, null)
+      if (sealedPin?.ct === config.ct) {
+        try {
+          const { pin } = await vc.unsealItem<{ pin: string }>(k, 'pin', sealedPin.e)
+          pinWrapped = await vc.pinWrap(raw, pin)
+          pinTries = 0
+        } catch {
+          // Damaged: the PIN is set again in Settings
+        }
+      }
+      raw.fill(0)
+      set({ pinReady: !!pinWrapped })
+    },
+
+    setPin: async (master, pin) => {
+      if (!/^\d{4,8}$/.test(pin)) throw new Error('Use 4 to 8 digits')
+      const config = needConfig()
+      const raw = await vc.rawWithPassword(config, needRoot(), master)
+      pinWrapped = await vc.pinWrap(raw, pin)
+      raw.fill(0)
+      pinTries = 0
+      saveJson(PIN_KEY, { ct: config.ct, e: await vc.sealItem(needKey(), 'pin', { pin }) })
+      set({ pinSet: true, pinReady: true })
+    },
+
+    removePin: () => {
+      pinWrapped = null
+      try {
+        localStorage.removeItem(PIN_KEY)
+      } catch {
+        // Nothing stored
+      }
+      set({ pinSet: false, pinReady: false })
+    },
+
+    unlockWithPin: async (pin) => {
+      if (!pinWrapped) throw new Error('Use your master password')
+      const config = needConfig()
+      try {
+        await opened(await vc.pinUnwrap(pinWrapped, pin), config)
+        pinTries = 0
+      } catch (e) {
+        if (!(e instanceof WrongPasswordError)) throw e
+        if (++pinTries >= FREE_TRIES) {
+          pinWrapped = null
+          set({ pinReady: false })
+          throw new Error('Too many wrong PINs. Use your master password.')
+        }
+        throw new Error(`Wrong PIN · ${FREE_TRIES - pinTries} ${FREE_TRIES - pinTries === 1 ? 'try' : 'tries'} left`)
+      }
+    },
+
+    enableBio: async (master) => {
+      const config = needConfig()
+      const raw = await vc.rawWithPassword(config, needRoot(), master)
+      try {
+        const res = await Native.biometricEnable({ data: toB64(raw) })
+        if (res.cancelled) return false
+      } finally {
+        raw.fill(0)
+      }
+      saveJson(BIO_KEY, config.ct)
+      set({ bioSet: true })
+      return true
+    },
+
+    disableBio: async () => {
+      await Native.biometricDisable().catch(() => {})
+      try {
+        localStorage.removeItem(BIO_KEY)
+      } catch {
+        // Nothing stored
+      }
+      set({ bioSet: false })
+    },
+
+    unlockWithBio: async () => {
+      const config = needConfig()
+      let res: { data?: string; cancelled?: boolean }
+      try {
+        res = await Native.biometricUnlock()
+      } catch (e) {
+        // Fingerprints changed on the phone: turned off (the native side cleared it)
+        if ((e as { code?: string }).code === 'INVALIDATED') await get().disableBio()
+        throw e
+      }
+      if (res.cancelled || !res.data) return false
+      const raw = fromB64(res.data)
+      try {
+        await opened(await importAes(raw), config)
+      } catch {
+        await get().disableBio()
+        throw new Error('Fingerprint unlock no longer fits this vault. Use your master password and turn it on again.')
+      }
+      return true
     },
 
     checkCode: async (code) => vc.checkRecoveryCode(needConfig(), needRoot(), code),
@@ -296,7 +437,7 @@ export const useVault = create<VaultState>((set, get) => {
     recover: async (code, newPassword) => {
       const { config, key: k, code: next } = await vc.recover(needConfig(), needRoot(), code, newPassword)
       await deps.backend.writeConfig(deps.drive(), config)
-      set({ pendingCode: 'recover' })
+      set({ pendingCode: 'recover', sessionUnlocked: true })
       await opened(k, config)
       return next
     },
@@ -327,6 +468,8 @@ export const useVault = create<VaultState>((set, get) => {
       await deps.backend.writeConfig(deps.drive(), null)
       closeKey()
       setTries(0)
+      get().removePin()
+      if (get().bioSet) await get().disableBio()
       for (const k of Object.keys(seen)) delete seen[k]
       saveJson(SEEN_KEY, seen)
       set({ config: null, status: 'none', items: [], folders: [], damaged: 0, rollbacks: [] })

@@ -63,6 +63,7 @@ app.whenReady().then(() => {
   ipcMain.handle('td-update-state', () => updates.getState())
   ipcMain.on('td-update-install', () => updates.installNow())
   ipcMain.handle('td-update-check', () => updates.checkNow())
+  ipcMain.on('td-protect', (_e, on) => win?.setContentProtection(!!on))
   updates.initUpdates((state) => win?.webContents.send('td-update', state))
 })
 

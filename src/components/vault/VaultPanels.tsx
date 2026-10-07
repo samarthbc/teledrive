@@ -1,4 +1,4 @@
-import { Copy, KeyRound, LifeBuoy, RefreshCw, Trash2 } from 'lucide-react'
+import { Copy, Download, KeyRound, LifeBuoy, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { CLIPBOARD_CHOICES, setSetting, useSettings, VAULT_LOCK_CHOICES } from '../../lib/settings'
 import { Row, Section } from '../../pages/Settings'
@@ -8,7 +8,11 @@ import {
 } from '../../vault/generator'
 import { Checkbox, Segmented, Toggle } from '../ui'
 import { SecretText, StrengthMeter } from './parts'
-import { ChangePasswordDialog, NewCodeDialog, ResetDialog } from './VaultGate'
+import { ExportDialog, ImportDialog } from './DataDialogs'
+import { ChangePasswordDialog, EnableBioDialog, NewCodeDialog, ResetDialog, SetPinDialog } from './VaultGate'
+import { isAndroid, Native } from '../../native/android'
+import { isDesktop } from '../../native/desktop'
+import { useVault } from '../../store/useVault'
 
 /** Kept while TeleDrive is open (memory only). */
 const history: { value: string; at: number }[] = []
@@ -142,7 +146,13 @@ function Slider(props: { label: string; value: number; min: number; max: number;
 /** Settings → TeleWarden (only while TeleWarden is open). */
 export function VaultSettings() {
   const settings = useSettings()
-  const [dialog, setDialog] = useState<'password' | 'code' | 'reset' | null>(null)
+  const [dialog, setDialog] = useState<'password' | 'code' | 'reset' | 'import' | 'export' | 'pin' | 'bio' | null>(null)
+  const pinSet = useVault((s) => s.pinSet)
+  const bioSet = useVault((s) => s.bioSet)
+  const [bio, setBio] = useState<{ available: boolean; enrolled: boolean } | null>(null)
+  useEffect(() => {
+    if (isAndroid) Native.biometricAvailable().then(setBio, () => setBio({ available: false, enrolled: false }))
+  }, [])
   return (
     <>
       <Section title="TeleWarden">
@@ -162,6 +172,23 @@ export function VaultSettings() {
             options={CLIPBOARD_CHOICES.map((s) => ({ value: s, label: !s ? 'Never' : s < 60 ? `${s} s` : `${s / 60} min` }))}
           />
         </Row>
+        <Row inline name="Unlock with a PIN" hint="Quicker than the master password. Your master password is asked once after TeleDrive restarts.">
+          <Toggle label="Unlock with a PIN" checked={pinSet} onChange={(v) => (v ? setDialog('pin') : useVault.getState().removePin())} />
+        </Row>
+        {isAndroid && (
+          <Row
+            inline
+            name="Unlock with fingerprint"
+            hint={bio && !bio.available ? (bio.enrolled ? 'This phone has no strong fingerprint sensor.' : 'Add a fingerprint in the phone’s settings first.') : 'Your master password is asked once after TeleDrive restarts.'}
+          >
+            <Toggle label="Unlock with fingerprint" disabled={!bioSet && !bio?.available} checked={bioSet} onChange={(v) => (v ? setDialog('bio') : void useVault.getState().disableBio())} />
+          </Row>
+        )}
+        {(isAndroid || isDesktop) && (
+          <Row inline name="Block screenshots" hint="While TeleWarden is open, screenshots, screen recordings and the app switcher show nothing.">
+            <Toggle label="Block screenshots" checked={settings.vaultBlockScreenshots} onChange={(v) => setSetting('vaultBlockScreenshots', v)} />
+          </Row>
+        )}
         <Row inline name="Show 2FA codes in the list" hint="The current code next to each login that has one.">
           <Toggle label="Show 2FA codes in the list" checked={settings.vaultCodesInList} onChange={(v) => setSetting('vaultCodesInList', v)} />
         </Row>
@@ -175,6 +202,16 @@ export function VaultSettings() {
             <LifeBuoy /> New code
           </button>
         </Row>
+        <Row name="Import passwords" hint="From Bitwarden, Chrome, Edge, Firefox, LastPass, 1Password or KeePass.">
+          <button className="btn-secondary" onClick={() => setDialog('import')}>
+            <Download /> Import
+          </button>
+        </Row>
+        <Row name="Export vault" hint="Keep a copy somewhere other than Telegram, or move to another manager.">
+          <button className="btn-secondary" onClick={() => setDialog('export')}>
+            <Upload /> Export
+          </button>
+        </Row>
         <Row name="Reset TeleWarden" hint="Only if you’ve lost both your master password and your recovery code. Deletes every item. Your files and photos aren’t touched.">
           <button className="btn-danger" onClick={() => setDialog('reset')}>
             <Trash2 /> Reset
@@ -184,6 +221,10 @@ export function VaultSettings() {
       {dialog === 'password' && <ChangePasswordDialog onClose={() => setDialog(null)} />}
       {dialog === 'code' && <NewCodeDialog onClose={() => setDialog(null)} />}
       {dialog === 'reset' && <ResetDialog onClose={() => setDialog(null)} />}
+      {dialog === 'import' && <ImportDialog onClose={() => setDialog(null)} />}
+      {dialog === 'pin' && <SetPinDialog onClose={() => setDialog(null)} />}
+      {dialog === 'bio' && <EnableBioDialog onClose={() => setDialog(null)} />}
+      {dialog === 'export' && <ExportDialog onClose={() => setDialog(null)} />}
     </>
   )
 }

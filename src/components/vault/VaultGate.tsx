@@ -1,5 +1,5 @@
-import { ArrowRight, KeyRound, LifeBuoy, Lightbulb, Loader2, Lock, LockKeyhole, LockOpen, MonitorSmartphone, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowRight, Fingerprint, Grid3x3, KeyRound, LifeBuoy, Lightbulb, Loader2, Lock, LockKeyhole, LockOpen, MonitorSmartphone, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { WrongPasswordError } from '../../drive/crypto'
 import { useVault } from '../../store/useVault'
 import { toast } from '../../store/useToast'
@@ -130,11 +130,46 @@ export function VaultSetup() {
   )
 }
 
-/** Locked: the master password, the hint, the recovery code. */
+/** Locked: the master password (or the PIN, or a fingerprint), the hint, the recovery code. */
 export function VaultLock() {
   const unlock = useVault((s) => s.unlock)
   const waitUntil = useVault((s) => s.waitUntil)
   const tries = useVault((s) => s.tries)
+  const pinReady = useVault((s) => s.pinReady)
+  const bioReady = useVault((s) => s.bioSet && s.sessionUnlocked)
+  const [usePassword, setUsePassword] = useState(false)
+  const [pin, setPin] = useState('')
+  const pinMode = pinReady && !usePassword
+
+  const fingerprint = async () => {
+    setError(null)
+    try {
+      await useVault.getState().unlockWithBio()
+    } catch (e) {
+      setError(message(e))
+    }
+  }
+  // Offer the fingerprint straight away (once)
+  const asked = useRef(false)
+  useEffect(() => {
+    if (!bioReady || asked.current) return
+    asked.current = true
+    useVault.getState().unlockWithBio().catch((e) => setError(message(e)))
+  }, [bioReady])
+  const submitPin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pin) return
+    setBusy(true)
+    setError(null)
+    try {
+      await useVault.getState().unlockWithPin(pin)
+    } catch (err) {
+      setError(message(err))
+      setPin('')
+    } finally {
+      setBusy(false)
+    }
+  }
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -171,7 +206,24 @@ export function VaultLock() {
         <Lock className="size-9" />
       </span>
       <h1 className="text-[40px] leading-none font-black tracking-[-0.04em]">TeleWarden is locked</h1>
-      <p className="text-muted">Enter your master password.</p>
+      <p className="text-muted">{pinMode ? 'Enter your PIN.' : 'Enter your master password.'}</p>
+      {pinMode ? (
+        <form className="w-full space-y-3 text-left" onSubmit={(e) => void submitPin(e)}>
+          <PasswordField label="PIN" value={pin} onChange={(v) => setPin(v.replace(/\D/g, '').slice(0, 8))} icon={Grid3x3} mono autoFocus autoComplete="off" error={!!error} />
+          {error && <ErrorText>{error}</ErrorText>}
+          <button className="btn-primary w-full" type="submit" disabled={busy || pin.length < 4}>
+            {busy ? <Loader2 className="animate-spin" /> : <LockOpen />} Unlock
+          </button>
+          {bioReady && (
+            <button type="button" className="btn-secondary w-full" onClick={() => void fingerprint()}>
+              <Fingerprint /> Use fingerprint
+            </button>
+          )}
+          <button type="button" className="btn-ghost -ml-2 h-9 px-2" onClick={() => (setUsePassword(true), setError(null))}>
+            <KeyRound /> Use master password
+          </button>
+        </form>
+      ) : (
       <form className="w-full space-y-3 text-left" onSubmit={(e) => void submit(e)}>
         <PasswordField label="Master password" value={password} onChange={setPassword} icon={KeyRound} autoFocus autoComplete="current-password" error={!!error} />
         {wait > 0 ? <ErrorText>Too many wrong tries. Try again in {wait} s</ErrorText> : error && <ErrorText>{error}</ErrorText>}
@@ -179,6 +231,11 @@ export function VaultLock() {
         <button className="btn-primary w-full" type="submit" disabled={busy || wait > 0 || !password}>
           {busy ? <Loader2 className="animate-spin" /> : <LockOpen />} {busy ? 'Opening…' : 'Unlock'}
         </button>
+        {bioReady && (
+          <button type="button" className="btn-secondary w-full" onClick={() => void fingerprint()}>
+            <Fingerprint /> Use fingerprint
+          </button>
+        )}
         <div className="flex flex-wrap justify-between gap-2">
           <button
             type="button"
@@ -192,6 +249,7 @@ export function VaultLock() {
           </button>
         </div>
       </form>
+      )}
       {tries > 0 && tries < 5 && !error && <p className="text-xs text-muted">{tries} wrong {tries === 1 ? 'try' : 'tries'} so far</p>}
       {dialog === 'recover' && <RecoverDialog onClose={() => setDialog(null)} onReset={() => setDialog('reset')} />}
       {dialog === 'reset' && <ResetDialog onClose={() => setDialog(null)} />}
@@ -409,6 +467,99 @@ export function ReminderDialog({ ct, onClose, onRecover }: { ct: number; onClose
             )}
           </>
         )}
+      </div>
+    </Dialog>
+  )
+}
+
+/** Settings → Unlock with a PIN. */
+export function SetPinDialog({ onClose }: { onClose: () => void }) {
+  const [master, setMaster] = useState('')
+  const [pin, setPin] = useState('')
+  const [repeat, setRepeat] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ok = /^\d{4,8}$/.test(pin) && pin === repeat && !!master
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await useVault.getState().setPin(master, pin)
+      toast('PIN set')
+      onClose()
+    } catch (e) {
+      setError(message(e))
+      setBusy(false)
+    }
+  }
+  const digits = (v: string) => v.replace(/\D/g, '').slice(0, 8)
+  return (
+    <Dialog
+      title="Unlock with a PIN"
+      icon={Grid3x3}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" disabled={busy || !ok} onClick={() => void save()}>
+            {busy && <Loader2 className="animate-spin" />} Set PIN
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4 pb-1">
+        <PasswordField label="PIN (4 to 8 digits)" value={pin} onChange={(v) => setPin(digits(v))} icon={Grid3x3} mono autoComplete="off" autoFocus />
+        <PasswordField label="Type it again" value={repeat} onChange={(v) => setRepeat(digits(v))} icon={Grid3x3} mono autoComplete="off" error={!!repeat && repeat !== pin} />
+        <PasswordField label="Master password" value={master} onChange={setMaster} icon={KeyRound} autoComplete="current-password" />
+        <p className="text-xs text-muted">
+          The PIN’s copy of the key stays in memory only: after TeleDrive restarts your master password is asked once, then the PIN works again. Five
+          wrong PINs and the master password is needed.
+        </p>
+        {error && <ErrorText>{error}</ErrorText>}
+      </div>
+    </Dialog>
+  )
+}
+
+/** Settings → Unlock with fingerprint (Android). */
+export function EnableBioDialog({ onClose }: { onClose: () => void }) {
+  const [master, setMaster] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const go = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      if (await useVault.getState().enableBio(master)) {
+        toast('Fingerprint unlock is on')
+        onClose()
+      } else setBusy(false)
+    } catch (e) {
+      setError(message(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog
+      title="Unlock with fingerprint"
+      icon={Fingerprint}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" disabled={busy || !master} onClick={() => void go()}>
+            {busy && <Loader2 className="animate-spin" />} Continue
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4 pb-1">
+        <PasswordField label="Master password" value={master} onChange={setMaster} icon={KeyRound} autoComplete="current-password" autoFocus />
+        <p className="text-xs text-muted">
+          Then touch the sensor. The key stays in this phone’s secure hardware and only opens with your fingerprint. After TeleDrive restarts, your master
+          password is asked once first. Adding a new fingerprint to the phone turns this off.
+        </p>
+        {error && <ErrorText>{error}</ErrorText>}
       </div>
     </Dialog>
   )

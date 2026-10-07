@@ -1464,7 +1464,7 @@ password.
   three-account export (GitHub → its login, Dropbox → new item, Google → skipped as already saved), codes in list rows
   and in the detail. Still to check on the phone: the camera scanner (Google's scanner screen).
 
-## Phase 21: TeleWarden, unlocking and your data ⬜
+## Phase 21: TeleWarden, unlocking and your data 🚧 (implemented; fingerprint and screenshot blocking need the phone)
 
 ### 21.1 Fingerprint (Android)
 - Settings → *Unlock with fingerprint*. Turning it on asks the master password once; the vault key's raw bytes
@@ -1513,6 +1513,27 @@ password.
    import a real Chrome export and a Bitwarden export; re-import our encrypted export.
 
 ---
+
+### 21.7 Done so far
+- PIN: `vaultCrypto.pinWrap/pinUnwrap` (PBKDF2 200k, memory only); the PIN itself is kept sealed with the vault key
+  on the device, so after a restart the master password brings the PIN back (as Bitwarden does); five wrong PINs and
+  the master password is needed. Lock screen: PIN first when set, "Use master password".
+- Fingerprint (Android): `TeleDriveNativePlugin` `biometricAvailable/Enable/Unlock/Disable` (AndroidX Biometric,
+  AES-GCM Keystore key with `setUserAuthenticationRequired` and `setInvalidatedByBiometricEnrollment`); offered on
+  the lock screen (and asked for straight away) only after one master-password unlock since the app started; a
+  changed fingerprint turns it off with a message.
+- Block screenshots (Settings, on by default): Android `setSecure` (FLAG_SECURE), Windows app
+  `setContentProtection` (preload + main), while the TeleWarden page is on screen.
+- Import (`vault/importers.ts`, `components/vault/DataDialogs.tsx`): Bitwarden .json (also password-protected) and
+  .csv, Chrome/Edge, Firefox, LastPass (folders, favorites, notes, TOTP), 1Password .csv, KeePass 2 .xml (groups →
+  folders, extra fields kept, Recycle Bin skipped); duplicates skipped; folders reused by name; progress.
+- Export (`vault/exporters.ts`): password-protected .json in Bitwarden's format (PBKDF2 600k → HKDF-Expand →
+  AES-256-CBC + HMAC-SHA256), plain .json, .csv; asks the master password; saved like other downloads.
+- Tests: `vault/importers.test.ts`, `vault/exporters.test.ts` (round trips through the importers; wrong file
+  password), PIN in `store/useVault.test.ts`.
+- Checked in the browser (mock, `?mock&vault=pin`, PIN 4821): the PIN lock screen and unlock; the KeePass importer;
+  the import dialog with a Chrome CSV (1 duplicate skipped, 2 added). Not yet: the Windows app's CSP (19.7);
+  checking Bitwarden opens our protected file (built from Bitwarden's documented format, not tried against Bitwarden).
 
 ## Phase 22: TeleWarden, security report ⬜
 
