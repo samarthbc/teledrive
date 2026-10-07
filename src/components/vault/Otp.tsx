@@ -71,7 +71,7 @@ export function RowCode({ otp }: { otp: string }) {
   const { params, code, remaining } = useCode(otp)
   if (!params || !code) return null
   return (
-    <button
+    <button type="button"
       className="flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[12.5px] font-bold hover:pressed-xs"
       onClick={(e) => (e.stopPropagation(), void copySecret(code, '2FA code'))}
       title="Copy 2FA code"
@@ -118,11 +118,11 @@ export function OtpRow({ item }: { item: LoginItem }) {
         </div>
       </div>
       {params.type === 'hotp' && (
-        <button className="icon-btn-flat" onClick={() => void next()} aria-label="Next code" title="Next code">
+        <button type="button" className="icon-btn-flat" onClick={() => void next()} aria-label="Next code" title="Next code">
           <RotateCw />
         </button>
       )}
-      <button className="icon-btn-flat" disabled={!code} onClick={() => code && void copySecret(code, '2FA code')} aria-label="Copy 2FA code" title="Copy 2FA code">
+      <button type="button" className="icon-btn-flat" disabled={!code} onClick={() => code && void copySecret(code, '2FA code')} aria-label="Copy 2FA code" title="Copy 2FA code">
         <Copy />
       </button>
     </div>
@@ -248,10 +248,10 @@ export function CodesPanel({ query, onAdd, onImport, onOpen }: { query: string; 
     <div className="space-y-5">
       <ClockWarning />
       <div className="flex flex-wrap gap-3">
-        <button className="btn-primary" onClick={onAdd}>
+        <button type="button" className="btn-primary" onClick={onAdd}>
           <Plus /> Add 2FA code
         </button>
-        <button className="btn-secondary" onClick={onImport}>
+        <button type="button" className="btn-secondary" onClick={onImport}>
           <ScanQrCode /> Import from Google Authenticator
         </button>
       </div>
@@ -280,10 +280,10 @@ function CodeCard({ item, onOpen }: { item: LoginItem; onOpen: () => void }) {
   const { params, code, remaining } = useCode(item.d.otp)
   return (
     <div className="card flex items-center gap-3.5 p-3.5">
-      <button className="shrink-0" onClick={onOpen} aria-label={`Open ${item.n}`}>
+      <button type="button" className="shrink-0" onClick={onOpen} aria-label={`Open ${item.n}`}>
         <ItemTile item={item} />
       </button>
-      <button className="min-w-0 flex-1 text-left" onClick={() => code && void copySecret(code, '2FA code')} title="Copy 2FA code">
+      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => code && void copySecret(code, '2FA code')} title="Copy 2FA code">
         <span className="block truncate text-sm font-bold">{item.n}</span>
         <span className="block truncate text-xs text-muted">{item.d.u || params?.account || ' '}</span>
         <span className="mt-1 flex items-center gap-2">
@@ -291,7 +291,7 @@ function CodeCard({ item, onOpen }: { item: LoginItem; onOpen: () => void }) {
           {params?.type === 'totp' && <Ring remaining={remaining} period={params.period} />}
         </span>
       </button>
-      <button className="icon-btn-flat" disabled={!code} onClick={() => code && void copySecret(code, '2FA code')} aria-label="Copy 2FA code">
+      <button type="button" className="icon-btn-flat" disabled={!code} onClick={() => code && void copySecret(code, '2FA code')} aria-label="Copy 2FA code">
         <Copy />
       </button>
     </div>
@@ -386,8 +386,8 @@ export function AddCodeDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={!params || busy || target === 'skip'} onClick={() => void save()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-primary" disabled={!params || busy || target === 'skip'} onClick={() => void save()}>
             {busy ? <Loader2 className="animate-spin" /> : <Check />} Add
           </button>
         </>
@@ -459,8 +459,8 @@ export function ImportGoogleDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={!accounts.length || busy} onClick={() => void run()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-primary" disabled={!accounts.length || busy} onClick={() => void run()}>
             {busy ? <Loader2 className="animate-spin" /> : <Check />} Import {accounts.filter((p) => targets.get(keyOf(p)) !== 'skip').length || ''}
           </button>
         </>

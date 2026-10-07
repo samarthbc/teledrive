@@ -63,7 +63,7 @@ export function ItemRow(props: { item: VaultItem; selected: boolean; onOpen: () 
       {copy && (
         <div className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
           {item.ty === 'login' && item.d.u && (
-            <button className="icon-btn-flat hidden group-hover:inline-flex" onClick={() => void copySecret(item.d.u, 'Username')} aria-label="Copy username" title="Copy username">
+            <button type="button" className="icon-btn-flat hidden group-hover:inline-flex" onClick={() => void copySecret(item.d.u, 'Username')} aria-label="Copy username" title="Copy username">
               <UserRound />
             </button>
           )}
@@ -72,7 +72,7 @@ export function ItemRow(props: { item: VaultItem; selected: boolean; onOpen: () 
               <ExternalLink />
             </a>
           )}
-          <button className="icon-btn-flat" onClick={() => void copySecret(copy[0], copy[1])} aria-label={`Copy ${copy[1].toLowerCase()}`} title={`Copy ${copy[1].toLowerCase()}`}>
+          <button type="button" className="icon-btn-flat" onClick={() => void copySecret(copy[0], copy[1])} aria-label={`Copy ${copy[1].toLowerCase()}`} title={`Copy ${copy[1].toLowerCase()}`}>
             <Copy />
           </button>
         </div>
@@ -138,7 +138,7 @@ export function ItemDetail(props: {
           </p>
         </div>
         {!item.tr && (
-          <button
+          <button type="button"
             className={`icon-btn-flat ${item.fav ? 'text-brand-ink' : ''}`}
             onClick={() => void run(useVault.getState().save({ ...item, fav: item.fav ? undefined : true }))}
             aria-label={item.fav ? 'Remove from favorites' : 'Add to favorites'}
@@ -147,7 +147,7 @@ export function ItemDetail(props: {
             <Star className={item.fav ? 'fill-current' : ''} />
           </button>
         )}
-        <button className="icon-btn-flat" onClick={onMenu} aria-label="More actions">
+        <button type="button" className="icon-btn-flat" onClick={onMenu} aria-label="More actions">
           <MoreVertical />
         </button>
       </div>
@@ -161,8 +161,8 @@ export function ItemDetail(props: {
         <Warning>
           <span>An older version of this item came back (someone may have restored an old copy). Check it before you use it.</span>
           <span className="mt-2 flex flex-wrap gap-2">
-            <button className="btn-secondary h-9" onClick={() => useVault.getState().acceptRollback(item.id)}>It’s fine</button>
-            <button className="btn-secondary h-9" onClick={onEdit}>Edit it</button>
+            <button type="button" className="btn-secondary h-9" onClick={() => useVault.getState().acceptRollback(item.id)}>It’s fine</button>
+            <button type="button" className="btn-secondary h-9" onClick={onEdit}>Edit it</button>
           </span>
         </Warning>
       )}
@@ -175,7 +175,7 @@ export function ItemDetail(props: {
 
       {item.ty === 'login' && !!item.ph?.length && (
         <div>
-          <button className="btn-ghost -ml-2 h-9 px-2" onClick={() => setHistory(!history)} aria-expanded={history}>
+          <button type="button" className="btn-ghost -ml-2 h-9 px-2" onClick={() => setHistory(!history)} aria-expanded={history}>
             <History /> Password history ({item.ph.length}) {history ? <ChevronUp /> : <ChevronDown />}
           </button>
           {history && (
@@ -185,7 +185,7 @@ export function ItemDetail(props: {
                   <SecretText value={h.p} className="min-w-0" />
                   <span className="flex shrink-0 items-center text-muted">
                     {formatDate(h.d)}
-                    <button className="icon-btn-flat size-8" onClick={() => void copySecret(h.p, 'Old password')} aria-label="Copy old password">
+                    <button type="button" className="icon-btn-flat size-8" onClick={() => void copySecret(h.p, 'Old password')} aria-label="Copy old password">
                       <Copy />
                     </button>
                   </span>
@@ -202,19 +202,19 @@ export function ItemDetail(props: {
       <div className="flex flex-wrap gap-3">
         {item.tr ? (
           <>
-            <button className="btn-secondary" onClick={() => void run(useVault.getState().restore([item.id]).then(() => toast(`Restored “${item.n}”`)))}>
+            <button type="button" className="btn-secondary" onClick={() => void run(useVault.getState().restore([item.id]).then(() => toast(`Restored “${item.n}”`)))}>
               <RotateCcw /> Restore
             </button>
-            <button className="btn-danger" onClick={onDeleteForever}>
+            <button type="button" className="btn-danger" onClick={onDeleteForever}>
               <Trash2 /> Delete forever
             </button>
           </>
         ) : (
           <>
-            <button className="btn-secondary" onClick={onEdit}>
+            <button type="button" className="btn-secondary" onClick={onEdit}>
               <Pencil /> Edit
             </button>
-            <button className="btn-danger" onClick={() => void run(useVault.getState().trash([item.id]).then(() => toast(`Moved “${item.n}” to the trash`)))}>
+            <button type="button" className="btn-danger" onClick={() => void run(useVault.getState().trash([item.id]).then(() => toast(`Moved “${item.n}” to the trash`)))}>
               <Trash2 /> Move to trash
             </button>
           </>

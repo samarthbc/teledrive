@@ -88,12 +88,12 @@ export function FieldRow(props: {
       <div className="flex shrink-0 gap-0.5">
         {actions}
         {secret && (
-          <button className="icon-btn-flat" onClick={() => setShown(!shown)} aria-label={`${shown ? 'Hide' : 'Show'} ${label}`}>
+          <button type="button" className="icon-btn-flat" onClick={() => setShown(!shown)} aria-label={`${shown ? 'Hide' : 'Show'} ${label}`}>
             {shown ? <EyeOff /> : <Eye />}
           </button>
         )}
         {copy && (
-          <button className="icon-btn-flat" onClick={() => void copySecret(value, label)} aria-label={`Copy ${label}`} title={`Copy ${label}`}>
+          <button type="button" className="icon-btn-flat" onClick={() => void copySecret(value, label)} aria-label={`Copy ${label}`} title={`Copy ${label}`}>
             <Copy />
           </button>
         )}
@@ -255,10 +255,10 @@ export function RecoveryCodeView({ code, saved, onSaved }: { code: string; saved
         <span className="font-mono text-[17px] font-bold tracking-[0.04em] break-all select-all">{code}</span>
       </div>
       <div className="flex flex-wrap gap-3">
-        <button className="btn-secondary" onClick={() => void copySecret(code, 'Recovery code')}>
+        <button type="button" className="btn-secondary" onClick={() => void copySecret(code, 'Recovery code')}>
           <Copy /> Copy
         </button>
-        <button className="btn-secondary" onClick={() => void saveFile()}>
+        <button type="button" className="btn-secondary" onClick={() => void saveFile()}>
           <FileDown /> Save as file
         </button>
       </div>

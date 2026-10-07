@@ -79,17 +79,17 @@ export default function ItemForm(props: { type: ItemType; item?: VaultItem; fold
               value={c.v}
               onChange={(e) => updateField(i, { v: e.target.value })}
             />
-            <button className="icon-btn-flat self-center" onClick={() => set({ cf: draft.cf!.filter((_, j) => j !== i) })} aria-label="Remove field">
+            <button type="button" className="icon-btn-flat self-center" onClick={() => set({ cf: draft.cf!.filter((_, j) => j !== i) })} aria-label="Remove field">
               <X />
             </button>
           </div>
         ))}
       </div>
       <div className="mt-1 flex flex-wrap gap-x-4">
-        <button className="btn-ghost -ml-2 h-9 px-2" onClick={() => set({ cf: [...(draft.cf ?? []), { k: '', v: '' }] })}>
+        <button type="button" className="btn-ghost -ml-2 h-9 px-2" onClick={() => set({ cf: [...(draft.cf ?? []), { k: '', v: '' }] })}>
           <Plus /> Text field
         </button>
-        <button className="btn-ghost h-9 px-2" onClick={() => set({ cf: [...(draft.cf ?? []), { k: '', v: '', h: true }] })}>
+        <button type="button" className="btn-ghost h-9 px-2" onClick={() => set({ cf: [...(draft.cf ?? []), { k: '', v: '', h: true }] })}>
           <Plus /> Hidden field
         </button>
       </div>
@@ -114,13 +114,13 @@ export default function ItemForm(props: { type: ItemType; item?: VaultItem; fold
       footer={
         conflict !== false ? (
           <>
-            <button className="btn-ghost" onClick={onClose}>Keep theirs</button>
-            <button className="btn-primary" onClick={() => void save(true)}>Keep mine</button>
+            <button type="button" className="btn-ghost" onClick={onClose}>Keep theirs</button>
+            <button type="button" className="btn-primary" onClick={() => void save(true)}>Keep mine</button>
           </>
         ) : (
           <>
-            <button className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" disabled={busy} onClick={() => void save()}>
+            <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-primary" disabled={busy} onClick={() => void save()}>
               {busy ? <Loader2 className="animate-spin" /> : <Check />} Save
             </button>
           </>

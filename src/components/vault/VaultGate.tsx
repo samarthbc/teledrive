@@ -80,7 +80,7 @@ export function VaultSetup() {
             <Point icon={MonitorSmartphone} title="On every device">
               Website, Windows and Android stay in sync.
             </Point>
-            <button className="btn-primary w-full" onClick={() => setStep(2)}>
+            <button type="button" className="btn-primary w-full" onClick={() => setStep(2)}>
               Create a master password <ArrowRight />
             </button>
           </>
@@ -113,7 +113,7 @@ export function VaultSetup() {
               <h2 className="mt-2 text-[22px] font-black tracking-[-0.02em]">Save your recovery code</h2>
             </div>
             <RecoveryCodeView code={code} saved={saved} onSaved={setSaved} />
-            <button
+            <button type="button"
               className="btn-primary w-full"
               disabled={!saved}
               onClick={() => {
@@ -280,8 +280,8 @@ export function RecoverDialog({ onClose, onReset }: { onClose: () => void; onRes
   const footer =
     step === 1 ? (
       <>
-        <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button
+        <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="button"
           className="btn-primary"
           disabled={busy || !code.trim()}
           onClick={() =>
@@ -296,8 +296,8 @@ export function RecoverDialog({ onClose, onReset }: { onClose: () => void; onRes
       </>
     ) : step === 2 ? (
       <>
-        <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button
+        <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="button"
           className="btn-primary"
           disabled={busy || !master.valid}
           onClick={() =>
@@ -311,7 +311,7 @@ export function RecoverDialog({ onClose, onReset }: { onClose: () => void; onRes
         </button>
       </>
     ) : (
-      <button
+      <button type="button"
         className="btn-primary"
         disabled={!saved}
         onClick={() => {
@@ -336,7 +336,7 @@ export function RecoverDialog({ onClose, onReset }: { onClose: () => void; onRes
         {step === 1 && (
           <>
             <TextField label="Recovery code" value={code} onChange={setCode} mono autoFocus placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" hint="Dashes, spaces and capitals don’t matter." />
-            <button className="btn-ghost -ml-2 h-9 px-2 text-brand-ink" onClick={onReset}>
+            <button type="button" className="btn-ghost -ml-2 h-9 px-2 text-brand-ink" onClick={onReset}>
               Lost the code too? Reset TeleWarden
             </button>
           </>
@@ -375,8 +375,8 @@ export function ResetDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-danger-solid" disabled={busy || !password || word !== 'RESET'} onClick={() => void reset()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-danger-solid" disabled={busy || !password || word !== 'RESET'} onClick={() => void reset()}>
             {busy && <Loader2 className="animate-spin" />} Reset TeleWarden
           </button>
         </>
@@ -439,11 +439,11 @@ export function ReminderDialog({ ct, onClose, onRecover }: { ct: number; onClose
       onClose={done}
       footer={
         result === 'right' ? (
-          <button className="btn-primary" onClick={done}>Done</button>
+          <button type="button" className="btn-primary" onClick={done}>Done</button>
         ) : (
           <>
-            <button className="btn-ghost" onClick={done}>Not now</button>
-            <button className="btn-primary" disabled={busy || !password} onClick={() => void check()}>
+            <button type="button" className="btn-ghost" onClick={done}>Not now</button>
+            <button type="button" className="btn-primary" disabled={busy || !password} onClick={() => void check()}>
               {busy && <Loader2 className="animate-spin" />} Check
             </button>
           </>
@@ -460,7 +460,7 @@ export function ReminderDialog({ ct, onClose, onRecover }: { ct: number; onClose
               <>
                 <ErrorText>That’s not it.</ErrorText>
                 <p className="text-sm">Set a new one now with your recovery code, so you aren’t locked out later.</p>
-                <button className="btn-secondary" onClick={() => (markReminded(ct), onRecover())}>
+                <button type="button" className="btn-secondary" onClick={() => (markReminded(ct), onRecover())}>
                   <LifeBuoy /> Use recovery code
                 </button>
               </>
@@ -500,8 +500,8 @@ export function SetPinDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={busy || !ok} onClick={() => void save()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-primary" disabled={busy || !ok} onClick={() => void save()}>
             {busy && <Loader2 className="animate-spin" />} Set PIN
           </button>
         </>
@@ -546,8 +546,8 @@ export function EnableBioDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={busy || !master} onClick={() => void go()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-primary" disabled={busy || !master} onClick={() => void go()}>
             {busy && <Loader2 className="animate-spin" />} Continue
           </button>
         </>
@@ -592,8 +592,8 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
       wide
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={busy || !current || !master.valid} onClick={() => void save()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-primary" disabled={busy || !current || !master.valid} onClick={() => void save()}>
             {busy && <Loader2 className="animate-spin" />} Change master password
           </button>
         </>
@@ -636,13 +636,13 @@ export function NewCodeDialog({ onClose }: { onClose: () => void }) {
       wide
       footer={
         code ? (
-          <button className="btn-primary" disabled={!saved} onClick={() => (toast('New recovery code saved. The old one no longer works.'), onClose())}>
+          <button type="button" className="btn-primary" disabled={!saved} onClick={() => (toast('New recovery code saved. The old one no longer works.'), onClose())}>
             Done
           </button>
         ) : (
           <>
-            <button className="btn-ghost" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" disabled={busy || !password} onClick={() => void make()}>
+            <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn-primary" disabled={busy || !password} onClick={() => void make()}>
               {busy && <Loader2 className="animate-spin" />} Make a new code
             </button>
           </>

@@ -90,14 +90,14 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
       onClose={busy ? () => {} : onClose}
       footer={
         <>
-          <button className="btn-ghost" disabled={busy} onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-ghost" disabled={busy} onClick={onClose}>Cancel</button>
           {result ? (
-            <button className="btn-primary" disabled={busy || !fresh.length} onClick={() => void run()}>
+            <button type="button" className="btn-primary" disabled={busy || !fresh.length} onClick={() => void run()}>
               {busy ? <Loader2 className="animate-spin" /> : <Download />} {progress ?? `Import ${fresh.length} item${fresh.length === 1 ? '' : 's'}`}
             </button>
           ) : (
             locked && (
-              <button className="btn-primary" disabled={!filePassword} onClick={() => file && void read(file, filePassword)}>
+              <button type="button" className="btn-primary" disabled={!filePassword} onClick={() => file && void read(file, filePassword)}>
                 Open file
               </button>
             )
@@ -126,7 +126,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             </div>
             <p className="text-xs text-muted">In {meta.label}: {meta.hint}</p>
             <input ref={input} type="file" hidden accept={`${meta.ext},text/*,application/json,application/xml`} onChange={(e) => (e.target.files?.[0] && void pick(e.target.files[0]), (e.target.value = ''))} />
-            <button
+            <button type="button"
               className="flex w-full flex-col items-center gap-2 rounded-md px-6 py-6 text-center pressed-lg"
               onClick={() => input.current?.click()}
               onDragOver={(e) => e.preventDefault()}
@@ -163,7 +163,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             {!locked && (
               <Note>This file isn’t encrypted. Delete it after importing.</Note>
             )}
-            <button className="btn-ghost -ml-2 h-9 px-2" disabled={busy} onClick={() => (setResult(null), setFile(null))}>
+            <button type="button" className="btn-ghost -ml-2 h-9 px-2" disabled={busy} onClick={() => (setResult(null), setFile(null))}>
               Choose another file
             </button>
           </>
@@ -218,8 +218,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={busy || !master || !fileOk} onClick={() => void run()}>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-primary" disabled={busy || !master || !fileOk} onClick={() => void run()}>
             {busy ? <Loader2 className="animate-spin" /> : <Upload />} Export
           </button>
         </>

@@ -62,10 +62,10 @@ export function GeneratorPanel() {
       <div>
         <div className="well flex items-center gap-3 p-5">
           <SecretText value={value} className="min-w-0 flex-1 text-[22px] leading-snug font-bold" />
-          <button className="icon-btn" onClick={() => void make()} aria-label="Generate another" title="Generate another">
+          <button type="button" className="icon-btn" onClick={() => void make()} aria-label="Generate another" title="Generate another">
             <RefreshCw />
           </button>
-          <button className="icon-btn" onClick={() => void copySecret(value, mode === 'password' ? 'Password' : 'Passphrase')} aria-label="Copy" title="Copy">
+          <button type="button" className="icon-btn" onClick={() => void copySecret(value, mode === 'password' ? 'Password' : 'Passphrase')} aria-label="Copy" title="Copy">
             <Copy />
           </button>
         </div>
@@ -119,7 +119,7 @@ export function GeneratorPanel() {
               <div key={i} className="flex items-center gap-3 py-3">
                 <SecretText value={h.value} className="min-w-0 flex-1 text-sm" />
                 <span className="shrink-0 text-xs text-muted">{new Date(h.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
-                <button className="icon-btn-flat" onClick={() => void copySecret(h.value, 'Password')} aria-label="Copy">
+                <button type="button" className="icon-btn-flat" onClick={() => void copySecret(h.value, 'Password')} aria-label="Copy">
                   <Copy />
                 </button>
               </div>
@@ -193,27 +193,27 @@ export function VaultSettings() {
           <Toggle label="Show 2FA codes in the list" checked={settings.vaultCodesInList} onChange={(v) => setSetting('vaultCodesInList', v)} />
         </Row>
         <Row name="Master password" hint="Change it any time. Nothing is re-encrypted, and your recovery code keeps working.">
-          <button className="btn-secondary" onClick={() => setDialog('password')}>
+          <button type="button" className="btn-secondary" onClick={() => setDialog('password')}>
             <KeyRound /> Change
           </button>
         </Row>
         <Row name="Recovery code" hint="Make a new code if the old one may have been seen. The old one stops working.">
-          <button className="btn-secondary" onClick={() => setDialog('code')}>
+          <button type="button" className="btn-secondary" onClick={() => setDialog('code')}>
             <LifeBuoy /> New code
           </button>
         </Row>
         <Row name="Import passwords" hint="From Bitwarden, Chrome, Edge, Firefox, LastPass, 1Password or KeePass.">
-          <button className="btn-secondary" onClick={() => setDialog('import')}>
+          <button type="button" className="btn-secondary" onClick={() => setDialog('import')}>
             <Download /> Import
           </button>
         </Row>
         <Row name="Export vault" hint="Keep a copy somewhere other than Telegram, or move to another manager.">
-          <button className="btn-secondary" onClick={() => setDialog('export')}>
+          <button type="button" className="btn-secondary" onClick={() => setDialog('export')}>
             <Upload /> Export
           </button>
         </Row>
         <Row name="Reset TeleWarden" hint="Only if you’ve lost both your master password and your recovery code. Deletes every item. Your files and photos aren’t touched.">
-          <button className="btn-danger" onClick={() => setDialog('reset')}>
+          <button type="button" className="btn-danger" onClick={() => setDialog('reset')}>
             <Trash2 /> Reset
           </button>
         </Row>
