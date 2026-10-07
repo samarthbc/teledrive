@@ -51,7 +51,8 @@
     "react-router-dom": "^7.18.4",
     "telegram": "^2.26.22",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "zxing-wasm": "^3.1.5"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.6.9",
