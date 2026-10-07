@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Copy, Download, KeyRound, LifeBuoy, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { Check, Copy, Download, KeyRound, LifeBuoy, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { CLIPBOARD_CHOICES, setSetting, useSettings, VAULT_LOCK_CHOICES } from '../../lib/settings'
 import { Row, Section } from '../../pages/Settings'
@@ -14,25 +14,20 @@ import { isAndroid, Native } from '../../native/android'
 import { isDesktop } from '../../native/desktop'
 import { useVault } from '../../store/useVault'
 
-/** Kept while TeleDrive is open (memory only). */
-const history: { value: string; at: number }[] = []
+/** The last choices, while TeleDrive is open. */
 let lastMode: 'password' | 'passphrase' = 'password'
 let lastPassword: PasswordOptions = DEFAULT_PASSWORD
 let lastPassphrase: PassphraseOptions = DEFAULT_PASSPHRASE
 
+/** Two columns of the same height: the result on the left, the options on the right (stacked on phones). */
 export function GeneratorPanel() {
   const [mode, setMode] = useState(lastMode)
   const [pw, setPw] = useState(lastPassword)
   const [pp, setPp] = useState(lastPassphrase)
   const [value, setValue] = useState('')
-  const [, redraw] = useState(0)
 
   const make = useCallback(async () => {
-    const v = mode === 'password' ? generatePassword(pw) : await generatePassphrase(pp)
-    setValue(v)
-    history.unshift({ value: v, at: Date.now() })
-    history.splice(8)
-    redraw((n) => n + 1)
+    setValue(mode === 'password' ? generatePassword(pw) : await generatePassphrase(pp))
   }, [mode, pw, pp])
 
   useEffect(() => {
@@ -48,7 +43,7 @@ export function GeneratorPanel() {
       {label}
     </button>
   )
-  const pwChip = (key: keyof Omit<PasswordOptions, 'length'>, label: string) =>
+  const pwChip = (key: keyof Omit<PasswordOptions, 'length' | 'avoidAmbiguous'>, label: string) =>
     chip(pw[key], label, (v) => {
       const next = { ...pw, [key]: v }
       // At least one kind of character stays on
@@ -56,53 +51,55 @@ export function GeneratorPanel() {
     })
 
   return (
-    <div className="mx-auto w-full max-w-[640px]">
+    <>
       <h1 className="h-display mb-5">Generator</h1>
-      <div className="panel space-y-5 p-4 md:p-6">
-        <div className="flex">
-          <Segmented
-            label="Kind"
-            value={mode}
-            onChange={setMode}
-            options={[
-              { value: 'password', label: 'Password' },
-              { value: 'passphrase', label: 'Passphrase' },
-            ]}
-          />
-        </div>
-
-        <div>
-          <div className="rounded-md px-4 py-4 pressed md:px-5">
-            <SecretText value={value} className="block min-h-[2lh] text-lg leading-snug font-bold md:text-xl" />
+      <div className="grid gap-4.5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="panel flex flex-col gap-4 p-4 md:p-5">
+          <div className="flex">
+            <Segmented
+              label="Kind"
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: 'password', label: 'Password' },
+                { value: 'passphrase', label: 'Passphrase' },
+              ]}
+            />
+          </div>
+          <div className="flex min-h-24 flex-1 items-center rounded-md px-4 py-4 pressed md:px-5">
+            <SecretText value={value} className="min-w-0 text-lg leading-snug font-bold md:text-[21px]" />
           </div>
           <StrengthMeter password={value} />
+          <div className="flex gap-2.5">
+            <button type="button" className="btn-primary flex-1" onClick={() => void copySecret(value, mode === 'password' ? 'Password' : 'Passphrase')}>
+              <Copy /> Copy
+            </button>
+            <button type="button" className="icon-btn size-11" onClick={() => void make()} aria-label="Generate another" title="Generate another">
+              <RefreshCw />
+            </button>
+          </div>
         </div>
 
-        <div className="flex gap-2.5">
-          <button type="button" className="btn-primary flex-1" onClick={() => void copySecret(value, mode === 'password' ? 'Password' : 'Passphrase')}>
-            <Copy /> Copy
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => void make()} aria-label="Generate another" title="Generate another">
-            <RefreshCw /> <span className="hidden sm:inline">New</span>
-          </button>
-        </div>
-
-        <div className="space-y-4 border-t-2 border-line pt-5">
+        <div className="panel flex flex-col divide-y-2 divide-line px-4 md:px-5">
           {mode === 'password' ? (
             <>
               <Slider label="Length" value={pw.length} min={MIN_LENGTH} max={MAX_LENGTH} onChange={(length) => setPw({ ...pw, length })} />
-              <Option label="Include">
-                {pwChip('upper', 'A–Z')}
-                {pwChip('lower', 'a–z')}
-                {pwChip('digits', '0–9')}
-                {pwChip('symbols', '!@#$')}
-              </Option>
-              <Option label="Avoid">{chip(pw.avoidAmbiguous, 'Look-alikes (l 1 I O 0)', (avoidAmbiguous) => setPw({ ...pw, avoidAmbiguous }))}</Option>
+              <div className="py-4">
+                <p className="mb-2.5 text-sm font-bold">Include</p>
+                <div className="flex flex-wrap gap-2">
+                  {pwChip('upper', 'A–Z')}
+                  {pwChip('lower', 'a–z')}
+                  {pwChip('digits', '0–9')}
+                  {pwChip('symbols', '!@#$')}
+                </div>
+              </div>
+              <SwitchRow label="Avoid look-alikes" hint="l 1 I O 0" checked={pw.avoidAmbiguous} onChange={(avoidAmbiguous) => setPw({ ...pw, avoidAmbiguous })} />
             </>
           ) : (
             <>
               <Slider label="Words" value={pp.words} min={3} max={10} onChange={(words) => setPp({ ...pp, words })} />
-              <Option label="Separator">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4">
+                <span className="flex-1 text-sm font-bold">Separator</span>
                 <Segmented
                   small
                   label="Separator"
@@ -110,50 +107,30 @@ export function GeneratorPanel() {
                   onChange={(separator) => setPp({ ...pp, separator })}
                   options={['-', '.', '_', ' '].map((s) => ({ value: s, label: s === ' ' ? 'Space' : s }))}
                 />
-              </Option>
-              <Option label="Add">
-                {chip(pp.capitalize, 'Capitals', (capitalize) => setPp({ ...pp, capitalize }))}
-                {chip(pp.number, 'A number', (number) => setPp({ ...pp, number }))}
-              </Option>
+              </div>
+              <SwitchRow label="Capitalize words" checked={pp.capitalize} onChange={(capitalize) => setPp({ ...pp, capitalize })} />
+              <SwitchRow label="Include a number" checked={pp.number} onChange={(number) => setPp({ ...pp, number })} />
             </>
           )}
+          <p className="mt-auto py-4 text-xs text-muted">
+            Made on this device. Nothing is sent anywhere.
+            {mode === 'passphrase' && ' Words come from the EFF list of 7,776.'}
+          </p>
         </div>
-        <p className="text-xs text-muted">
-          Made on this device with its secure random generator. Nothing is sent anywhere.
-          {mode === 'passphrase' && ' Words come from the EFF list of 7,776.'}
-        </p>
       </div>
-
-      {history.length > 1 && (
-        <details className="group mt-5">
-          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-muted hover:text-ink">
-            <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-            Recently generated ({history.length - 1})
-          </summary>
-          <div className="panel mt-3 divide-y-2 divide-line px-4">
-            {history.slice(1).map((h, i) => (
-              <div key={i} className="flex items-center gap-3 py-2.5">
-                <SecretText value={h.value} className="min-w-0 flex-1 text-sm" />
-                <span className="shrink-0 text-xs text-muted">{new Date(h.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
-                <button type="button" className="icon-btn-flat" onClick={() => void copySecret(h.value, 'Password')} aria-label="Copy">
-                  <Copy />
-                </button>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-muted">Kept only until TeleDrive closes.</p>
-        </details>
-      )}
-    </div>
+    </>
   )
 }
 
-/** A labelled row of options. */
-function Option({ label, children }: { label: string; children: React.ReactNode }) {
+function SwitchRow(props: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
+  const { label, hint, checked, onChange } = props
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <span className="w-20 shrink-0 text-sm font-bold">{label}</span>
-      <div className="flex flex-wrap gap-2">{children}</div>
+    <div className="flex items-center gap-3 py-4">
+      <span className="min-w-0 flex-1 text-sm font-bold">
+        {label}
+        {hint && <span className="ml-2 font-mono text-xs font-normal text-muted">{hint}</span>}
+      </span>
+      <Toggle label={label} checked={checked} onChange={onChange} />
     </div>
   )
 }
@@ -161,8 +138,8 @@ function Option({ label, children }: { label: string; children: React.ReactNode 
 function Slider(props: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
   const { label, value, min, max, onChange } = props
   return (
-    <label className="flex items-center gap-4">
-      <span className="w-20 shrink-0 text-sm font-bold">{label}</span>
+    <label className="flex items-center gap-4 py-4">
+      <span className="w-16 shrink-0 text-sm font-bold">{label}</span>
       <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(+e.target.value)} className="min-w-0 flex-1 accent-brand" />
       <span className="w-8 text-right text-lg font-black tabular-nums">{value}</span>
     </label>
