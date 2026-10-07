@@ -342,7 +342,7 @@ export default function VaultPage() {
               </div>
               {!wide && <div className="mb-3 flex">{searchBox}</div>}
               {showChips && (
-                <div className="-mx-4 mb-3 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 md:-mx-4.5 md:px-4.5">
+                <div className="-mx-4 mb-3 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 [scrollbar-width:none] md:-mx-4.5 md:px-4.5">
                   {(['all', ...TYPES] as const)
                     .filter((t) => t === 'all' || scope.some((i) => i.ty === t))
                     .map((t) => (
@@ -352,8 +352,8 @@ export default function VaultPage() {
                     ))}
                 </div>
               )}
-              <div className="grid min-h-0 flex-1 items-start gap-4.5 md:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
-                <section className="panel p-2">
+              <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-4.5 md:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+                <section className="-mx-3 md:mx-0 md:panel md:p-2">
                   {shown.length ? (
                     shown.map((i) => <ItemRow key={i.id} item={i} selected={wide && i.id === visibleSelected?.id} onOpen={() => select(i.id)} />)
                   ) : (

@@ -67,12 +67,12 @@ function Ring({ remaining, period, small }: { remaining: number; period: number;
 }
 
 /** The code in a list row: small, with its ring; tapping it copies it. */
-export function RowCode({ otp }: { otp: string }) {
+export function RowCode({ otp, className = '' }: { otp: string; className?: string }) {
   const { params, code, remaining } = useCode(otp)
   if (!params || !code) return null
   return (
     <button type="button"
-      className="flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[12.5px] font-bold hover:pressed-xs"
+      className={`flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-[12.5px] font-bold hover:pressed-xs ${className}`}
       onClick={(e) => (e.stopPropagation(), void copySecret(code, '2FA code'))}
       title="Copy 2FA code"
       aria-label={`Copy 2FA code ${code}`}

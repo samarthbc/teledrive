@@ -37,6 +37,7 @@ export function ItemRow(props: { item: VaultItem; selected: boolean; onOpen: () 
   const copy = item.tr ? null : quickCopy(item)
   const codesInList = useSettings((s) => s.vaultCodesInList)
   const site = item.ty === 'login' ? item.d.urls.map((u) => openableUrl(u.u)).find(Boolean) : null
+  const showCode = codesInList && !item.tr && item.ty === 'login' && !!item.d.otp
   return (
     <div
       role="button"
@@ -57,9 +58,13 @@ export function ItemRow(props: { item: VaultItem; selected: boolean; onOpen: () 
             </span>
           ) : null}
         </p>
-        <p className="truncate text-[13px] text-muted">{subtitleOf(item)}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="min-w-0 truncate text-[13px] text-muted">{subtitleOf(item)}</p>
+          {/* Phones: the code under the name, so the name keeps the width */}
+          {showCode && <RowCode otp={item.d.otp!} className="-my-1 text-ink md:hidden" />}
+        </div>
       </div>
-      {codesInList && !item.tr && item.ty === 'login' && item.d.otp && <RowCode otp={item.d.otp} />}
+      {showCode && <RowCode otp={item.d.otp!} className="hidden md:flex" />}
       {copy && (
         <div className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
           {item.ty === 'login' && item.d.u && (
