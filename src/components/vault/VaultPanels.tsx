@@ -1,4 +1,4 @@
-import { Copy, Download, KeyRound, LifeBuoy, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { Check, ChevronRight, Copy, Download, KeyRound, LifeBuoy, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { CLIPBOARD_CHOICES, setSetting, useSettings, VAULT_LOCK_CHOICES } from '../../lib/settings'
 import { Row, Section } from '../../pages/Settings'
@@ -6,7 +6,7 @@ import { copySecret } from '../../vault/clipboard'
 import {
   DEFAULT_PASSPHRASE, DEFAULT_PASSWORD, generatePassphrase, generatePassword, MAX_LENGTH, MIN_LENGTH, type PassphraseOptions, type PasswordOptions,
 } from '../../vault/generator'
-import { Checkbox, Segmented, Toggle } from '../ui'
+import { Segmented, Toggle } from '../ui'
 import { SecretText, StrengthMeter } from './parts'
 import { ExportDialog, ImportDialog } from './DataDialogs'
 import { ChangePasswordDialog, EnableBioDialog, NewCodeDialog, ResetDialog, SetPinDialog } from './VaultGate'
@@ -42,81 +42,97 @@ export function GeneratorPanel() {
     void make()
   }, [mode, pw, pp, make])
 
-  const check = (key: keyof Omit<PasswordOptions, 'length'>, label: string) => (
-    <Checkbox checked={pw[key]} onChange={(v) => setPw({ ...pw, [key]: v })}>
-      <span className="font-semibold">{label}</span>
-    </Checkbox>
+  const chip = (on: boolean, label: string, onChange: (v: boolean) => void) => (
+    <button type="button" aria-pressed={on} className={on ? 'chip-active' : 'chip'} onClick={() => onChange(!on)}>
+      {on && <Check className="size-3.5" strokeWidth={3} />}
+      {label}
+    </button>
   )
+  const pwChip = (key: keyof Omit<PasswordOptions, 'length'>, label: string) =>
+    chip(pw[key], label, (v) => {
+      const next = { ...pw, [key]: v }
+      // At least one kind of character stays on
+      if (next.upper || next.lower || next.digits || next.symbols) setPw(next)
+    })
 
   return (
-    <div className="space-y-6">
-      <Segmented
-        label="Kind"
-        value={mode}
-        onChange={setMode}
-        options={[
-          { value: 'password', label: 'Password' },
-          { value: 'passphrase', label: 'Passphrase' },
-        ]}
-      />
-      <div>
-        <div className="well flex items-center gap-3 p-5">
-          <SecretText value={value} className="min-w-0 flex-1 text-[22px] leading-snug font-bold" />
-          <button type="button" className="icon-btn" onClick={() => void make()} aria-label="Generate another" title="Generate another">
-            <RefreshCw />
+    <div className="mx-auto w-full max-w-[640px]">
+      <h1 className="h-display mb-5">Generator</h1>
+      <div className="panel space-y-5 p-4 md:p-6">
+        <div className="flex">
+          <Segmented
+            label="Kind"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'password', label: 'Password' },
+              { value: 'passphrase', label: 'Passphrase' },
+            ]}
+          />
+        </div>
+
+        <div>
+          <div className="rounded-md px-4 py-4 pressed md:px-5">
+            <SecretText value={value} className="block min-h-[2lh] text-lg leading-snug font-bold md:text-xl" />
+          </div>
+          <StrengthMeter password={value} />
+        </div>
+
+        <div className="flex gap-2.5">
+          <button type="button" className="btn-primary flex-1" onClick={() => void copySecret(value, mode === 'password' ? 'Password' : 'Passphrase')}>
+            <Copy /> Copy
           </button>
-          <button type="button" className="icon-btn" onClick={() => void copySecret(value, mode === 'password' ? 'Password' : 'Passphrase')} aria-label="Copy" title="Copy">
-            <Copy />
+          <button type="button" className="btn-secondary" onClick={() => void make()} aria-label="Generate another" title="Generate another">
+            <RefreshCw /> <span className="hidden sm:inline">New</span>
           </button>
         </div>
-        <StrengthMeter password={value} />
-      </div>
-      <div className="panel divide-y-2 divide-line px-5">
-        {mode === 'password' ? (
-          <>
-            <Slider label="Length" value={pw.length} min={MIN_LENGTH} max={MAX_LENGTH} onChange={(length) => setPw({ ...pw, length })} />
-            <div className="grid gap-x-6 gap-y-3 py-4 sm:grid-cols-2">
-              {check('upper', 'A–Z')}
-              {check('lower', 'a–z')}
-              {check('digits', '0–9')}
-              {check('symbols', '! @ # $ %')}
-              {check('avoidAmbiguous', 'Avoid look-alikes (l 1 I O 0)')}
-            </div>
-          </>
-        ) : (
-          <>
-            <Slider label="Words" value={pp.words} min={3} max={10} onChange={(words) => setPp({ ...pp, words })} />
-            <div className="flex flex-wrap items-center gap-4 py-4">
-              <span className="w-24 text-sm font-bold">Separator</span>
-              <Segmented
-                small
-                label="Separator"
-                value={pp.separator}
-                onChange={(separator) => setPp({ ...pp, separator })}
-                options={['-', '.', '_', ' '].map((s) => ({ value: s, label: s === ' ' ? 'Space' : s }))}
-              />
-            </div>
-            <div className="grid gap-x-6 gap-y-3 py-4 sm:grid-cols-2">
-              <Checkbox checked={pp.capitalize} onChange={(capitalize) => setPp({ ...pp, capitalize })}>
-                <span className="font-semibold">Capitalize words</span>
-              </Checkbox>
-              <Checkbox checked={pp.number} onChange={(number) => setPp({ ...pp, number })}>
-                <span className="font-semibold">Include a number</span>
-              </Checkbox>
-            </div>
-          </>
-        )}
-        <p className="py-4 text-xs text-muted">
+
+        <div className="space-y-4 border-t-2 border-line pt-5">
+          {mode === 'password' ? (
+            <>
+              <Slider label="Length" value={pw.length} min={MIN_LENGTH} max={MAX_LENGTH} onChange={(length) => setPw({ ...pw, length })} />
+              <Option label="Include">
+                {pwChip('upper', 'A–Z')}
+                {pwChip('lower', 'a–z')}
+                {pwChip('digits', '0–9')}
+                {pwChip('symbols', '!@#$')}
+              </Option>
+              <Option label="Avoid">{chip(pw.avoidAmbiguous, 'Look-alikes (l 1 I O 0)', (avoidAmbiguous) => setPw({ ...pw, avoidAmbiguous }))}</Option>
+            </>
+          ) : (
+            <>
+              <Slider label="Words" value={pp.words} min={3} max={10} onChange={(words) => setPp({ ...pp, words })} />
+              <Option label="Separator">
+                <Segmented
+                  small
+                  label="Separator"
+                  value={pp.separator}
+                  onChange={(separator) => setPp({ ...pp, separator })}
+                  options={['-', '.', '_', ' '].map((s) => ({ value: s, label: s === ' ' ? 'Space' : s }))}
+                />
+              </Option>
+              <Option label="Add">
+                {chip(pp.capitalize, 'Capitals', (capitalize) => setPp({ ...pp, capitalize }))}
+                {chip(pp.number, 'A number', (number) => setPp({ ...pp, number }))}
+              </Option>
+            </>
+          )}
+        </div>
+        <p className="text-xs text-muted">
           Made on this device with its secure random generator. Nothing is sent anywhere.
           {mode === 'passphrase' && ' Words come from the EFF list of 7,776.'}
         </p>
       </div>
+
       {history.length > 1 && (
-        <section>
-          <h2 className="label-swiss mb-3">History</h2>
-          <div className="panel divide-y-2 divide-line px-5">
+        <details className="group mt-5">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-muted hover:text-ink">
+            <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+            Recently generated ({history.length - 1})
+          </summary>
+          <div className="panel mt-3 divide-y-2 divide-line px-4">
             {history.slice(1).map((h, i) => (
-              <div key={i} className="flex items-center gap-3 py-3">
+              <div key={i} className="flex items-center gap-3 py-2.5">
                 <SecretText value={h.value} className="min-w-0 flex-1 text-sm" />
                 <span className="shrink-0 text-xs text-muted">{new Date(h.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
                 <button type="button" className="icon-btn-flat" onClick={() => void copySecret(h.value, 'Password')} aria-label="Copy">
@@ -126,8 +142,18 @@ export function GeneratorPanel() {
             ))}
           </div>
           <p className="mt-2 text-xs text-muted">Kept only until TeleDrive closes.</p>
-        </section>
+        </details>
       )}
+    </div>
+  )
+}
+
+/** A labelled row of options. */
+function Option({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span className="w-20 shrink-0 text-sm font-bold">{label}</span>
+      <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   )
 }
@@ -135,10 +161,10 @@ export function GeneratorPanel() {
 function Slider(props: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
   const { label, value, min, max, onChange } = props
   return (
-    <label className="flex items-center gap-4 py-4">
-      <span className="w-24 text-sm font-bold">{label}</span>
+    <label className="flex items-center gap-4">
+      <span className="w-20 shrink-0 text-sm font-bold">{label}</span>
       <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(+e.target.value)} className="min-w-0 flex-1 accent-brand" />
-      <span className="w-10 text-right text-xl font-black tabular-nums">{value}</span>
+      <span className="w-8 text-right text-lg font-black tabular-nums">{value}</span>
     </label>
   )
 }
