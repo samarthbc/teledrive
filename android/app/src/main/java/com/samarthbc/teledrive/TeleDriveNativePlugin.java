@@ -666,7 +666,7 @@ public class TeleDriveNativePlugin extends Plugin {
                         .putString("iv", Base64.encodeToString(c.getIV(), Base64.NO_WRAP))
                         .putString("ct", Base64.encodeToString(ct, Base64.NO_WRAP))
                         .apply();
-                    call.resolve();
+                    call.resolve(new JSObject());
                 } catch (Exception e) {
                     call.reject(e.getMessage());
                 } finally {

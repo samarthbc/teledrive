@@ -389,7 +389,7 @@ export const useVault = create<VaultState>((set, get) => {
       const raw = await vc.rawWithPassword(config, needRoot(), master)
       try {
         const res = await Native.biometricEnable({ data: toB64(raw) })
-        if (res.cancelled) return false
+        if (res?.cancelled) return false
       } finally {
         raw.fill(0)
       }
@@ -418,7 +418,7 @@ export const useVault = create<VaultState>((set, get) => {
         if ((e as { code?: string }).code === 'INVALIDATED') await get().disableBio()
         throw e
       }
-      if (res.cancelled || !res.data) return false
+      if (res?.cancelled || !res?.data) return false
       const raw = fromB64(res.data)
       try {
         await opened(await importAes(raw), config)

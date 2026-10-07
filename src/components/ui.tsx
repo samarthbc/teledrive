@@ -156,14 +156,14 @@ export function Segmented<T extends string | number>(props: {
 }) {
   const { label, value, options, onChange, small } = props
   return (
-    <div className={`flex shrink-0 gap-1 rounded-md p-1 pressed ${small ? 'h-9' : 'h-11'}`} role="radiogroup" aria-label={label}>
+    <div className={`flex max-w-full shrink-0 gap-1 overflow-x-auto rounded-md p-1 pressed ${small ? 'h-9' : 'h-11'}`} role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button
           key={String(o.value)}
           role="radio"
           aria-checked={o.value === value}
           onClick={() => onChange(o.value)}
-          className={`min-w-0 flex-1 rounded-md px-3 ${small ? 'text-xs' : 'text-[13px]'} whitespace-nowrap transition-[box-shadow,color] duration-120 sm:flex-none ${
+          className={`min-w-0 flex-auto rounded-md px-1.5 sm:px-3 ${small ? 'text-xs' : 'text-[13px]'} whitespace-nowrap transition-[box-shadow,color] duration-120 sm:flex-none ${
             o.value === value ? 'bg-surface font-extrabold text-brand-ink raised-sm' : 'font-semibold text-muted hover:text-ink'
           }`}
         >
