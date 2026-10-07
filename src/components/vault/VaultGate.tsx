@@ -136,7 +136,7 @@ export function VaultLock() {
   const waitUntil = useVault((s) => s.waitUntil)
   const tries = useVault((s) => s.tries)
   const pinReady = useVault((s) => s.pinReady)
-  const bioReady = useVault((s) => s.bioSet && s.sessionUnlocked)
+  const bioReady = useVault((s) => s.bioSet)
   const [usePassword, setUsePassword] = useState(false)
   const [pin, setPin] = useState('')
   const pinMode = pinReady && !usePassword

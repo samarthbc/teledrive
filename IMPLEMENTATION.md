@@ -1519,9 +1519,9 @@ password.
   on the device, so after a restart the master password brings the PIN back (as Bitwarden does); five wrong PINs and
   the master password is needed. Lock screen: PIN first when set, "Use master password".
 - Fingerprint (Android): `TeleDriveNativePlugin` `biometricAvailable/Enable/Unlock/Disable` (AndroidX Biometric,
-  AES-GCM Keystore key with `setUserAuthenticationRequired` and `setInvalidatedByBiometricEnrollment`); offered on
-  the lock screen (and asked for straight away) only after one master-password unlock since the app started; a
-  changed fingerprint turns it off with a message.
+  AES-GCM Keystore key with `setUserAuthenticationRequired` and `setInvalidatedByBiometricEnrollment`); asked for
+  straight away on the lock screen, also right after the app starts (the key stays in the Keystore, usable only
+  with a fingerprint, as in Bitwarden); a changed fingerprint turns it off with a message.
 - Block screenshots (Settings, on by default): Android `setSecure` (FLAG_SECURE), Windows app
   `setContentProtection` (preload + main), while the TeleWarden page is on screen.
 - Import (`vault/importers.ts`, `components/vault/DataDialogs.tsx`): Bitwarden .json (also password-protected) and

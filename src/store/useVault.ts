@@ -71,8 +71,6 @@ interface VaultState {
   pinReady: boolean
   /** Fingerprint unlock is on (Android). */
   bioSet: boolean
-  /** The master password was entered since TeleDrive started (the fingerprint works from then on). */
-  sessionUnlocked: boolean
 
   /** Settings → Unlock with a PIN (asks the master password). */
   setPin: (master: string, pin: string) => Promise<void>
@@ -300,7 +298,6 @@ export const useVault = create<VaultState>((set, get) => {
     pinSet: false,
     pinReady: false,
     bioSet: false,
-    sessionUnlocked: false,
 
     create: async (password, hint) => {
       if (get().config) throw new Error('TeleWarden is already set up')
@@ -330,7 +327,6 @@ export const useVault = create<VaultState>((set, get) => {
       }
       const k = await importAes(raw.slice())
       await opened(k, config)
-      set({ sessionUnlocked: true })
       // A PIN set earlier: make its copy of the key again (it was in memory only)
       const sealedPin = loadJson<{ ct: number; e: string } | null>(PIN_KEY, null)
       if (sealedPin?.ct === config.ct) {
@@ -450,7 +446,6 @@ export const useVault = create<VaultState>((set, get) => {
         set({ pendingCode: null })
         throw e
       }
-      set({ sessionUnlocked: true })
       await opened(k, config)
       return next
     },

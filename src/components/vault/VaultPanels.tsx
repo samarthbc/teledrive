@@ -182,7 +182,7 @@ export function VaultSettings() {
           <Row
             inline
             name="Unlock with fingerprint"
-            hint={bio && !bio.available ? (bio.enrolled ? 'This phone has no strong fingerprint sensor.' : 'Add a fingerprint in the phone’s settings first.') : 'Your master password is asked once after TeleDrive restarts.'}
+            hint={bio && !bio.available ? (bio.enrolled ? 'This phone has no strong fingerprint sensor.' : 'Add a fingerprint in the phone’s settings first.') : 'Asked when TeleWarden opens. The master password always works too.'}
           >
             <Toggle label="Unlock with fingerprint" disabled={!bioSet && !bio?.available} checked={bioSet} onChange={(v) => (v ? setDialog('bio') : void useVault.getState().disableBio())} />
           </Row>

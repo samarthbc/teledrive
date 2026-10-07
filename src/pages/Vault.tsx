@@ -352,7 +352,7 @@ export default function VaultPage() {
                     ))}
                 </div>
               )}
-              <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-4.5 md:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+              <div className="grid flex-1 grid-cols-1 items-start md:min-h-0 gap-4.5 md:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
                 <section className="-mx-3 md:mx-0 md:panel md:p-2">
                   {shown.length ? (
                     shown.map((i) => <ItemRow key={i.id} item={i} selected={wide && i.id === visibleSelected?.id} onOpen={() => select(i.id)} />)
