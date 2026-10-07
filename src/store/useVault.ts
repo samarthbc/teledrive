@@ -305,8 +305,15 @@ export const useVault = create<VaultState>((set, get) => {
     create: async (password, hint) => {
       if (get().config) throw new Error('TeleWarden is already set up')
       const { config, key: k, code } = await vc.createVault(needRoot(), password, hint)
-      await deps.backend.writeConfig(deps.drive(), config)
-      set({ config, pendingCode: 'setup' })
+      // Set first: the drive reads the config back while it's written, and the setup screen must stay (with the code)
+      set({ pendingCode: 'setup' })
+      try {
+        await deps.backend.writeConfig(deps.drive(), config)
+      } catch (e) {
+        set({ pendingCode: null })
+        throw e
+      }
+      set({ config })
       await opened(k, config)
       return code
     },
@@ -436,8 +443,14 @@ export const useVault = create<VaultState>((set, get) => {
 
     recover: async (code, newPassword) => {
       const { config, key: k, code: next } = await vc.recover(needConfig(), needRoot(), code, newPassword)
-      await deps.backend.writeConfig(deps.drive(), config)
-      set({ pendingCode: 'recover', sessionUnlocked: true })
+      set({ pendingCode: 'recover' })
+      try {
+        await deps.backend.writeConfig(deps.drive(), config)
+      } catch (e) {
+        set({ pendingCode: null })
+        throw e
+      }
+      set({ sessionUnlocked: true })
       await opened(k, config)
       return next
     },

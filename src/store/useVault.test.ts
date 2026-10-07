@@ -49,6 +49,23 @@ describe('TeleWarden store', () => {
     expect(vault().tries).toBe(0)
   }, 30_000)
 
+  it('keeps the setup screen while the config is read back (Telegram feeds it before writeConfig returns)', async () => {
+    const write = mem.backend.writeConfig
+    const slowWrite: typeof write = async (d, w) => {
+      await write(d, w)
+      await settle()
+    }
+    configureVault({ backend: { ...mem.backend, writeConfig: slowWrite } })
+    const seen: string[] = []
+    const off = useVault.subscribe((s) => seen.push(`${s.status}/${s.pendingCode}`))
+    await vault().create(PW, '')
+    off()
+    configureVault({ backend: mem.backend })
+    // Never shown as set up without the code screen (that swapped the setup screen out and lost the code)
+    expect(seen.filter((s) => s.endsWith('/null'))).toEqual([])
+    expect(vault().pendingCode).toBe('setup')
+  }, 30_000)
+
   it('saves items sealed (nothing readable in the channel) and reads them back after a lock', async () => {
     await vault().create(PW, '')
     await vault().save(login('a1', 'Bank'))
