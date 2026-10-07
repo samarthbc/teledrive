@@ -14,7 +14,8 @@ import type { AccountConfig } from '../drive/crypto'
 import { isAndroid } from '../native/android'
 import { describeError, errorCode, logOut } from '../telegram/auth'
 import {
-  createDrive, createPhotosDrive, driveName, isPhotosDrive, loadDrives, openStorage, refreshDrives, stillAccessible, type DriveInfo,
+  createDrive, createPhotosDrive, createVaultDrive, driveName, isPhotosDrive, isVaultDrive, loadDrives, openStorage, refreshDrives,
+  stillAccessible, type DriveInfo,
 } from '../telegram/channel'
 import { getClient, isAuthorized, onSessionLost, resetClient, SESSION_LOST_CODES } from '../telegram/client'
 import { acquireSessionLock, onSessionTakenOver } from '../telegram/sessionLock'
@@ -72,6 +73,8 @@ interface State {
   openPhotos: () => Promise<void>
   /** TelePhotos, created (but not opened) if it doesn't exist yet. */
   ensurePhotosDrive: () => Promise<DriveInfo>
+  /** Open TeleWarden, creating its channel the first time. Throws if transfers are still running. */
+  openVault: () => Promise<void>
   /**
    * Camera backup while the app is in the background: open the backup drive, remembering the one that was open.
    * False if it can't now (transfers running, or the switch failed).
@@ -96,6 +99,7 @@ let booting: Promise<void> | null = null
 let switching = false
 /** TelePhotos being created (so two taps don't create two). */
 let creatingPhotos: Promise<DriveInfo> | null = null
+let creatingVault: Promise<DriveInfo> | null = null
 /** Waiting on the TeleDrive password screen. */
 let pendingPassword: { config: AccountConfig | null; resolve: () => void } | null = null
 
@@ -394,6 +398,18 @@ export const useDrive = create<State>((set, get) => {
       return creatingPhotos
     },
 
+    openVault: async () => {
+      const existing = get().drives.find(isVaultDrive)
+      if (existing) return get().switchDrive(existing.id)
+      if (hasActiveTransfers()) throw new Error('Wait for uploads and downloads to finish (or cancel them) before opening TeleWarden')
+      creatingVault ??= (async () => {
+        const { drive, drives } = await createVaultDrive(get().drives)
+        set({ drives })
+        return drive
+      })().finally(() => (creatingVault = null))
+      await get().switchDrive((await creatingVault).id)
+    },
+
     openForBackup: async (id) => {
       const { currentDrive, phase, returnTo } = get()
       if (id === currentDrive) return true
@@ -426,6 +442,11 @@ export const useDrive = create<State>((set, get) => {
 /** TelePhotos is the open drive. */
 export function useInPhotos(): boolean {
   return useDrive((s) => isPhotosDrive(s.drives.find((x) => x.id === s.currentDrive)))
+}
+
+/** TeleWarden is the open drive. */
+export function useInVault(): boolean {
+  return useDrive((s) => isVaultDrive(s.drives.find((x) => x.id === s.currentDrive)))
 }
 
 /** Name of the open drive ("My Drive" for the first one), shown where the top folder is named. */

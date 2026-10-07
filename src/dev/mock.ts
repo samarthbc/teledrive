@@ -1,7 +1,7 @@
 // Development only: `?mock` shows the app with sample files and no Telegram connection, for
 // working on the design and taking screenshots. `?mock=password|login|setup` shows that screen.
 // `&photos` opens a TelePhotos with ~1,500 photos over three years (for the timeline and its scrubber); its Locked
-// photos hold 12 more (`&photos&unlocked` shows them unlocked).
+// photos hold 12 more (`&photos&unlocked` shows them unlocked). `&vault` opens TeleWarden (see dev/vaultMock.ts).
 // Loaded from main.tsx only when import.meta.env.DEV, so it never ships.
 import type { Meta } from '../drive/meta'
 import type { Transfer } from '../drive/queue'
@@ -103,9 +103,10 @@ useDrive.setState({
   drives: [
     { id: '1', accessHash: '0', title: 'TeleDrive Storage' },
     ...(param.has('photos') ? [{ id: '3', accessHash: '0', title: 'TeleDrive Photos' }] : []),
+    ...(param.has('vault') ? [{ id: '4', accessHash: '0', title: 'TeleDrive Vault' }] : []),
     { id: '2', accessHash: '0', title: 'TeleDrive · Work' },
   ] as never,
-  currentDrive: param.has('photos') ? '3' : '1',
+  currentDrive: param.has('vault') ? '4' : param.has('photos') ? '3' : '1',
   transfers: param.has('transfers') ? transfers : [],
   boot: async () => {},
   refresh: async () => {},
@@ -126,3 +127,5 @@ Object.assign(sessions, {
   end: async () => {},
   endOthers: async () => {},
 })
+
+if (param.has('vault')) await (await import('./vaultMock')).startVaultMock(param.get('vault') ?? '')

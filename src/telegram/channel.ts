@@ -5,11 +5,13 @@ import { encode, type ConfigMeta } from '../drive/meta'
 import { getClient } from './client'
 
 // Each drive is a private channel. The first one is "TeleDrive Storage"; TelePhotos is "TeleDrive Photos";
-// more are "TeleDrive · <name>".
+// TeleWarden (passwords) is "TeleDrive Vault"; more are "TeleDrive · <name>".
 
 const MAIN_TITLE = 'TeleDrive Storage'
 const PHOTOS_TITLE = 'TeleDrive Photos'
 export const PHOTOS_NAME = 'TelePhotos'
+const VAULT_TITLE = 'TeleDrive Vault'
+export const VAULT_NAME = 'TeleWarden'
 const TITLE_PREFIX = 'TeleDrive · '
 const ABOUT_MARKER = 'teledrive:v1'
 const ABOUT = `${ABOUT_MARKER} · Storage for TeleDrive. Don't post or delete messages here manually.`
@@ -54,6 +56,11 @@ export function isPhotosDrive(d: DriveInfo | null | undefined): boolean {
   return d?.title === PHOTOS_TITLE
 }
 
+/** TeleWarden: the password manager. */
+export function isVaultDrive(d: DriveInfo | null | undefined): boolean {
+  return d?.title === VAULT_TITLE
+}
+
 /**
  * The name shown in the app: "My Drive" for the first drive, "TelePhotos" for the photos drive, otherwise the part
  * after "TeleDrive · ".
@@ -61,6 +68,7 @@ export function isPhotosDrive(d: DriveInfo | null | undefined): boolean {
 export function driveName(d: DriveInfo): string {
   if (d.title === MAIN_TITLE) return 'My Drive'
   if (d.title === PHOTOS_TITLE) return PHOTOS_NAME
+  if (d.title === VAULT_TITLE) return VAULT_NAME
   return d.title.startsWith(TITLE_PREFIX) ? d.title.slice(TITLE_PREFIX.length) : d.title
 }
 
@@ -90,6 +98,7 @@ export async function createDrive(name: string, known: DriveInfo[]): Promise<{ d
   if (!n) throw new Error('Give the drive a name')
   if (n.length > MAX_DRIVE_NAME) throw new Error(`Drive names can be at most ${MAX_DRIVE_NAME} characters`)
   if (n.toLowerCase() === PHOTOS_NAME.toLowerCase()) throw new Error(`${PHOTOS_NAME} is the built-in drive for photos`)
+  if (n.toLowerCase() === VAULT_NAME.toLowerCase()) throw new Error(`${VAULT_NAME} is the built-in drive for passwords`)
   if (known.some((d) => driveName(d).toLowerCase() === n.toLowerCase())) throw new Error('A drive with this name already exists')
   const drive = await createChannel(TITLE_PREFIX + n)
   const drives = [...known, drive]
@@ -111,9 +120,23 @@ export async function createPhotosDrive(known: DriveInfo[]): Promise<{ drive: Dr
   return { drive, drives }
 }
 
-/** My Drive first, then TelePhotos, then the rest in their order. */
+/** Create TeleWarden (once) and put it after TelePhotos in the list. */
+export async function createVaultDrive(known: DriveInfo[]): Promise<{ drive: DriveInfo; drives: DriveInfo[] }> {
+  const existing = known.find(isVaultDrive)
+  if (existing) return { drive: existing, drives: known }
+  // Another device may have created it: look on Telegram first
+  const refreshed = await refreshDrives(known)
+  const found = refreshed.find(isVaultDrive)
+  if (found) return { drive: found, drives: refreshed }
+  const drive = await createChannel(VAULT_TITLE)
+  const drives = sortDrives([...known, drive])
+  await setKV(KEYS.drives, drives)
+  return { drive, drives }
+}
+
+/** My Drive first, then TelePhotos, then TeleWarden, then the rest in their order. */
 function sortDrives(drives: DriveInfo[]): DriveInfo[] {
-  const rank = (d: DriveInfo) => (d.title === MAIN_TITLE ? 0 : isPhotosDrive(d) ? 1 : 2)
+  const rank = (d: DriveInfo) => (d.title === MAIN_TITLE ? 0 : isPhotosDrive(d) ? 1 : isVaultDrive(d) ? 2 : 3)
   return [...drives].sort((a, b) => rank(a) - rank(b))
 }
 

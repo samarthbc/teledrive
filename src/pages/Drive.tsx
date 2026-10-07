@@ -772,6 +772,10 @@ export default function DrivePage({ mode }: { mode: Mode }) {
     navigate('/')
     if (!inPhotos) void act(useDrive.getState().openPhotos())
   }
+  const openVault = () => {
+    navigate('/')
+    void act(useDrive.getState().openVault())
+  }
 
   const sidebar = (
     <Sidebar
@@ -784,6 +788,7 @@ export default function DrivePage({ mode }: { mode: Mode }) {
       onLockAll={anyUnlocked ? closeAllLocks : undefined}
       onSwitchDrive={switchDrive}
       onOpenPhotos={openPhotos}
+      onOpenVault={openVault}
       onNewDrive={() => setModal({ type: 'newDrive' })}
       // Camera backup lives in Settings; TelePhotos' storage card shows its status and leads there
       onCameraBackup={appUi && inPhotos ? () => navigate('/settings') : undefined}

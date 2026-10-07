@@ -58,6 +58,11 @@ interface VaultState {
   lastActive: number
   /** Why it locked last, for a toast (cleared once shown). */
   lockedBecause: string | null
+  /**
+   * A new recovery code is on screen (after setting up or recovering): the setup / lock screen stays until the
+   * person says they saved it, although the vault is already open.
+   */
+  pendingCode: 'setup' | 'recover' | null
 
   create: (password: string, hint: string) => Promise<string>
   unlock: (password: string) => Promise<void>
@@ -250,12 +255,13 @@ export const useVault = create<VaultState>((set, get) => {
     waitUntil: savedTries.waitUntil,
     lastActive: Date.now(),
     lockedBecause: null,
+    pendingCode: null,
 
     create: async (password, hint) => {
       if (get().config) throw new Error('TeleWarden is already set up')
       const { config, key: k, code } = await vc.createVault(needRoot(), password, hint)
       await deps.backend.writeConfig(deps.drive(), config)
-      set({ config })
+      set({ config, pendingCode: 'setup' })
       await opened(k, config)
       return code
     },
@@ -276,6 +282,7 @@ export const useVault = create<VaultState>((set, get) => {
     recover: async (code, newPassword) => {
       const { config, key: k, code: next } = await vc.recover(needConfig(), needRoot(), code, newPassword)
       await deps.backend.writeConfig(deps.drive(), config)
+      set({ pendingCode: 'recover' })
       await opened(k, config)
       return next
     },

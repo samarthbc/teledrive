@@ -17,7 +17,13 @@ import { describeError } from '../telegram/auth'
 import { sessions, type Session } from '../telegram/sessions'
 
 /** Settings (IMPLEMENTATION.md Phase 10): per device, shown in the drive page's main area. */
-export default function SettingsView({ onGetApps, cameraBackup }: { onGetApps?: () => void; cameraBackup?: boolean }) {
+export default function SettingsView(props: {
+  onGetApps?: () => void
+  cameraBackup?: boolean
+  /** Settings of the open drive's own (TeleWarden's), first. */
+  extra?: React.ReactNode
+}) {
+  const { onGetApps, cameraBackup, extra } = props
   const settings = useSettings()
   const themeMode = useTheme((t) => t.mode)
   const anyUnlocked = useDrive((s) => [...s.drive.items.values()].some((i) => i.lock && !i.locked))
@@ -29,6 +35,7 @@ export default function SettingsView({ onGetApps, cameraBackup }: { onGetApps?: 
     // grow past the screen (long, truncated texts would otherwise widen them)
     <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-8 pb-6 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-8">
+        {extra}
         {/* Camera backup belongs to TelePhotos: only in its settings */}
         {cameraBackup && inPhotos && (
           <section aria-label="Camera backup">
@@ -120,7 +127,7 @@ export default function SettingsView({ onGetApps, cameraBackup }: { onGetApps?: 
   )
 }
 
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+export function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section aria-label={title}>
       <div className="mb-3 flex items-end justify-between gap-3">
@@ -133,7 +140,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 }
 
 /** A setting: name and explanation, its control on the right (below on phones, except small ones like switches). */
-function Row(props: { name: string; hint?: React.ReactNode; inline?: boolean; children?: React.ReactNode }) {
+export function Row(props: { name: string; hint?: React.ReactNode; inline?: boolean; children?: React.ReactNode }) {
   const { name, hint, inline, children } = props
   return (
     <div

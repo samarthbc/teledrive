@@ -1,13 +1,14 @@
 import { Loader2, MonitorSmartphone, TriangleAlert } from 'lucide-react'
 import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import DrivePage from './pages/Drive'
+import DrivePage, { type Mode } from './pages/Drive'
+import VaultPage from './pages/Vault'
 import LoginPage from './pages/Login'
 import PasswordPage from './pages/Password'
 import SetupPage from './pages/Setup'
 import { backupDriveOpened, initCameraBackup } from './native/backup'
 import { driveName } from './telegram/channel'
-import { useDrive } from './store/useDrive'
+import { useDrive, useInVault } from './store/useDrive'
 
 let backupStarted = false
 
@@ -77,19 +78,28 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<DrivePage mode="folder" />} />
-      <Route path="/folder/:folderId" element={<DrivePage mode="folder" />} />
-      <Route path="/search" element={<DrivePage mode="search" />} />
-      <Route path="/recent" element={<DrivePage mode="recent" />} />
-      <Route path="/starred" element={<DrivePage mode="starred" />} />
-      <Route path="/albums" element={<DrivePage mode="albums" />} />
-      <Route path="/album/:albumId" element={<DrivePage mode="album" />} />
-      <Route path="/locked" element={<DrivePage mode="locked" />} />
-      <Route path="/trash" element={<DrivePage mode="trash" />} />
-      <Route path="/settings" element={<DrivePage mode="settings" />} />
+      <Route path="/" element={<Page mode="folder" />} />
+      <Route path="/folder/:folderId" element={<Page mode="folder" />} />
+      <Route path="/search" element={<Page mode="search" />} />
+      <Route path="/recent" element={<Page mode="recent" />} />
+      <Route path="/starred" element={<Page mode="starred" />} />
+      <Route path="/albums" element={<Page mode="albums" />} />
+      <Route path="/album/:albumId" element={<Page mode="album" />} />
+      <Route path="/locked" element={<Page mode="locked" />} />
+      <Route path="/trash" element={<Page mode="trash" />} />
+      <Route path="/settings" element={<Page mode="settings" />} />
+      {/* TeleWarden's own places */}
+      <Route path="/v/*" element={<Page mode="folder" />} />
+      <Route path="/generator" element={<Page mode="folder" />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
+}
+
+/** TeleWarden has its own page; every other drive is files (or photos). */
+function Page({ mode }: { mode: Mode }) {
+  const inVault = useInVault()
+  return inVault ? <VaultPage /> : <DrivePage mode={mode} />
 }
 
 function Centered({ children }: { children: React.ReactNode }) {

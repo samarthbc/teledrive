@@ -1,10 +1,9 @@
 import {
-  Album, Camera, Check, ChevronDown, Clock, FolderPlus, FolderUp, HardDrive, Images, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Settings, Star,
+  Album, Camera, Clock, FolderPlus, FolderUp, HardDrive, Images, Lock, LockOpen, LogOut, MonitorSmartphone, Plus, Settings, Star,
   Trash2, Upload, type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { driveName, isPhotosDrive, PHOTOS_NAME } from '../telegram/channel'
 import { APP_VERSION } from '../lib/releases'
 import { updateNow, useUpdate, type UpdateStatus } from '../lib/updates'
 import { isAndroid } from '../native/android'
@@ -14,7 +13,7 @@ import { collectTree, driveStats, isHidden, starredItems, trashedItems, type Dri
 import { category, formatBytes } from '../lib/format'
 import { useBackup } from '../native/backup'
 import { useDrive, useInPhotos, useRootName } from '../store/useDrive'
-import Logo from './Logo'
+import DrivePicker from './DrivePicker'
 import Menu, { type MenuEntry } from './Menu'
 
 export default function Sidebar(props: {
@@ -30,27 +29,23 @@ export default function Sidebar(props: {
   onSwitchDrive: (id: string) => void
   /** Open TelePhotos (created the first time). */
   onOpenPhotos: () => void
+  /** Open TeleWarden (created the first time). */
+  onOpenVault: () => void
   onNewDrive: () => void
   /** Only in the Android app, in TelePhotos: the storage card's Backup line (leads to Settings). */
   onCameraBackup?: () => void
   /** Only on the website: download links for the apps. */
   onGetApps?: () => void
 }) {
-  const { onUpload, onUploadFolder, onNewFolder, onNewAlbum, onLogout, onLockAll, onSwitchDrive, onOpenPhotos, onNewDrive, onCameraBackup, onGetApps } = props
-  const drives = useDrive((s) => s.drives)
-  const currentDrive = useDrive((s) => s.currentDrive)
-  const [picking, setPicking] = useState(false)
+  const { onUpload, onUploadFolder, onNewFolder, onNewAlbum, onLogout, onLockAll, onSwitchDrive, onOpenPhotos, onOpenVault, onNewDrive, onCameraBackup, onGetApps } = props
   const [newMenu, setNewMenu] = useState<{ x: number; y: number } | null>(null)
   const isApp = isAndroid || isDesktop
-  const current = drives.find((d) => d.id === currentDrive)
   const rootName = useRootName()
   const drive = useDrive((s) => s.drive)
   const { pathname } = useLocation()
   const counts = useMemo(() => ({ starred: starredItems(drive).length, trash: trashedItems(drive).length }), [drive])
   const inDrive = pathname === '/' || pathname.startsWith('/folder/')
   const inPhotos = useInPhotos()
-  // TelePhotos is listed even before its channel exists (it's created when first opened)
-  const hasPhotos = drives.some(isPhotosDrive)
 
   const newEntries: MenuEntry[] = inPhotos
     ? [
@@ -62,59 +57,9 @@ export default function Sidebar(props: {
         ...(onUploadFolder ? [{ label: 'Upload folder', icon: FolderUp, onClick: onUploadFolder }] : []),
         { label: 'New folder', icon: FolderPlus, onClick: onNewFolder },
       ]
-  const pickerRow = (key: string, Icon: LucideIcon, name: string, on: boolean, onClick: () => void) => (
-    <button
-      key={key}
-      className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold active:pressed"
-      onClick={() => {
-        setPicking(false)
-        onClick()
-      }}
-    >
-      <Icon className="size-4 shrink-0 text-muted" />
-      <span className="truncate">{name}</span>
-      {on && <Check className="ml-auto size-4 shrink-0 text-brand-ink" strokeWidth={2.5} />}
-    </button>
-  )
-
   return (
     <div className="flex h-full flex-col gap-1 overflow-y-auto px-3.5 py-5">
-      <button
-        className="mb-4 flex items-center gap-3 rounded-md px-1.5 py-1 text-left active:pressed"
-        // Doesn't close the phone drawer: it only opens the list
-        onClick={(e) => {
-          e.stopPropagation()
-          setPicking(!picking)
-        }}
-        aria-expanded={picking}
-      >
-        <Logo />
-        <span className="min-w-0 flex-1">
-          <span className="block text-lg leading-tight font-black tracking-tight">TeleDrive</span>
-          <span className="block truncate text-xs text-muted">{current ? driveName(current) : ' '}</span>
-        </span>
-        <ChevronDown className={`size-4 shrink-0 text-muted transition-transform ${picking ? 'rotate-180' : ''}`} />
-      </button>
-      {picking && (
-        <div className="mb-4 space-y-1 rounded-md p-1.5 pressed">
-          {drives.flatMap((d, i) => [
-            pickerRow(d.id, isPhotosDrive(d) ? Images : HardDrive, driveName(d), d.id === currentDrive, () =>
-              isPhotosDrive(d) ? onOpenPhotos() : onSwitchDrive(d.id),
-            ),
-            // Not created yet: right after My Drive
-            ...(i === 0 && !hasPhotos ? [pickerRow('photos', Images, PHOTOS_NAME, false, onOpenPhotos)] : []),
-          ])}
-          <button
-            className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold text-muted active:pressed"
-            onClick={() => {
-              setPicking(false)
-              onNewDrive()
-            }}
-          >
-            <Plus className="size-4" /> New drive
-          </button>
-        </div>
-      )}
+      <DrivePicker onSwitchDrive={onSwitchDrive} onOpenPhotos={onOpenPhotos} onOpenVault={onOpenVault} onNewDrive={onNewDrive} />
 
       <div className="mb-4 px-1">
         <button
