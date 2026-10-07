@@ -51,6 +51,29 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
+        <!-- TeleWarden: fills logins in other apps and in Chrome (Settings → Autofill service → TeleDrive) -->
+        <service
+            android:name=".TeleWardenAutofillService"
+            android:label="TeleWarden"
+            android:exported="true"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/autofill_service" />
+        </service>
+
+        <!-- The unlock-and-pick window opened from TeleWarden's autofill suggestion -->
+        <activity
+            android:name=".AutofillActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".TransferService"
             android:exported="false"

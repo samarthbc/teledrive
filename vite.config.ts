@@ -36,6 +36,8 @@ export default defineConfig(({ mode }) => ({
         main: fileURLToPath(new URL('index.html', import.meta.url)),
         // Camera backup while the Android app is closed (see src/backup/headless.ts)
         backup: fileURLToPath(new URL('backup.html', import.meta.url)),
+        // Android autofill's window (see src/autofill/main.tsx)
+        autofill: fileURLToPath(new URL('autofill.html', import.meta.url)),
       },
     },
   },

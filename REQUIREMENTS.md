@@ -253,10 +253,10 @@ A third built-in drive, **TeleWarden**, next to My Drive and TelePhotos. UI prot
 - Left out (decided 2026-10-07): exposed passwords (Have I Been Pwned) and unsecured (http://) websites
 
 **Android autofill (Phase 23)**
-- [ ] Fills logins in other apps and in Chrome (TeleDrive as Android's autofill service); unlock with fingerprint first
-- [ ] "Save to TeleWarden?" / "Update password?" after signing in somewhere
-- [ ] Suggestions above the keyboard (Android 11+); fills cards and identities into forms too
-- [ ] Website matching: base domain, host, starts with, exact, regular expression, never; Android apps by package name
+- [x] Fills logins in other apps and in Chrome (TeleDrive as Android's autofill service); unlock with fingerprint first
+- [x] "Save to TeleWarden?" / "Update password?" after signing in somewhere
+- [x] Suggestions above the keyboard (Android 11+); fills cards and identities into forms too
+- [x] Website matching: base domain, host, starts with, exact, regular expression, never; Android apps by package name
 
 ---
 

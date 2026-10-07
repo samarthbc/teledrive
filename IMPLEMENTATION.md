@@ -1566,7 +1566,7 @@ Scope (decided 2026-10-07): **weak, reused and old** passwords. Exposed password
 
 ---
 
-## Phase 23: TeleWarden, Android autofill ⬜
+## Phase 23: TeleWarden, Android autofill 🚧 (built; needs testing on the phone)
 
 ### 23.1 What the user sees
 - Settings → *Autofill in other apps* → **Turn on** opens Android's "Autofill service" setting to pick TeleDrive;
@@ -1609,6 +1609,33 @@ Scope (decided 2026-10-07): **weak, reused and old** passwords. Exposed password
 4. Cards, identities, inline suggestions; the Settings row, with Chrome's setting explained.
 5. Check on the phone: a real app login (fill, save, update), Chrome on a website, a card form, an address form,
    keyboard suggestions, locked vs unlocked, nothing decrypted left in memory after the activity closes.
+
+### 23.4 Done so far
+- `vault/match.ts` (tested): base domain with a trimmed suffix list (`co.in`, `github.io`…), host, starts with, exact,
+  regular expression, never; `androidapp://<package>`; an app with nothing saved for it matches the site its package
+  name points to (`com.instagram.android` → instagram.com). Logins saved for the app come first.
+- `TeleWardenAutofillService` + `AutofillParser`: fields from autofill hints, `autocomplete`/`type` on web pages, the
+  input type, then names/ids/hint text; the username is guessed as the text box before the password. Offered only
+  for a password, an explicit username, a card number, or two or more address fields; never in TeleDrive itself. One
+  locked dataset ("TeleWarden · Tap to unlock and fill", inline above the keyboard on Android 11+) whose
+  authentication opens `AutofillActivity`. `SaveInfo` (password, optional username,
+  `FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE`).
+- `AutofillActivity` (FLAG_SECURE, not in recents) loads `autofill.html` (`src/autofill/`) from the app's origin with
+  the same asset loader as the backup runner (the service worker is only pointed at it when the app isn't running).
+  The page reads the vault from IndexedDB (no Telegram, so it never competes with the app's session), restores the
+  remembered TeleDrive password, unlocks with the fingerprint or the master password, lists the matches (search all;
+  a login saved for another site asks first), copies a TOTP code, locks, and returns values by field kind
+  (`src/autofill/fill.ts`, tested). The WebView bridge now answers slow calls later (`{pending}` +
+  `window.__nativeResult`).
+- Fingerprint and secure copy moved to `VaultSecrets.java`, shared by the plugin and the autofill window.
+- Save: the save prompt opens TeleDrive (`MainActivity` extras → plugin `takeAutofillSave` / `autofillSave` event);
+  TeleWarden opens and, once unlocked, `SaveLoginDialog` saves a new login (name from the app or site) or updates the
+  password of the login with that username (old one kept in its history), or says it's already saved.
+- Settings → TeleWarden → *Autofill in other apps*: status and a button to Android's autofill-service setting; the hint
+  explains Chrome's "Autofill using another service".
+- Checked: unit tests; the autofill page in the browser with the sample vault (unlock, match by package, search, the
+  "fill anyway" question); the save dialog (update with history; new login named from the site); the release build
+  installs and Android lists TeleDrive as an autofill service. Not yet: filling and saving in real apps and Chrome.
 
 ## Later (ideas, not planned yet)
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).

@@ -39,6 +39,16 @@ export interface MediaFolder {
   sampleUri: string
 }
 
+/** A login another app (or Chrome) offered to save: `target` is the web domain or the app's package. */
+export interface AutofillSave {
+  kind: 'web' | 'app'
+  target: string
+  /** The app's name, for an app. */
+  label?: string
+  username: string
+  password: string
+}
+
 /** Native side: android/app/src/main/java/.../TeleDriveNativePlugin.java */
 interface TeleDriveNativePlugin {
   mediaPermission(o: { request?: boolean }): Promise<{ granted: boolean }>
@@ -73,6 +83,16 @@ interface TeleDriveNativePlugin {
   biometricDisable(): Promise<void>
   /** TeleWarden: scan a QR code (Google's scanner). */
   scanQr(): Promise<{ text?: string; cancelled?: boolean }>
+  /** TeleWarden autofill: is TeleDrive Android's autofill service? (Android 8+) */
+  autofillStatus(): Promise<{ supported: boolean; enabled: boolean }>
+  /** Opens Android's "Autofill service" setting with TeleDrive to pick. */
+  autofillSettings(): Promise<void>
+  /** "Save to TeleWarden?" accepted in another app: what to save (once). */
+  takeAutofillSave(): Promise<{ save?: AutofillSave }>
+  addListener(event: 'autofillSave', fn: () => void): Promise<PluginListenerHandle>
+  /** The autofill window (AutofillActivity) only: fill these fields and close; or close without filling. */
+  autofillFill(o: { values: Record<string, string> }): Promise<void>
+  autofillCancel(): Promise<void>
   /** Background backup page only. */
   network(): Promise<{ connected: boolean; wifi: boolean }>
   done(o: { result: string }): Promise<void>
@@ -89,13 +109,32 @@ interface TeleDriveNativePlugin {
   addListener(event: 'updateProgress', fn: (e: { progress: number }) => void): Promise<PluginListenerHandle>
 }
 
-/** In the background backup page, the same calls go through a plain WebView bridge. */
+/**
+ * In the background backup page and the autofill window (AutofillActivity.java), the same calls go through a plain
+ * WebView bridge. A call that takes a while (a fingerprint) answers `{pending: id}` at once and the result later
+ * through `window.__nativeResult(id, json)`.
+ */
 function headlessNative(bridge: NonNullable<typeof headlessBridge>): TeleDriveNativePlugin {
+  const waiting = new Map<string, (json: string) => void>()
+  Object.assign(window, { __nativeResult: (id: string, json: string) => (waiting.get(id)?.(json), waiting.delete(id)) })
+  const parse = (json: string) => {
+    const res = JSON.parse(json)
+    if (res.error) throw Object.assign(new Error(res.error), res.code ? { code: res.code } : {})
+    return res
+  }
   return new Proxy({} as TeleDriveNativePlugin, {
     get: (_, method: string) => async (args?: object) => {
-      const res = JSON.parse(bridge.call(method, JSON.stringify(args ?? {})))
-      if (res.error) throw new Error(res.error)
-      return res
+      const res = parse(bridge.call(method, JSON.stringify(args ?? {})))
+      if (typeof res.pending !== 'string') return res
+      return new Promise((resolve, reject) => {
+        waiting.set(res.pending, (json) => {
+          try {
+            resolve(parse(json))
+          } catch (e) {
+            reject(e)
+          }
+        })
+      })
     },
   })
 }

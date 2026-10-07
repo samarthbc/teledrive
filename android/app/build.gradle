@@ -72,6 +72,8 @@ dependencies {
     implementation "com.google.android.gms:play-services-code-scanner:16.1.0"
     // TeleWarden: fingerprint unlock (BiometricPrompt with a Keystore key)
     implementation "androidx.biometric:biometric:1.1.0"
+    // TeleWarden autofill: suggestions above the keyboard (Android 11+)
+    implementation "androidx.autofill:autofill:1.1.0"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

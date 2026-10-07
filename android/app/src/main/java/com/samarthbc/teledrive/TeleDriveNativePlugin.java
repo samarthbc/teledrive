@@ -126,6 +126,7 @@ public class TeleDriveNativePlugin extends Plugin {
         media = new MediaAccess(getContext());
         instance = this;
         collectShares(getActivity().getIntent());
+        collectAutofillSave(getActivity().getIntent());
         trashPrompt = getActivity().registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(), result -> {
             PluginCall call = trashCall;
             trashCall = null;
@@ -173,6 +174,7 @@ public class TeleDriveNativePlugin extends Plugin {
     protected void handleOnNewIntent(Intent intent) {
         super.handleOnNewIntent(intent);
         if (collectShares(intent)) notifyListeners("shared", new JSObject());
+        if (collectAutofillSave(intent)) notifyListeners("autofillSave", new JSObject());
     }
 
     // ---- Permissions ----
@@ -535,39 +537,11 @@ public class TeleDriveNativePlugin extends Plugin {
 
     // ---- TeleWarden ----
 
-    /** Which copy is the latest (a newer copy cancels the older one's clearing). */
-    private int clipSerial = 0;
-
-    /**
-     * Copy a secret: marked sensitive, so the keyboard's clipboard strip and Android's preview don't show it, and
-     * cleared after `clearAfter` seconds (0 = never) if it's still what's on the clipboard.
-     */
+    /** Copy a secret, marked sensitive and cleared later (see VaultSecrets.copySecret). */
     @PluginMethod
     public void copySecret(PluginCall call) {
-        String text = call.getString("text", "");
-        long clearAfter = longArg(call, "clearAfter", 0);
-        getActivity().runOnUiThread(() -> {
-            ClipboardManager cm = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("TeleWarden", text);
-            PersistableBundle extras = new PersistableBundle();
-            // ClipDescription.EXTRA_IS_SENSITIVE from Android 13; keyboards read the same key on older versions
-            extras.putBoolean(Build.VERSION.SDK_INT >= 33 ? ClipDescription.EXTRA_IS_SENSITIVE : "android.content.extra.IS_SENSITIVE", true);
-            clip.getDescription().setExtras(extras);
-            cm.setPrimaryClip(clip);
-            int mine = ++clipSerial;
-            if (clearAfter > 0) {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (mine != clipSerial) return;
-                    // In the background Android may not let the app read the clipboard: then it's cleared anyway
-                    ClipData now = cm.getPrimaryClip();
-                    CharSequence current = now != null && now.getItemCount() > 0 ? now.getItemAt(0).getText() : null;
-                    if (now != null && (current == null || !current.toString().equals(text))) return;
-                    if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip();
-                    else cm.setPrimaryClip(ClipData.newPlainText("", ""));
-                }, clearAfter * 1000);
-            }
-            call.resolve();
-        });
+        VaultSecrets.copySecret(getContext(), call.getString("text", ""), longArg(call, "clearAfter", 0));
+        call.resolve();
     }
 
     /** Keep TeleWarden out of screenshots, screen recordings and the app switcher (FLAG_SECURE). */
@@ -581,139 +555,113 @@ public class TeleDriveNativePlugin extends Plugin {
         call.resolve();
     }
 
-    // Fingerprint unlock: the vault key is encrypted with a Keystore key that only works right after a fingerprint
-    // (BiometricPrompt with a CryptoObject). Adding a fingerprint to the phone makes that key unusable.
-
-    private static final String BIO_ALIAS = "telewarden_bio";
-    private static final String BIO_PREFS = "telewarden_bio";
-
     @PluginMethod
     public void biometricAvailable(PluginCall call) {
-        int r = BiometricManager.from(getContext()).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG);
+        boolean[] r = VaultSecrets.biometricAvailable(getContext());
         JSObject res = new JSObject();
-        res.put("available", r == BiometricManager.BIOMETRIC_SUCCESS);
-        res.put("enrolled", r != BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED);
+        res.put("available", r[0]);
+        res.put("enrolled", r[1]);
         call.resolve(res);
     }
 
-    private SecretKey bioKey(boolean fresh) throws Exception {
-        KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
-        ks.load(null);
-        if (!fresh && ks.containsAlias(BIO_ALIAS)) return (SecretKey) ks.getKey(BIO_ALIAS, null);
-        KeyGenerator kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
-        KeyGenParameterSpec.Builder spec = new KeyGenParameterSpec.Builder(BIO_ALIAS, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .setUserAuthenticationRequired(true)
-            .setInvalidatedByBiometricEnrollment(true);
-        if (Build.VERSION.SDK_INT >= 30) spec.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG);
-        kg.init(spec.build());
-        return kg.generateKey();
-    }
+    /** The fingerprint answer as the plugin's result: `data` (unlock), `cancelled`, or rejected with a code. */
+    private static VaultSecrets.Done bioDone(PluginCall call) {
+        return new VaultSecrets.Done() {
+            @Override
+            public void ok(String data) {
+                JSObject res = new JSObject();
+                if (data != null) res.put("data", data);
+                call.resolve(res);
+            }
 
-    private void bioPrompt(String title, Cipher cipher, PluginCall call, Consumer<Cipher> done) {
-        getActivity().runOnUiThread(() -> {
-            BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
-                .setTitle(title)
-                .setSubtitle("TeleWarden")
-                .setNegativeButtonText("Use master password")
-                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-                .build();
-            BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), ContextCompat.getMainExecutor(getContext()),
-                new BiometricPrompt.AuthenticationCallback() {
-                    @Override
-                    public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                        BiometricPrompt.CryptoObject crypto = result.getCryptoObject();
-                        if (crypto == null || crypto.getCipher() == null) call.reject("Fingerprint unlock failed");
-                        else done.accept(crypto.getCipher());
-                    }
+            @Override
+            public void cancelled() {
+                JSObject res = new JSObject();
+                res.put("cancelled", true);
+                call.resolve(res);
+            }
 
-                    @Override
-                    public void onAuthenticationError(int code, CharSequence message) {
-                        if (code == BiometricPrompt.ERROR_NEGATIVE_BUTTON || code == BiometricPrompt.ERROR_USER_CANCELED || code == BiometricPrompt.ERROR_CANCELED) {
-                            JSObject res = new JSObject();
-                            res.put("cancelled", true);
-                            call.resolve(res);
-                        } else call.reject(message.toString());
-                    }
-                });
-            prompt.authenticate(info, new BiometricPrompt.CryptoObject(cipher));
-        });
-    }
-
-    private void clearBio() {
-        try {
-            KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
-            ks.load(null);
-            ks.deleteEntry(BIO_ALIAS);
-        } catch (Exception ignored) {
-        }
-        getContext().getSharedPreferences(BIO_PREFS, Context.MODE_PRIVATE).edit().clear().apply();
+            @Override
+            public void failed(String message, String code) {
+                if (code != null) call.reject(message, code);
+                else call.reject(message);
+            }
+        };
     }
 
     /** Turn on fingerprint unlock: encrypt `data` (the vault key, base64) after a fingerprint. */
     @PluginMethod
     public void biometricEnable(PluginCall call) {
-        byte[] data = Base64.decode(call.getString("data", ""), Base64.NO_WRAP);
-        try {
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.ENCRYPT_MODE, bioKey(true));
-            bioPrompt("Turn on fingerprint unlock", cipher, call, c -> {
-                try {
-                    byte[] ct = c.doFinal(data);
-                    getContext().getSharedPreferences(BIO_PREFS, Context.MODE_PRIVATE).edit()
-                        .putString("iv", Base64.encodeToString(c.getIV(), Base64.NO_WRAP))
-                        .putString("ct", Base64.encodeToString(ct, Base64.NO_WRAP))
-                        .apply();
-                    call.resolve(new JSObject());
-                } catch (Exception e) {
-                    call.reject(e.getMessage());
-                } finally {
-                    java.util.Arrays.fill(data, (byte) 0);
-                }
-            });
-        } catch (Exception e) {
-            java.util.Arrays.fill(data, (byte) 0);
-            call.reject(e.getMessage());
-        }
+        VaultSecrets.biometricEnable((FragmentActivity) getActivity(), call.getString("data", ""), bioDone(call));
     }
 
     /** The vault key (base64) after a fingerprint; `cancelled` if the person chose the master password instead. */
     @PluginMethod
     public void biometricUnlock(PluginCall call) {
-        android.content.SharedPreferences prefs = getContext().getSharedPreferences(BIO_PREFS, Context.MODE_PRIVATE);
-        String iv = prefs.getString("iv", null);
-        String ct = prefs.getString("ct", null);
-        if (iv == null || ct == null) {
-            call.reject("Fingerprint unlock isn't set up", "NOT_SET");
-            return;
-        }
-        try {
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, bioKey(false), new GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)));
-            bioPrompt("Unlock TeleWarden", cipher, call, c -> {
-                try {
-                    JSObject res = new JSObject();
-                    res.put("data", Base64.encodeToString(c.doFinal(Base64.decode(ct, Base64.NO_WRAP)), Base64.NO_WRAP));
-                    call.resolve(res);
-                } catch (Exception e) {
-                    call.reject(e.getMessage());
-                }
-            });
-        } catch (KeyPermanentlyInvalidatedException e) {
-            // A fingerprint was added or removed: set it up again with the master password
-            clearBio();
-            call.reject("Fingerprints changed on this phone. Unlock with your master password and turn fingerprint unlock on again.", "INVALIDATED");
-        } catch (Exception e) {
-            call.reject(e.getMessage());
-        }
+        VaultSecrets.biometricUnlock((FragmentActivity) getActivity(), bioDone(call));
     }
 
     @PluginMethod
     public void biometricDisable(PluginCall call) {
-        clearBio();
+        VaultSecrets.biometricDisable(getContext());
         call.resolve();
+    }
+
+    // ---- TeleWarden autofill (TeleWardenAutofillService) ----
+
+    /** { supported, enabled }: is TeleDrive Android's autofill service? */
+    @PluginMethod
+    public void autofillStatus(PluginCall call) {
+        JSObject res = new JSObject();
+        boolean supported = false;
+        boolean enabled = false;
+        if (Build.VERSION.SDK_INT >= 26) {
+            android.view.autofill.AutofillManager am = getContext().getSystemService(android.view.autofill.AutofillManager.class);
+            supported = am != null && am.isAutofillSupported();
+            enabled = am != null && am.hasEnabledAutofillServices();
+        }
+        res.put("supported", supported);
+        res.put("enabled", enabled);
+        call.resolve(res);
+    }
+
+    /** Android's "Autofill service" setting, with TeleDrive to pick. */
+    @PluginMethod
+    public void autofillSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE, Uri.parse("package:" + getContext().getPackageName()));
+            getActivity().startActivity(intent);
+        } catch (Exception e) {
+            // Some phones lack that screen: the general settings list then
+            getActivity().startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
+        call.resolve();
+    }
+
+    /** A login another app offered to save ("Save to TeleWarden?" → Save), taken once. */
+    private static JSObject pendingSave;
+
+    static boolean collectAutofillSave(Intent intent) {
+        if (intent == null || !intent.hasExtra(TeleWardenAutofillService.EXTRA_SAVE_PASSWORD)) return false;
+        JSObject save = new JSObject();
+        save.put("kind", intent.getStringExtra(TeleWardenAutofillService.EXTRA_SAVE_KIND));
+        save.put("target", intent.getStringExtra(TeleWardenAutofillService.EXTRA_SAVE_TARGET));
+        save.put("label", intent.getStringExtra(TeleWardenAutofillService.EXTRA_SAVE_LABEL));
+        save.put("username", intent.getStringExtra(TeleWardenAutofillService.EXTRA_SAVE_USERNAME));
+        save.put("password", intent.getStringExtra(TeleWardenAutofillService.EXTRA_SAVE_PASSWORD));
+        pendingSave = save;
+        // Only once: not again when the activity is recreated
+        intent.removeExtra(TeleWardenAutofillService.EXTRA_SAVE_PASSWORD);
+        intent.removeExtra(TeleWardenAutofillService.EXTRA_SAVE_USERNAME);
+        return true;
+    }
+
+    @PluginMethod
+    public void takeAutofillSave(PluginCall call) {
+        JSObject res = new JSObject();
+        if (pendingSave != null) res.put("save", pendingSave);
+        pendingSave = null;
+        call.resolve(res);
     }
 
     /** Scan a QR code with Google's scanner screen (2FA setup codes, Google Authenticator exports). */

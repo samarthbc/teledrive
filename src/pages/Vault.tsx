@@ -21,6 +21,7 @@ import { TYPE_ICONS } from '../components/vault/parts'
 import { RecoverDialog, ReminderDialog, reminderDue, ResetDialog, VaultLock, VaultSetup } from '../components/vault/VaultGate'
 import { GeneratorPanel, VaultSettings } from '../components/vault/VaultPanels'
 import { PROBLEM_INFO, ReportPanel, useReport } from '../components/vault/Report'
+import { SaveLoginDialog, usePendingSave } from '../components/vault/SaveLogin'
 import type { Problem } from '../vault/report'
 import { useSettings } from '../lib/settings'
 import { isAndroid } from '../native/android'
@@ -109,6 +110,7 @@ export default function VaultPage() {
   const [modal, setModal] = useState<Modal | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[] } | null>(null)
   const open = status === 'open' && !pendingCode
+  const pendingSave = usePendingSave((s) => s.save)
 
   // Activity keeps it open (at most once a second)
   useEffect(() => {
@@ -445,6 +447,7 @@ export default function VaultPage() {
       )}
 
       {menu && <Menu {...menu} onClose={() => setMenu(null)} />}
+      {open && pendingSave && <SaveLoginDialog key={`${pendingSave.target}:${pendingSave.username}`} />}
       {modal?.type === 'new' && (
         <ItemForm type={modal.itemType} folder={view.kind === 'list' ? view.folder : undefined} onClose={() => setModal(null)} onSaved={(i) => ((waitingFor.current = i.id), setSelected(i.id))} />
       )}

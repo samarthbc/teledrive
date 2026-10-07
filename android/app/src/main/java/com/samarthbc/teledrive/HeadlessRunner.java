@@ -132,7 +132,7 @@ public final class HeadlessRunner {
     }
 
     /** Serves the web app's files (assets/public) at https://localhost/. */
-    private static class PublicAssets implements WebViewAssetLoader.PathHandler {
+    static class PublicAssets implements WebViewAssetLoader.PathHandler {
         private final Context ctx;
 
         PublicAssets(Context ctx) {

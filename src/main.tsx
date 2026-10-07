@@ -9,6 +9,7 @@ import { initKeepAlive } from './native/keepAlive'
 import { initShareReceiver } from './native/share'
 import { initAutoLock } from './drive/keyring'
 import { initUpdates } from './lib/updates'
+import { initAutofillSave } from './components/vault/SaveLogin'
 
 // Android app features (no-ops on the website)
 initBackButton()
@@ -18,6 +19,8 @@ initShareReceiver()
 initAutoLock()
 // Windows and Android apps: newer versions from GitHub Releases
 initUpdates()
+// Android: "Save to TeleWarden?" from other apps
+initAutofillSave()
 
 // Troubleshooting hook, off unless localStorage 'td-debug' is '1' on this device
 if (localStorage.getItem('td-debug') === '1') {

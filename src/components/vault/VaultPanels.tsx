@@ -187,6 +187,7 @@ export function VaultSettings() {
             <Toggle label="Unlock with fingerprint" disabled={!bioSet && !bio?.available} checked={bioSet} onChange={(v) => (v ? setDialog('bio') : void useVault.getState().disableBio())} />
           </Row>
         )}
+        {isAndroid && <AutofillRow />}
         {(isAndroid || isDesktop) && (
           <Row inline name="Block screenshots" hint="While TeleWarden is open, screenshots, screen recordings and the app switcher show nothing.">
             <Toggle label="Block screenshots" checked={settings.vaultBlockScreenshots} onChange={(v) => setSetting('vaultBlockScreenshots', v)} />
@@ -229,5 +230,33 @@ export function VaultSettings() {
       {dialog === 'bio' && <EnableBioDialog onClose={() => setDialog(null)} />}
       {dialog === 'export' && <ExportDialog onClose={() => setDialog(null)} />}
     </>
+  )
+}
+
+/** Android: TeleDrive as the phone's autofill service (Phase 23). */
+function AutofillRow() {
+  const [status, setStatus] = useState<{ supported: boolean; enabled: boolean } | null>(null)
+  useEffect(() => {
+    const check = () => void Native.autofillStatus().then(setStatus, () => setStatus({ supported: false, enabled: false }))
+    check()
+    // Back from Android's setting
+    const onShow = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', onShow)
+    return () => document.removeEventListener('visibilitychange', onShow)
+  }, [])
+  if (status && !status.supported) return null
+  return (
+    <Row
+      name="Autofill in other apps"
+      hint={
+        status?.enabled
+          ? 'On. In Chrome, also pick Settings → Autofill services → “Autofill using another service”.'
+          : 'Fill logins in apps and in Chrome, and save new ones. Pick TeleDrive as the autofill service.'
+      }
+    >
+      <button type="button" className="btn-secondary" onClick={() => void Native.autofillSettings().catch(() => {})}>
+        {status?.enabled ? 'On · Change' : 'Turn on'}
+      </button>
+    </Row>
   )
 }
