@@ -342,7 +342,7 @@ export default function VaultPage() {
               </div>
               {!wide && <div className="mb-3 flex">{searchBox}</div>}
               {showChips && (
-                <div className="-mx-4 mb-3 flex gap-2.5 overflow-x-auto px-4 pt-1 pb-3 [scrollbar-width:none] md:-mx-4.5 md:px-4.5">
+                <div className="-mx-4 mb-3 flex shrink-0 gap-2.5 overflow-x-auto px-4 pt-1 pb-3 [scrollbar-width:none] md:-mx-4.5 md:px-4.5">
                   {(['all', ...TYPES] as const)
                     .filter((t) => t === 'all' || scope.some((i) => i.ty === t))
                     .map((t) => (
