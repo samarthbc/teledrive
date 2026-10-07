@@ -1,4 +1,5 @@
 import type { AccountConfig, LockInfo } from './crypto'
+import type { VaultConfig } from '../vault/vaultCrypto'
 import { ROOT_LEVEL } from './keyring'
 import { ROOT, type Flags, type Meta, type Secret } from './meta'
 
@@ -104,6 +105,8 @@ export interface Drive {
   configMsgId?: number
   /** The TeleDrive password's check value. */
   encryption?: AccountConfig
+  /** TeleWarden's channel: how the vault key is protected (none until TeleWarden is set up). */
+  vaultConfig?: VaultConfig
 }
 
 export const LOCKED_FILE_NAME = 'Locked file'
@@ -154,6 +157,7 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
   const albums = new Map<string, Album>()
   let configMsgId: number | undefined
   let encryption: AccountConfig | undefined
+  let vaultConfig: VaultConfig | undefined
 
   const sorted = [...records].sort((a, b) => a.msgId - b.msgId)
   for (const r of sorted) {
@@ -162,7 +166,10 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
       if (configMsgId === undefined) {
         configMsgId = r.msgId
         encryption = m.e
+        vaultConfig = m.w
       }
+    } else if (m.t === 'v' || m.t === 'vf') {
+      // TeleWarden's items: read by the vault (store/useVault.ts), not part of the file tree
     } else if (m.t === 'a') {
       // Named once the top level's key is open
       if (!albums.has(m.id)) albums.set(m.id, { id: m.id, name: keys.secretOf(m.e)?.n ?? 'Album', msgId: r.msgId, ts: m.ts || r.date })
@@ -248,7 +255,7 @@ export function buildDrive(records: Iterable<MessageRecord>, keys: KeyView = PLA
     children.set(item.parent, list)
   }
 
-  return { items, children, allChildren, orphanChunks, albums, configMsgId, encryption }
+  return { items, children, allChildren, orphanChunks, albums, configMsgId, encryption, vaultConfig }
 }
 
 function reachesRoot(items: Map<string, Item>, id: string): boolean {

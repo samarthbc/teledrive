@@ -161,7 +161,7 @@ function currentMeta(item: Item): Extract<Meta, { t: 'd' | 'f' }> {
   return current
 }
 
-async function writeMeta(msgId: number, meta: Meta): Promise<void> {
+export async function writeMeta(msgId: number, meta: Meta): Promise<void> {
   const client = await getClient()
   try {
     const res = await client.invoke(new Api.messages.EditMessage({ peer: storagePeer(), id: msgId, message: encode(meta) }))
@@ -333,7 +333,7 @@ export async function deleteMessages(ids: number[]): Promise<void> {
   }
 }
 
-async function refetch(ids: number[]): Promise<void> {
+export async function refetch(ids: number[]): Promise<void> {
   const client = await getClient()
   const res = await client.invoke(
     new Api.channels.GetMessages({ channel: storageChannel(), id: ids.map((id) => new Api.InputMessageID({ id })) }),

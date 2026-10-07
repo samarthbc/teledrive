@@ -1,10 +1,13 @@
 // Caption metadata format. See IMPLEMENTATION.md → "Metadata design".
 
 import type { AccountConfig, LockInfo } from './crypto'
+import type { VaultConfig } from '../vault/vaultCrypto'
 
 export const FORMAT_VERSION = 1
 export const ROOT = 'root'
 export const CAPTION_LIMIT = 1024
+/** Text messages (config, TeleWarden items) can be longer than captions. */
+export const TEXT_LIMIT = 4096
 export const MAX_NAME_LENGTH = 255
 
 export interface Flags {
@@ -91,6 +94,26 @@ export interface ConfigMeta {
   app: 'teledrive'
   /** The TeleDrive password's check value (the master key, wrapped). */
   e?: AccountConfig
+  /** TeleWarden's channel only: how the vault key is protected. */
+  w?: VaultConfig
+}
+
+/** A TeleWarden item (text message). Everything about it, even its type, is sealed in `e` with the vault key. */
+export interface VaultItemMeta {
+  td: 1
+  t: 'v'
+  id: string
+  ts: number
+  e: string
+}
+
+/** A TeleWarden folder (text message); its name is sealed in `e` with the vault key. */
+export interface VaultFolderMeta {
+  td: 1
+  t: 'vf'
+  id: string
+  ts: number
+  e: string
 }
 
 /**
@@ -106,13 +129,14 @@ export interface AlbumMeta {
   e: string
 }
 
-export type Meta = FolderMeta | FileMeta | ChunkMeta | ConfigMeta | AlbumMeta
+export type Meta = FolderMeta | FileMeta | ChunkMeta | ConfigMeta | AlbumMeta | VaultItemMeta | VaultFolderMeta
 
 export class MetaError extends Error {}
 
 export function encode(meta: Meta): string {
   const text = JSON.stringify(meta)
-  if (text.length > CAPTION_LIMIT) throw new MetaError('Metadata too long (name is too long)')
+  const isText = meta.t === 'v' || meta.t === 'vf' || meta.t === 'cfg'
+  if (text.length > (isText ? TEXT_LIMIT : CAPTION_LIMIT)) throw new MetaError(isText ? 'This item is too long' : 'Metadata too long (name is too long)')
   return text
 }
 
@@ -124,6 +148,13 @@ const isHash = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{
 function isLock(v: unknown): v is LockInfo {
   const l = v as LockInfo
   return !!l && typeof l === 'object' && isStr(l.s) && isStr(l.w) && isInt(l.i) && l.i > 0
+}
+
+function isVaultConfig(v: unknown): v is VaultConfig {
+  const c = v as VaultConfig
+  const k = c?.kdf
+  return !!c && typeof c === 'object' && c.v === 1 && !!k && k.a === 'argon2id' && isInt(k.m) && isInt(k.t) && isInt(k.p) &&
+    isStr(c.s) && isStr(c.k) && isStr(c.r) && isInt(c.ct)
 }
 
 function isAccountConfig(v: unknown): v is AccountConfig {
@@ -166,7 +197,11 @@ export function decode(text: string | undefined | null): Meta | null {
       if (!isStr(o.id) || !isInt(o.pt)) return null
       return { td: 1, t: 'c', id: o.id, pt: o.pt }
     case 'cfg':
-      return { td: 1, t: 'cfg', app: 'teledrive', ...(isAccountConfig(o.e) && { e: o.e }) }
+      return { td: 1, t: 'cfg', app: 'teledrive', ...(isAccountConfig(o.e) && { e: o.e }), ...(isVaultConfig(o.w) && { w: o.w }) }
+    case 'v':
+    case 'vf':
+      if (!isStr(o.id) || !isStr(o.e)) return null
+      return { td: 1, t: o.t, id: o.id, ts: isInt(o.ts) ? o.ts : 0, e: o.e }
     case 'a':
       if (!isStr(o.id) || !sealed) return null
       return { td: 1, t: 'a', id: o.id, ts: isInt(o.ts) ? o.ts : 0, x: x ?? {}, e: sealed }

@@ -6,6 +6,12 @@ import { create } from 'zustand'
 export type Density = 'comfortable' | 'compact'
 export const AUTO_LOCK_CHOICES = [1, 5, 15, 30] as const
 export type AutoLockMinutes = (typeof AUTO_LOCK_CHOICES)[number]
+/** TeleWarden locks after this many idle minutes; 0 = only when TeleDrive closes. */
+export const VAULT_LOCK_CHOICES = [1, 5, 15, 30, 0] as const
+export type VaultLockMinutes = (typeof VAULT_LOCK_CHOICES)[number]
+/** Copied passwords leave the clipboard after this many seconds; 0 = never. */
+export const CLIPBOARD_CHOICES = [10, 30, 60, 0] as const
+export type ClipboardSeconds = (typeof CLIPBOARD_CHOICES)[number]
 
 export interface Settings {
   density: Density
@@ -15,9 +21,13 @@ export interface Settings {
   autoLockMinutes: AutoLockMinutes
   /** Don't remember the TeleDrive password on this device: ask for it every time TeleDrive starts. */
   lockOnClose: boolean
+  vaultLockMinutes: VaultLockMinutes
+  clipboardSeconds: ClipboardSeconds
 }
 
-export const DEFAULT_SETTINGS: Settings = { density: 'comfortable', thumbnails: true, autoLockMinutes: 5, lockOnClose: false }
+export const DEFAULT_SETTINGS: Settings = {
+  density: 'comfortable', thumbnails: true, autoLockMinutes: 5, lockOnClose: false, vaultLockMinutes: 5, clipboardSeconds: 30,
+}
 
 const KEY = 'teledrive.settings'
 
@@ -37,6 +47,12 @@ export function parseSettings(raw: string | null): Settings {
       ? (saved.autoLockMinutes as AutoLockMinutes)
       : d.autoLockMinutes,
     lockOnClose: typeof saved.lockOnClose === 'boolean' ? saved.lockOnClose : d.lockOnClose,
+    vaultLockMinutes: VAULT_LOCK_CHOICES.includes(saved.vaultLockMinutes as VaultLockMinutes)
+      ? (saved.vaultLockMinutes as VaultLockMinutes)
+      : d.vaultLockMinutes,
+    clipboardSeconds: CLIPBOARD_CHOICES.includes(saved.clipboardSeconds as ClipboardSeconds)
+      ? (saved.clipboardSeconds as ClipboardSeconds)
+      : d.clipboardSeconds,
   }
 }
 

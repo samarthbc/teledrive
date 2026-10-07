@@ -87,24 +87,24 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array<ArrayBuffer> {
 // ---- AES-GCM helpers ----
 
 /** Encrypt bytes with a random IV; returns base64(IV + ciphertext). */
-async function wrapBytes(key: CryptoKey, raw: Uint8Array<ArrayBuffer>): Promise<string> {
+export async function wrapBytes(key: CryptoKey, raw: Uint8Array<ArrayBuffer>): Promise<string> {
   const iv = randomBytes(12)
   return toB64(concat(iv, new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, raw))))
 }
 
 /** Throws (OperationError) if the key is wrong or the data was changed. */
-async function unwrapBytes(key: CryptoKey, wrapped: string): Promise<Uint8Array<ArrayBuffer>> {
+export async function unwrapBytes(key: CryptoKey, wrapped: string): Promise<Uint8Array<ArrayBuffer>> {
   const data = fromB64(wrapped)
   return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: data.subarray(0, 12) }, key, data.subarray(12)))
 }
 
-async function importAes(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+export async function importAes(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt'])
   raw.fill(0)
   return key
 }
 
-async function passwordKey(password: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<CryptoKey> {
+export async function passwordKey(password: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey('raw', enc.encode(password.normalize('NFC')), 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
     { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
