@@ -1,0 +1,1501 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TeleWarden Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400..900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: TeleDrive's Soft Swiss shell (sidebar · list · detail on desktop, tabs + sheets on phone) inside a prototype stage */
+:root{
+  --surface:#E6E6E3;--sd:#C4C4C0;--sl:#FFFFFF;--line:#CFCFCB;--text:#111111;--muted:#4A4A4A;
+  --red:#D0021B;--red-text:#B80218;--on-red:#FFFFFF;--scrim:rgba(17,17,17,.28);
+  --lift:0 18px 48px rgba(17,17,17,.24),0 0 0 1px rgba(17,17,17,.06);
+  --kb:#2F5BD3;--kb-soft:#D9E2F6;--fillhi:#F1E6B0;--bezel:#0E0E10;
+  --font:'Archivo',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --surface:#1F2023;--sd:#141517;--sl:#2B2C30;--line:#34353A;--text:#F2F2F2;--muted:#A8A8A8;
+  --red:#E5222F;--red-text:#FF5A63;--scrim:rgba(0,0,0,.5);--lift:0 18px 48px rgba(0,0,0,.6),0 0 0 1px #34353A;
+  --kb:#8FAEFF;--kb-soft:#26304A;--fillhi:#4A4224;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --surface:#1F2023;--sd:#141517;--sl:#2B2C30;--line:#34353A;--text:#F2F2F2;--muted:#A8A8A8;
+  --red:#E5222F;--red-text:#FF5A63;--scrim:rgba(0,0,0,.5);--lift:0 18px 48px rgba(0,0,0,.6),0 0 0 1px #34353A;
+  --kb:#8FAEFF;--kb-soft:#26304A;--fillhi:#4A4224;color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--surface);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:0 32px;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+svg.lucide{width:17px;height:17px;stroke-width:1.8;flex-shrink:0}
+a{color:inherit}
+
+/* depth */
+.raised-xs{box-shadow:2px 2px 4px var(--sd),-2px -2px 4px var(--sl)}
+.raised-sm{box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.raised{box-shadow:4px 4px 8px var(--sd),-4px -4px 8px var(--sl)}
+.raised-md{box-shadow:6px 6px 12px var(--sd),-6px -6px 12px var(--sl)}
+.raised-lg{box-shadow:8px 8px 16px var(--sd),-8px -8px 16px var(--sl)}
+.raised-xl{box-shadow:11px 11px 22px var(--sd),-11px -11px 22px var(--sl)}
+.pressed-xs{box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl)}
+.pressed{box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl)}
+.pressed-lg{box-shadow:inset 5px 5px 10px var(--sd),inset -5px -5px 10px var(--sl)}
+
+/* type */
+.h1{font-size:44px;line-height:1;font-weight:900;letter-spacing:-.04em;margin:0}
+.h2{font-size:22px;font-weight:900;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.cap{font-size:12.5px;color:var(--muted)}
+.label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+.label-swiss{display:flex;gap:8px;align-items:baseline;border-top:2px solid var(--text);padding-top:7px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+.label-swiss b{color:var(--red-text)}
+.mono{font-family:var(--mono);font-size:14px;letter-spacing:.01em}
+.mono .d{color:var(--red-text)}
+.mono .s{color:var(--muted)}
+.muted{color:var(--muted)}
+.red{color:var(--red-text)}
+.num{font-variant-numeric:tabular-nums}
+
+/* controls */
+.btn{height:44px;padding:0 18px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:14px;font-weight:700;white-space:nowrap;transition:box-shadow .12s ease-out;box-shadow:4px 4px 8px var(--sd),-4px -4px 8px var(--sl)}
+.btn:active:not(:disabled){box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl)}
+.btn-primary{background:var(--red);color:var(--on-red)}
+.btn-primary svg.lucide{stroke-width:2.2}
+.btn-danger{color:var(--red-text)}
+.btn-danger-solid{background:var(--red);color:var(--on-red)}
+.btn-ghost{box-shadow:none}
+.btn-full{width:100%}
+.icon-btn{width:44px;height:44px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;box-shadow:4px 4px 8px var(--sd),-4px -4px 8px var(--sl);transition:box-shadow .12s}
+.icon-btn svg.lucide{width:19px;height:19px}
+.icon-btn:active,.icon-btn.on{box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl);color:var(--red-text)}
+.icon-btn.flat{box-shadow:none;width:40px;height:40px}
+.icon-btn.flat:hover{box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.input{height:46px;width:100%;padding:0 14px;border:0;border-radius:6px;background:var(--surface);box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl);font-size:14px}
+textarea.input{height:auto;min-height:84px;padding:12px 14px;resize:vertical}
+select.input{appearance:none;cursor:pointer}
+.input::placeholder{color:var(--muted)}
+.input-wrap{position:relative;display:flex;align-items:center}
+.input-wrap>svg.lucide.lead{position:absolute;left:14px;color:var(--muted);pointer-events:none}
+.input-wrap>.input.has-lead{padding-left:42px}
+.input-wrap>.trail{position:absolute;right:4px;display:flex;gap:2px}
+.input-wrap>.trail .icon-btn{width:38px;height:38px;box-shadow:none}
+.input-wrap>.input.has-trail{padding-right:90px}
+.fld{display:grid;gap:8px}
+.fld>label{font-size:13px;font-weight:700}
+.hint{font-size:12px;color:var(--muted)}
+.err{font-size:12px;color:var(--red-text);font-weight:600}
+.chip{padding:9px 15px;border-radius:6px;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.chip.on{box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl);color:var(--red-text);font-weight:800}
+.chips{display:flex;gap:10px;padding:4px 4px 8px;overflow-x:auto;scrollbar-width:none}
+.seg{display:inline-flex;padding:4px;border-radius:6px;gap:2px;box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl);max-width:100%;overflow-x:auto;scrollbar-width:none}
+.seg button{padding:7px 12px;border-radius:5px;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+.seg button.on{background:var(--surface);color:var(--red-text);font-weight:800;box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.seg button svg.lucide{width:15px;height:15px}
+.toggle{width:54px;height:30px;border-radius:15px;position:relative;flex-shrink:0;box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl);transition:background .15s}
+.toggle::after{content:"";position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;background:var(--surface);box-shadow:2px 2px 4px var(--sd),-1px -1px 3px var(--sl);transition:left .15s}
+.toggle.on{background:var(--red);box-shadow:inset 2px 2px 5px rgba(0,0,0,.28)}
+.toggle.on::after{left:28px;box-shadow:1px 1px 3px rgba(0,0,0,.3)}
+.check{width:24px;height:24px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl);flex-shrink:0}
+.check.on{background:var(--red);color:var(--on-red);box-shadow:2px 2px 4px var(--sd),-2px -2px 4px var(--sl)}
+.check svg.lucide{width:15px;height:15px;stroke-width:3}
+.radio{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl);flex-shrink:0}
+.radio.on::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--red)}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:6px;white-space:nowrap}
+.badge.out{border:1.5px solid var(--red-text);color:var(--red-text)}
+.badge.solid{background:var(--red);color:var(--on-red)}
+.badge.neutral{box-shadow:2px 2px 4px var(--sd),-2px -2px 4px var(--sl)}
+.note{display:flex;gap:10px;align-items:flex-start;border-left:3px solid var(--red);padding:4px 0 4px 12px;font-size:13px}
+.note svg.lucide{color:var(--red-text);margin-top:1px}
+.panel{border-radius:6px;box-shadow:8px 8px 16px var(--sd),-8px -8px 16px var(--sl);background:var(--surface)}
+.tile{width:44px;height:44px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:900;font-size:18px;letter-spacing:-.02em;box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.tile svg.lucide{width:21px;height:21px}
+.tile.lg{width:56px;height:56px;font-size:24px}
+.spinner{width:20px;height:20px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--red);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* prototype bar */
+.proto{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;padding-block:16px 18px;max-width:1440px;margin:0 auto}
+.proto-name{display:flex;flex-direction:column;margin-right:auto;min-width:0}
+.proto-name b{font-size:20px;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+.proto-name span{font-size:12px;color:var(--muted)}
+.proto .grp{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}
+.proto .grp .label{color:var(--muted)}
+.try{max-width:1440px;margin:22px auto 0;display:grid;gap:10px}
+.try ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:8px 22px}
+.try li{font-size:13px;display:flex;gap:7px;align-items:baseline;max-width:100%}
+.try li::before{content:"/";color:var(--red-text);font-weight:900}
+
+/* stage */
+.stage{max-width:1440px;margin:0 auto;display:flex;justify-content:center;gap:40px;align-items:flex-start;flex-wrap:wrap}
+.app{position:relative;overflow:hidden;background:var(--surface)}
+.app.desk{width:100%;height:clamp(660px,calc(100vh - 120px),900px);display:grid;grid-template-columns:256px minmax(0,1fr);gap:18px;padding:18px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line)}
+.device{padding:11px;border-radius:46px;background:var(--bezel);flex-shrink:0}
+.device .app{width:375px;height:780px;border-radius:36px}
+.app.ph{display:flex;flex-direction:column}
+.app.ph.bare{width:100%;height:calc(100vh - 140px);min-height:620px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line)}
+.statusbar{height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 26px 0 30px;font-size:13px;font-weight:700}
+.statusbar span:last-child{display:flex;gap:5px}
+.statusbar svg.lucide{width:15px;height:15px}
+
+/* sidebar */
+.side{display:flex;flex-direction:column;gap:4px;padding:20px 14px;overflow-y:auto;min-height:0}
+.brand{display:flex;align-items:center;gap:12px;padding:4px 6px;border-radius:6px;text-align:left;margin-bottom:14px}
+.logo{width:40px;height:40px;border-radius:6px;background:var(--red);color:var(--on-red);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.logo svg.lucide{width:21px;height:21px;stroke-width:2.2}
+.brand b{display:block;font-size:18px;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+.brand small{display:block;font-size:12px;color:var(--muted)}
+.picker{border-radius:6px;padding:6px;margin-bottom:14px;display:grid;gap:2px}
+.picker button{height:40px;display:flex;align-items:center;gap:12px;padding:0 12px;border-radius:6px;font-size:14px;font-weight:600;text-align:left}
+.picker button:hover{box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl)}
+.picker button .new{margin-left:auto}
+.nav{display:grid;gap:3px}
+.nav-link{height:42px;display:flex;align-items:center;gap:12px;padding:0 14px;border-radius:6px;font-size:14px;font-weight:600;color:var(--muted);width:100%;text-align:left;transition:box-shadow .12s,color .12s}
+.nav-link svg.lucide{width:19px;height:19px}
+.nav-link:hover:not(:disabled){color:var(--text)}
+.nav-link.on{color:var(--red-text);font-weight:800;box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl)}
+.nav-link .n{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted)}
+.nav-link .n.alert{color:var(--red-text);font-weight:800}
+.nav-sec{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 4px}
+.nav-sec .label{color:var(--muted)}
+.nav-sec button{color:var(--muted);display:flex}
+.nav-sec button:hover{color:var(--red-text)}
+.vcard{border-radius:6px;padding:14px;margin-top:auto;display:grid;gap:6px}
+.vcard .big{font-size:22px;font-weight:900;letter-spacing:-.02em;line-height:1}
+.stat{display:flex;align-items:center;gap:8px;height:30px;font-size:12px;width:100%;text-align:left;border-radius:6px;padding:0 4px}
+.stat svg.lucide{width:14px;height:14px;color:var(--muted)}
+.stat b{font-weight:600}
+.stat .v{margin-left:auto;color:var(--muted);white-space:nowrap}
+.stat.alert svg.lucide,.stat.alert .v{color:var(--red-text);font-weight:800}
+button.stat:hover{box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.rule{border-top:2px solid var(--line);margin:6px 0 2px}
+
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;gap:18px}
+.topbar{display:flex;gap:14px;align-items:center}
+.topbar .input-wrap{flex:1}
+.avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0;box-shadow:3px 3px 6px var(--sd),-3px -3px 6px var(--sl)}
+.head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.head .count{font-size:14px;color:var(--muted);font-weight:600}
+.head .act{margin-left:auto;align-self:center}
+.crumb{font-size:15px;font-weight:700;color:var(--muted);display:flex;gap:8px;align-items:center}
+.crumb button:hover{color:var(--text)}
+.crumb i,.crumb .sl{color:var(--red-text);font-weight:900}
+.split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(330px,400px);gap:18px}
+.split>.panel{min-height:0;overflow-y:auto}
+.listp{padding:8px}
+.row{display:flex;align-items:center;gap:14px;padding:10px 12px;border-radius:6px;width:100%;text-align:left;cursor:pointer;position:relative}
+.row:hover .quick{opacity:1}
+.row.sel{box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl)}
+.row .info{min-width:0;flex:1}
+.row .name{font-size:15px;font-weight:700;display:flex;gap:8px;align-items:center;min-width:0}
+.row .name span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .name svg.lucide{width:14px;height:14px;color:var(--red-text);fill:var(--red-text)}
+.row .sub{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.row .quick{display:flex;gap:2px;opacity:0;transition:opacity .12s}
+.row.sel .quick{opacity:1}
+.row .code{font-family:var(--mono);font-size:12.5px;font-weight:700;display:flex;gap:6px;align-items:center}
+.grouphead{padding:14px 12px 6px}
+
+/* detail */
+.detail{padding:22px;display:flex;flex-direction:column;gap:18px}
+.dhead{display:flex;gap:14px;align-items:center}
+.dhead .t{min-width:0;flex:1}
+.dhead .t b{display:block;font-size:20px;font-weight:900;letter-spacing:-.02em;line-height:1.15;overflow-wrap:anywhere}
+.fields{border-top:2px solid var(--text)}
+.f{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:2px solid var(--line);min-height:62px}
+.f .fv{min-width:0;flex:1}
+.f .fl{font-size:12px;color:var(--muted);font-weight:600}
+.f .val{font-size:15px;font-weight:600;overflow-wrap:anywhere;white-space:pre-wrap}
+.f .val.mono{font-size:14.5px}
+.f .val a{text-decoration:none}
+.f .val a:hover{text-decoration:underline}
+.f .acts{display:flex;gap:2px;flex-shrink:0}
+.meter{display:flex;gap:4px;margin-top:6px;align-items:center}
+.meter i{display:block;height:5px;flex:1;border-radius:3px;box-shadow:inset 1px 1px 2px var(--sd),inset -1px -1px 2px var(--sl)}
+.meter i.f1{background:var(--red)}
+.meter i.f2{background:var(--muted)}
+.meter i.f3,.meter i.f4{background:var(--text)}
+.meter span{font-size:12px;font-weight:700;margin-left:8px;white-space:nowrap;flex:0 0 auto}
+.meter.wide{max-width:none}
+.ring{--p:1;width:22px;height:22px;border-radius:50%;background:conic-gradient(var(--red) calc(var(--p)*360deg),var(--line) 0);position:relative;flex-shrink:0}
+.ring::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--surface)}
+.ring.sm{width:16px;height:16px}
+.ring.sm::after{inset:3px}
+.totp{font-family:var(--mono);font-weight:700;font-size:20px;letter-spacing:.06em}
+.cardviz{border-radius:8px;padding:18px;aspect-ratio:1.586;max-width:320px;width:100%;display:flex;flex-direction:column;justify-content:space-between}
+.cardviz .top{display:flex;justify-content:space-between;align-items:center;font-weight:900;letter-spacing:-.01em}
+.cardviz .chipm{width:34px;height:26px;border-radius:5px;box-shadow:2px 2px 4px var(--sd),-2px -2px 4px var(--sl)}
+.cardviz .numv{font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:.08em}
+.cardviz .bot{display:flex;justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.hist{display:grid;gap:4px;padding:6px 0}
+.hist div{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.metaline{font-size:12px;color:var(--muted)}
+.dactions{display:flex;gap:12px;flex-wrap:wrap;margin-top:auto}
+.well{border-radius:6px;padding:44px 28px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;margin:10px}
+.well .tile{width:72px;height:72px;color:var(--muted)}
+.well .tile svg.lucide{width:32px;height:32px}
+.well p{margin:0;max-width:34ch}
+.well .btns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+
+/* pages */
+.page{flex:1;min-height:0;overflow-y:auto;padding:6px 6px 24px;display:flex;flex-direction:column;gap:20px}
+.genout{border-radius:6px;padding:20px;display:flex;align-items:center;gap:12px}
+.genout .mono{font-size:22px;font-weight:700;flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.35}
+.genrow{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:2px solid var(--line);flex-wrap:wrap}
+.genrow .grow{flex:1;min-width:0}
+.genrow b{font-size:14px}
+input[type=range]{appearance:none;-webkit-appearance:none;height:8px;border-radius:4px;flex:1;min-width:120px;background:var(--surface);box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl);accent-color:var(--red)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:var(--red);box-shadow:2px 2px 4px var(--sd),-1px -1px 3px var(--sl);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radius:50%;background:var(--red);cursor:pointer}
+.opt{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;padding:6px 0;text-align:left}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:4px 18px;width:100%}
+.summary{border-radius:6px;padding:22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.summary .big{font-size:56px;font-weight:900;letter-spacing:-.05em;line-height:.9}
+.rrow{display:flex;align-items:center;gap:14px;padding:14px 16px;width:100%;text-align:left;border-bottom:2px solid var(--line)}
+.rrow:last-child{border-bottom:0}
+.rrow:hover{box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl);border-radius:6px}
+.rrow .grow{flex:1;min-width:0}
+.rrow b{display:block;font-size:15px}
+.rrow .n{font-size:22px;font-weight:900;letter-spacing:-.02em;min-width:28px;text-align:right}
+.rrow .n.alert{color:var(--red-text)}
+.srow{display:flex;align-items:center;gap:16px;padding:16px 18px;border-bottom:2px solid var(--line);flex-wrap:wrap}
+.srow:last-child{border-bottom:0}
+.srow .grow{flex:1;min-width:200px}
+.srow b{display:block;font-size:14.5px}
+.srow .cap{display:block;margin-top:2px;max-width:60ch}
+.srow.sw .grow{min-width:0}
+
+/* gate + intro */
+.center{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;min-height:0}
+.gate{width:100%;max-width:400px;display:grid;gap:16px;justify-items:center;text-align:center}
+.gate .tile{width:84px;height:84px;color:var(--red-text)}
+.gate .tile svg.lucide{width:36px;height:36px}
+.gate form{display:grid;gap:12px;width:100%;text-align:left}
+.intro{width:100%;max-width:980px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.wordmark{font-size:88px;line-height:.88;font-weight:900;letter-spacing:-.055em;margin:0;border-bottom:3px solid var(--text);padding-bottom:18px}
+.wordmark i{color:var(--red);font-style:normal}
+.introcard{border-radius:8px;padding:28px;display:grid;gap:18px;background:var(--surface)}
+.point{display:flex;gap:14px;align-items:flex-start}
+.point .tile{width:40px;height:40px}
+.point .tile svg.lucide{width:19px;height:19px}
+.point b{display:block;font-size:15px}
+.point p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+
+/* overlays */
+.scrim{position:absolute;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;padding:20px;z-index:40;animation:fade .15s}
+.dialog{background:var(--surface);border-radius:6px;box-shadow:var(--lift);width:100%;max-width:500px;max-height:100%;overflow-y:auto;padding:26px;display:grid;gap:18px;animation:pop .15s}
+.dialog .dh{display:flex;gap:14px;align-items:center}
+.dialog .dh .tile{width:40px;height:40px;box-shadow:none;background:var(--surface)}
+.dialog .dh .tile.lock{color:var(--red-text)}
+.dialog .dh .grow{flex:1;min-width:0}
+.dialog .foot{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.app.ph .scrim{align-items:flex-end;padding:0}
+.app.ph .dialog{border-radius:16px 16px 0 0;max-width:none;max-height:92%;animation:up .2s;box-shadow:0 -10px 30px rgba(0,0,0,.18)}
+.handle{width:40px;height:5px;border-radius:3px;margin:-12px auto -4px;box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl)}
+.menu{position:absolute;z-index:50;width:244px;background:var(--surface);border-radius:6px;box-shadow:var(--lift);padding:8px;animation:pop .15s}
+.menu button{height:40px;width:100%;display:flex;align-items:center;gap:12px;padding:0 12px;border-radius:6px;font-size:14px;font-weight:600;text-align:left}
+.menu button:hover,.menu button:focus-visible{box-shadow:inset 2px 2px 4px var(--sd),inset -2px -2px 4px var(--sl)}
+.menu button.danger{color:var(--red-text);font-weight:700}
+.menu hr{border:0;border-top:2px solid var(--line);margin:6px 4px}
+.toasts{position:absolute;right:18px;bottom:18px;display:grid;gap:10px;z-index:60;pointer-events:none}
+.app.ph .toasts{left:14px;right:14px;bottom:100px}
+.toast{background:var(--surface);border-radius:6px;padding:12px 16px;font-size:14px;font-weight:600;display:flex;gap:10px;align-items:center;box-shadow:var(--lift);animation:pop .15s;max-width:380px}
+.toast svg.lucide{width:18px;height:18px}
+@keyframes fade{from{opacity:0}}
+@keyframes pop{from{opacity:0;transform:scale(.98)}}
+@keyframes up{from{transform:translateY(40px);opacity:.4}}
+@keyframes slide{from{transform:translateX(-30px);opacity:.5}}
+
+/* phone */
+.ph-top{display:flex;align-items:center;gap:10px;padding:10px 16px 4px}
+.ph-top .sp{flex:1}
+.ph-body{flex:1;min-height:0;overflow-y:auto;padding:8px 16px 120px;display:flex;flex-direction:column;gap:14px}
+.ph-body .h1{font-size:38px}
+.ph-body .listp{padding:6px}
+.ph-body .row .quick{opacity:1}
+.ph-body .page{overflow:visible;padding:0}
+.ph-body .center{padding:10px 0}
+.bnav{position:absolute;left:12px;right:12px;bottom:12px;height:72px;border-radius:8px;display:flex;justify-content:space-around;align-items:center;background:var(--surface);z-index:20;box-shadow:6px 6px 12px var(--sd),-6px -6px 12px var(--sl)}
+.bnav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;color:var(--muted);min-width:64px}
+.bnav button span.pill{width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center}
+.bnav button svg.lucide{width:20px;height:20px}
+.bnav button.on{color:var(--red-text);font-weight:800}
+.bnav button.on span.pill{box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl)}
+.fab{position:absolute;right:24px;bottom:104px;width:60px;height:60px;border-radius:10px;background:var(--red);color:var(--on-red);display:flex;align-items:center;justify-content:center;z-index:20;box-shadow:6px 6px 12px var(--sd),-6px -6px 12px var(--sl)}
+.fab svg.lucide{width:26px;height:26px;stroke-width:2.4}
+.drawer{position:absolute;inset:0;z-index:45;background:var(--scrim);animation:fade .15s}
+.drawer>.side{position:absolute;left:0;top:0;bottom:0;width:290px;background:var(--surface);box-shadow:var(--lift);animation:slide .2s;padding-top:44px}
+.app.ph .intro{grid-template-columns:1fr;gap:22px}
+.app.ph .wordmark{font-size:58px}
+.app.ph .split{display:block}
+.app.ph .grid2{grid-template-columns:1fr}
+.app.ph .introcard{padding:20px}
+
+/* autofill demo: a made-up third-party app */
+.kb{flex:1;display:flex;flex-direction:column;padding:24px 26px;gap:14px;position:relative;min-height:0;overflow-y:auto}
+.kb-logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:900;letter-spacing:-.02em;color:var(--kb);margin:20px 0 18px}
+.kb-logo span.m{width:40px;height:40px;border-radius:12px;background:var(--kb);color:var(--surface);display:flex;align-items:center;justify-content:center}
+.kb label{font-size:13px;font-weight:600;color:var(--muted)}
+.kb input{height:50px;border-radius:12px;border:1.5px solid var(--line);background:transparent;padding:0 14px;font-size:15px;width:100%}
+.kb input:focus{outline:none;border-color:var(--kb)}
+.kb input.filled{background:var(--fillhi)}
+.kb .go{height:50px;border-radius:25px;background:var(--kb);color:var(--surface);font-weight:800;font-size:15px;margin-top:8px}
+.kb .fieldwrap{position:relative;display:grid;gap:6px}
+.afdrop{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border-radius:10px;box-shadow:var(--lift);z-index:10;overflow:hidden;animation:pop .12s}
+.afdrop button{display:flex;gap:12px;align-items:center;padding:12px 14px;width:100%;text-align:left}
+.afdrop button:hover{background:var(--kb-soft)}
+.afdrop b{display:block;font-size:14px}
+.afdrop small{font-size:12px;color:var(--muted)}
+.afdrop .tw{width:32px;height:32px;border-radius:6px;background:var(--red);color:var(--on-red);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.afdrop .tw svg.lucide{width:16px;height:16px;stroke-width:2.2}
+.welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:30px}
+.bio{display:grid;justify-items:center;gap:14px;text-align:center;padding:8px 0 4px}
+.bio .fp{width:84px;height:84px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--red-text)}
+.bio .fp svg.lucide{width:44px;height:44px}
+.steps{width:340px;max-width:100%;display:grid;gap:14px;padding-top:24px}
+.steps ol{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.steps li{display:flex;gap:12px;padding:12px 14px;border-radius:6px;font-size:14px;color:var(--muted)}
+.steps li b{color:var(--red-text);font-weight:900;min-width:16px}
+.steps li.now{color:var(--text);font-weight:700;box-shadow:inset 3px 3px 6px var(--sd),inset -3px -3px 6px var(--sl)}
+.steps li.done{color:var(--text)}
+.steps li.done b{color:var(--muted)}
+.steps p{margin:0;font-size:13px;color:var(--muted)}
+
+@media (max-width:900px){
+  body{padding-inline:12px}
+  .proto .grp.dev{display:none}
+}
+@media (max-width:430px){.device{padding:0;background:none;border-radius:0;width:100%}.device .app{width:100%;height:calc(100vh - 150px);min-height:640px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+<script>
+(() => {
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const ic = (n, c = '') => `<i data-lucide="${n}"${c ? ` class="${c}"` : ''}></i>`
+const clone = o => JSON.parse(JSON.stringify(o))
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`
+
+// ---------- example data ----------
+const FOLDERS = [
+  { id: 'bank', name: 'Banking' }, { id: 'work', name: 'Work' }, { id: 'shop', name: 'Shopping' }, { id: 'social', name: 'Social' },
+]
+const ITEMS = [
+  { id: 'i1', type: 'login', name: 'Google', fav: true, user: 'sam@example.com', pass: 'Rk7#vLq2!mZp9xWe', totp: 'JBSWY3DPEHPK3PXP', urls: ['https://accounts.google.com'], notes: 'Recovery codes are in the note “Google recovery codes”.', history: [{ p: 'Gm@il2023!', d: '14 Mar 2025' }, { p: 'sammy1234', d: '2 Jan 2024' }], created: '12 Jan 2024', edited: '2 Oct 2026', changed: 95 },
+  { id: 'i2', type: 'login', name: 'Amazon', folder: 'shop', user: 'sam@example.com', pass: 'amazon123', urls: ['https://www.amazon.in'], created: '3 Feb 2023', edited: '3 Mar 2026', changed: 210 },
+  { id: 'i3', type: 'login', name: 'Netflix', user: 'sam@example.com', pass: 'sunshine2019', breached: true, urls: ['https://www.netflix.com'], created: '9 Aug 2019', edited: '9 Jan 2025', changed: 640 },
+  { id: 'i4', type: 'login', name: 'GitHub', folder: 'work', fav: true, user: 'samb-dev', pass: 'v9$Qe2#Lm8!tYr4Kp', totp: 'GEZDGNBVGY3TQOJQ', urls: ['https://github.com'], fields: [{ k: 'Recovery email', v: 'sam@example.com', t: 'text' }], created: '1 Jun 2022', edited: '28 Aug 2026', changed: 40 },
+  { id: 'i5', type: 'login', name: 'HDFC NetBanking', folder: 'bank', user: '48210937', pass: 'Tq!7mW#2xLp9@Vn', urls: ['https://netbanking.hdfcbank.com'], fields: [{ k: 'Transaction PIN', v: '4821', t: 'hidden' }], created: '5 May 2021', edited: '8 Jun 2026', changed: 120 },
+  { id: 'i6', type: 'login', name: 'Instagram', folder: 'social', user: 'sam_b', pass: 'amazon123', urls: ['https://www.instagram.com', 'androidapp://com.instagram.android'], created: '22 Nov 2020', edited: '10 Dec 2025', changed: 300 },
+  { id: 'i7', type: 'login', name: 'Home router', user: 'admin', pass: 'Router@2021', urls: ['http://192.168.1.1'], created: '17 May 2025', edited: '17 May 2025', changed: 508 },
+  { id: 'i8', type: 'login', name: 'Slack', folder: 'work', user: 'sam@company.example', pass: 'Hn4$kP9!zQ2wLx7e', urls: ['https://app.slack.com'], created: '2 Jul 2024', edited: '2 Aug 2025', changed: 420 },
+  { id: 'i9', type: 'login', name: 'Kitebird', folder: 'social', user: 'sam_b', pass: 'Kb#82mQx!pL4', urls: ['https://kitebird.example', 'androidapp://com.kitebird.app'], created: '9 Jul 2026', edited: '9 Jul 2026', changed: 60 },
+  { id: 'c1', type: 'card', name: 'HDFC Visa', folder: 'bank', fav: true, holder: 'SAM B', number: '4532778109344421', exp: '08/29', cvv: '312', created: '4 Apr 2024', edited: '4 Apr 2024' },
+  { id: 'c2', type: 'card', name: 'ICICI Mastercard', folder: 'bank', holder: 'SAM B', number: '5412750012349087', exp: '11/27', cvv: '908', created: '1 Dec 2023', edited: '1 Dec 2023' },
+  { id: 'd1', type: 'identity', name: 'Personal', first: 'Sam', last: 'B', email: 'sam@example.com', phone: '+91 98450 12345', address: '12 MG Road, Bengaluru 560001', passport: 'Z1234567', created: '3 Mar 2024', edited: '3 Mar 2024' },
+  { id: 'n1', type: 'note', name: 'Google recovery codes', folder: 'bank', note: '4821 9930   1177 2045\n6630 1182   9054 7710\n3391 5528   0846 2273', created: '12 Jan 2024', edited: '12 Jan 2024' },
+  { id: 'n2', type: 'note', name: 'Home Wi-Fi', note: 'Network: Home-5G\nPassword: plum-river-otter-42\nGuest: Home-Guest / visit-2026', created: '17 May 2025', edited: '17 May 2025' },
+  { id: 't1', type: 'login', name: 'Yahoo (old)', user: 'sam.b@example.com', pass: 'yahoo2015', urls: ['https://login.yahoo.com'], trashed: true, tdays: 6, created: '1 Jan 2015', edited: '30 Sep 2026', changed: 900 },
+]
+const IMPORTED = ITEMS.filter(i => !i.trashed)
+
+const TYPES = {
+  login: { icon: 'globe', one: 'Login', many: 'Logins' },
+  card: { icon: 'credit-card', one: 'Card', many: 'Cards' },
+  identity: { icon: 'contact', one: 'Identity', many: 'Identities' },
+  note: { icon: 'sticky-note', one: 'Secure note', many: 'Notes' },
+}
+const WORDS = 'acorn amber anchor apple atlas badge bamboo basket beacon berry bison blossom bramble bridge brook cactus candle canyon castle cedar chalk cherry cider cliff clover comet copper coral cotton crane crystal dahlia delta denim desert dune eagle ember falcon fern fiddle flint forest fossil galaxy garnet ginger glacier granite harbor hazel heron hollow honey island ivory jasmine juniper kettle kiwi lagoon lantern lemon lilac lotus magnet mango maple meadow mesa mint mosaic nectar nutmeg oasis ocean olive orbit otter paddle pebble pepper pine planet plum pocket quartz quill raven reef ribbon river robin saffron sage salmon sequoia shadow sierra silver sparrow spruce summit thistle thunder tiger timber topaz tulip tundra velvet violet walnut willow window winter zephyr'.split(' ')
+const COMMON = ['password', 'sunshine', 'qwerty', 'amazon', 'letmein', 'welcome', 'admin', 'iloveyou', 'monkey', 'dragon', 'router', 'yahoo', 'sammy', 'gmail']
+const REPORT = [
+  { k: 'exposed', icon: 'shield-alert', t: 'Exposed in data breaches', d: 'These passwords were found in known breaches. Change them first.' },
+  { k: 'reused', icon: 'copy', t: 'Reused passwords', d: 'One leak opens every account that shares the password.' },
+  { k: 'weak', icon: 'triangle-alert', t: 'Weak passwords', d: 'Short, common or easy to guess.' },
+  { k: 'old', icon: 'clock', t: 'Not changed in over a year', d: 'Worth changing for important accounts.' },
+  { k: 'http', icon: 'lock-open', t: 'Unsecured websites', d: 'The saved address starts with http://, so the password is sent unencrypted.' },
+]
+
+// ---------- state ----------
+const narrow = () => window.innerWidth < 900
+const S = {
+  scenario: 'vault', device: narrow() ? 'phone' : 'desktop', theme: null,
+  unlocked: true, firstRun: false,
+  nav: 'all', chip: 'all', q: '', sel: 'i1', reveal: {}, histOpen: false, report: null,
+  dialog: null, menu: null, picker: false, drawer: false, sheet: false,
+  folders: clone(FOLDERS), items: clone(ITEMS),
+  settings: { lockAfter: 5, clip: 30, bio: true, pin: false, autofill: false, totpList: true, noShots: true, breach: true },
+  gen: { mode: 'password', len: 20, upper: true, lower: true, digits: true, symbols: true, avoid: false, words: 4, sep: '-', cap: true, num: true, value: '', history: [] },
+  lastActive: Date.now(), toasts: [], checking: false,
+  setup: { step: 1, code: '' }, master: null, hint: '', tries: 0, waitUntil: 0, hintShown: false, codeSaved: false, bioReady: false,
+  af: null,
+}
+const isPhone = () => S.device === 'phone' || narrow()
+const newAF = () => ({ step: 'idle', user: '', pass: '', locked: true, filled: false, next: null })
+S.af = newAF()
+
+// ---------- logic ----------
+function strength(p) {
+  if (!p) return { score: 0, label: '' }
+  let pool = 0
+  if (/[a-z]/.test(p)) pool += 26
+  if (/[A-Z]/.test(p)) pool += 26
+  if (/\d/.test(p)) pool += 10
+  if (/[^a-zA-Z\d]/.test(p)) pool += 32
+  let bits = p.length * Math.log2(pool || 1)
+  const base = p.toLowerCase().replace(/[^a-z]/g, '')
+  if (COMMON.some(w => base.includes(w)) || /^(.)\1+$/.test(p)) bits = Math.min(bits, 24)
+  const score = bits < 40 ? 1 : bits < 60 ? 2 : bits < 80 ? 3 : 4
+  return { score, label: ['', 'Weak', 'Fair', 'Strong', 'Very strong'][score] }
+}
+function meter(p) {
+  const { score, label } = strength(p)
+  return `${[1, 2, 3, 4].map(n => `<i class="${n <= score ? 'f' + score : ''}"></i>`).join('')}<span class="${score === 1 ? 'red' : ''}">${label || '&nbsp;'}</span>`
+}
+function issues(i) {
+  if (i.type !== 'login' || i.trashed) return []
+  const out = []
+  if (i.breached) out.push({ k: 'exposed', t: 'This password was found in a data breach.' })
+  const n = S.items.filter(o => o.type === 'login' && !o.trashed && o.pass === i.pass).length
+  if (n > 1) out.push({ k: 'reused', t: `This password is also used by ${plural(n - 1, 'other login')}.` })
+  if (strength(i.pass).score <= 1) out.push({ k: 'weak', t: 'This password is weak and easy to guess.' })
+  if (i.changed > 365) out.push({ k: 'old', t: `Not changed in ${Math.floor(i.changed / 30)} months.` })
+  if ((i.urls || []).some(u => u.startsWith('http://'))) out.push({ k: 'http', t: 'This website address uses http://, not https://.' })
+  return out
+}
+const BADGE = { exposed: 'Exposed', reused: 'Reused', weak: 'Weak' }
+function totp(secret, step) {
+  let h = 2166136261
+  const s = secret + ':' + step
+  for (let k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619) >>> 0 }
+  const c = String(h % 1000000).padStart(6, '0')
+  return c.slice(0, 3) + ' ' + c.slice(3)
+}
+const step = () => Math.floor(Date.now() / 30000)
+const left = () => 30 - (Math.floor(Date.now() / 1000) % 30)
+function rnd(n) { const a = new Uint32Array(1); const lim = Math.floor(0x100000000 / n) * n; do crypto.getRandomValues(a); while (a[0] >= lim); return a[0] % n }
+function genPassword(g = S.gen) {
+  const strip = s => (g.avoid ? s.replace(/[lI1O0o]/g, '') : s)
+  const sets = []
+  if (g.lower) sets.push(strip('abcdefghijklmnopqrstuvwxyz'))
+  if (g.upper) sets.push(strip('ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
+  if (g.digits) sets.push(strip('0123456789'))
+  if (g.symbols) sets.push('!@#$%^&*-_+=?')
+  if (!sets.length) sets.push('abcdefghijklmnopqrstuvwxyz')
+  const all = sets.join('')
+  const out = sets.map(s => s[rnd(s.length)])
+  while (out.length < g.len) out.push(all[rnd(all.length)])
+  for (let k = out.length - 1; k > 0; k--) { const j = rnd(k + 1); [out[k], out[j]] = [out[j], out[k]] }
+  return out.join('')
+}
+function genPassphrase(g = S.gen) {
+  const w = Array.from({ length: g.words }, () => WORDS[rnd(WORDS.length)]).map(x => (g.cap ? x[0].toUpperCase() + x.slice(1) : x))
+  if (g.num) { const k = rnd(w.length); w[k] += rnd(10) }
+  return w.join(g.sep)
+}
+function regen() {
+  S.gen.value = S.gen.mode === 'password' ? genPassword() : genPassphrase()
+  S.gen.history.unshift({ v: S.gen.value, t: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
+  S.gen.history = S.gen.history.slice(0, 8)
+}
+function colorize(p) {
+  return [...p].map(ch => (/\d/.test(ch) ? `<span class="d">${esc(ch)}</span>` : /[a-zA-Z]/.test(ch) ? esc(ch) : `<span class="s">${esc(ch)}</span>`)).join('')
+}
+function brandOf(n) {
+  n = (n || '').replace(/\s/g, '')
+  if (/^4/.test(n)) return 'Visa'
+  if (/^(5[1-5]|2[2-7])/.test(n)) return 'Mastercard'
+  if (/^3[47]/.test(n)) return 'Amex'
+  if (/^(60|65|81|82|508)/.test(n)) return 'RuPay'
+  return n ? 'Card' : ''
+}
+const group4 = n => (n || '').replace(/\s/g, '').replace(/(.{4})/g, '$1 ').trim()
+const live = () => S.items.filter(i => !i.trashed)
+const folderName = id => S.folders.find(f => f.id === id)?.name
+const host = u => { try { return u.startsWith('androidapp://') ? 'Android app · ' + u.slice(13) : new URL(u).host } catch { return u } }
+function subOf(i) {
+  if (i.type === 'login') return i.user || host(i.urls?.[0] || '')
+  if (i.type === 'card') return `${brandOf(i.number)} •••• ${(i.number || '').slice(-4)}`
+  if (i.type === 'identity') return [i.first, i.last].filter(Boolean).join(' ') || i.email || ''
+  return (i.note || '').split('\n')[0]
+}
+const ago = d => (d < 31 ? `${d} days ago` : d < 365 ? `${Math.round(d / 30)} months ago` : `${(d / 365).toFixed(1).replace('.0', '')} years ago`)
+
+function visible() {
+  let list = S.items.filter(i => (S.nav === 'trash' ? i.trashed : !i.trashed))
+  if (S.report) list = list.filter(i => issues(i).some(x => x.k === S.report))
+  else if (S.nav === 'fav') list = list.filter(i => i.fav)
+  else if (TYPES[S.nav]) list = list.filter(i => i.type === S.nav)
+  else if (S.nav.startsWith('folder:')) list = list.filter(i => i.folder === S.nav.slice(7))
+  if (chipsShown() && S.chip !== 'all') list = list.filter(i => i.type === S.chip)
+  if (S.q) {
+    const q = S.q.toLowerCase()
+    list = list.filter(i => [i.name, i.user, i.email, i.holder, ...(i.urls || [])].some(v => v && v.toLowerCase().includes(q)))
+  }
+  return list.sort((a, b) => a.name.localeCompare(b.name))
+}
+const chipsShown = () => !S.report && (S.nav === 'all' || S.nav === 'fav' || S.nav.startsWith('folder:'))
+function reportCounts() {
+  const c = {}
+  for (const r of REPORT) c[r.k] = live().filter(i => issues(i).some(x => x.k === r.k)).length
+  c.total = live().filter(i => issues(i).length).length
+  return c
+}
+function pageTitle() {
+  if (S.nav === 'all') return 'All items'
+  if (S.nav === 'fav') return 'Favorites'
+  if (S.nav === 'trash') return 'Trash'
+  if (TYPES[S.nav]) return TYPES[S.nav].many
+  if (S.nav.startsWith('folder:')) return folderName(S.nav.slice(7)) || 'Folder'
+  return { generator: 'Generator', report: 'Security report', settings: 'Settings' }[S.nav]
+}
+
+// ---------- toasts ----------
+let tid = 0
+function toast(text, icon = 'check', opts = {}) {
+  const t = { id: ++tid, text, icon, ...opts, born: Date.now() }
+  if (t.clip) S.toasts = S.toasts.filter(x => !x.clip)
+  S.toasts.push(t)
+  S.toasts = S.toasts.slice(-3)
+  drawToasts()
+}
+function toastText(t) {
+  if (t.clip && !t.cleared) {
+    if (S.settings.clip === 0) return `${t.text} copied`
+    const rem = Math.max(0, S.settings.clip - Math.floor((Date.now() - t.born) / 1000))
+    return `${t.text} copied · clears in <span class="num">${rem}s</span>`
+  }
+  return esc(t.text)
+}
+function drawToasts() {
+  const box = document.querySelector('.app .toasts')
+  if (!box) return
+  box.innerHTML = S.toasts.map(t => `<div class="toast">${ic(t.cleared ? 'clipboard-x' : t.icon, t.icon === 'x' ? 'red' : '')}<span>${toastText(t)}</span></div>`).join('')
+  icons()
+}
+let COPY = {}
+async function copyText(v, label) {
+  try { await navigator.clipboard.writeText(v) } catch { /* the frame may refuse; the toast still shows the flow */ }
+  toast(label, 'clipboard-check', { clip: true })
+}
+
+// ---------- views ----------
+function icons() { try { lucide.createIcons({ icons: lucide.icons }) } catch { } }
+
+function protoBar() {
+  const sc = [['first', 'First run'], ['locked', 'Locked'], ['vault', 'Vault'], ['autofill', 'Android autofill']]
+  const theme = document.documentElement.getAttribute('data-theme')
+  return `<header class="proto">
+    <div class="proto-name"><b>TeleWarden</b><span>UI prototype · example data, nothing leaves this page</span></div>
+    <div class="grp"><span class="label">Screen</span><div class="seg">${sc.map(([k, l]) => `<button data-act="scenario" data-arg="${k}" class="${S.scenario === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+    <div class="grp dev"><span class="label">Device</span><div class="seg">
+      <button data-act="device" data-arg="desktop" class="${S.device === 'desktop' ? 'on' : ''}" ${S.scenario === 'autofill' ? 'disabled' : ''}>${ic('monitor')}Desktop</button>
+      <button data-act="device" data-arg="phone" class="${S.device === 'phone' || S.scenario === 'autofill' ? 'on' : ''}">${ic('smartphone')}Phone</button></div></div>
+    <button class="icon-btn" data-act="theme" aria-label="Switch theme" title="Theme: ${theme || 'system'}">${ic(theme === 'dark' ? 'moon' : theme === 'light' ? 'sun' : 'sun-moon')}</button>
+  </header>`
+}
+const TRY = {
+  first: ['Create a master password: weak ones and the demo TeleDrive password are refused', 'Try “Suggest a passphrase”', 'Save the recovery code, then import the sample file from the empty vault', 'Lock it, then use “Forgot it? Use recovery code”'],
+  locked: ['Unlock with the master password (or any, if you skipped First run)', 'Type a wrong one 5 times to see the wait', 'Show hint, and Forgot it? Use recovery code', 'On Phone, “Use fingerprint” appears after the first unlock'],
+  vault: ['Click ⧉ on a row to copy its password and watch the clipboard timer', 'Open Security report, pick Weak passwords, then “Change password”', '+ New → Login, roll a password with the dice', 'The 2FA code on Google and GitHub refreshes every 30s', 'Lock now in the sidebar card, or wait out the auto-lock', 'Switch to Phone for tabs, sheets and the + button'],
+  autofill: ['Tap the username field in the Kitebird app', 'Or type a new username and password and tap Log in to see the save prompt'],
+}
+function render() {
+  if (S.dialog?.kind === 'form' && document.getElementById('itemForm')) captureForm()
+  const root = document.getElementById('root')
+  const sc = root.querySelector('.app .ph-body, .app .listp')
+  const keep = sc ? sc.scrollTop : 0
+  let stage
+  if (S.scenario === 'autofill') stage = autofillStage()
+  else if (isPhone()) {
+    const inner = `<div class="app ph${narrow() ? ' bare' : ''}">${narrow() ? '' : statusBar()}${phoneApp()}<div class="toasts"></div></div>`
+    stage = narrow() ? inner : `<div class="device">${inner}</div>`
+  } else stage = `<div class="app desk">${desktopApp()}<div class="toasts"></div></div>`
+  root.innerHTML = protoBar() + `<div class="stage">${stage}</div>` +
+    `<section class="try"><div class="label-swiss"><b>/</b>Things to try</div><ul>${TRY[S.scenario].map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>`
+  const sc2 = root.querySelector('.app .ph-body, .app .listp')
+  if (sc2) sc2.scrollTop = keep
+  drawToasts()
+  icons()
+  tick()
+}
+const statusBar = () => `<div class="statusbar"><span>9:41</span><span>${ic('signal')}${ic('wifi')}${ic('battery-full')}</span></div>`
+
+function sidebar() {
+  const locked = !S.unlocked
+  const L = live()
+  const cnt = t => L.filter(i => i.type === t).length
+  const rc = reportCounts()
+  const link = (id, icon, label, n, alert) => `<button class="nav-link ${S.nav === id && !S.report ? 'on' : ''}" data-act="nav" data-arg="${id}" ${locked ? 'disabled' : ''}>${ic(icon)}<span>${esc(label)}</span>${n ? `<span class="n ${alert ? 'alert' : ''}">${n}</span>` : ''}</button>`
+  return `<div class="side">
+    <button class="brand" data-act="picker" aria-expanded="${S.picker}">
+      <span class="logo">${ic('send')}</span>
+      <span style="flex:1;min-width:0"><b>TeleDrive</b><small>TeleWarden</small></span>${ic(S.picker ? 'chevron-up' : 'chevron-down')}
+    </button>
+    ${S.picker ? `<div class="picker pressed">
+      <button data-act="drive" data-arg="My Drive">${ic('hard-drive')}My Drive</button>
+      <button data-act="drive" data-arg="TelePhotos">${ic('images')}TelePhotos</button>
+      <button data-act="picker">${ic('key-round')}TeleWarden<span class="new red">${ic('check')}</span></button>
+      <button data-act="drive" data-arg="New drive" class="muted">${ic('plus')}New drive</button></div>` : ''}
+    <div style="padding:0 4px 16px"><button class="btn btn-primary btn-full" data-act="newmenu" ${locked ? 'disabled' : ''}>${ic('plus')}New</button></div>
+    <nav class="nav">
+      ${link('all', 'layout-grid', 'All items', L.length)}
+      ${link('fav', 'star', 'Favorites', L.filter(i => i.fav).length)}
+      ${Object.entries(TYPES).map(([k, t]) => link(k, t.icon, t.many, cnt(k))).join('')}
+      <div class="nav-sec"><span class="label">Folders</span><button data-act="newfolder" aria-label="New folder" ${locked ? 'disabled' : ''}>${ic('folder-plus')}</button></div>
+      ${S.folders.map(f => link('folder:' + f.id, 'folder', f.name, L.filter(i => i.folder === f.id).length)).join('') || '<p class="cap" style="padding:0 14px;margin:0">No folders yet</p>'}
+      <div class="nav-sec"><span class="label">Tools</span></div>
+      ${link('generator', 'dices', 'Generator')}
+      ${link('report', 'shield-check', 'Security report', rc.total, true)}
+      ${link('trash', 'trash-2', 'Trash', S.items.filter(i => i.trashed).length)}
+    </nav>
+    <div class="vcard pressed" style="margin-top:22px">
+      ${locked ? `<p style="margin:0;display:flex;gap:8px;align-items:center"><span class="red">${ic('lock')}</span><span class="big">Locked</span></p><p class="cap" style="margin:0">Unlock to see your items</p>` : `
+      <p style="margin:0"><span class="big num">${L.length}</span> <span class="cap">items</span></p>
+      <p class="cap" style="margin:0">${[['login', 'login'], ['card', 'card'], ['identity', 'identity'], ['note', 'note']].map(([k, w]) => cnt(k) ? plural(cnt(k), w).replace('identitys', 'identities') : '').filter(Boolean).join(' · ') || 'Empty'}</p>
+      <div class="rule"></div>
+      <button class="stat ${rc.total ? 'alert' : ''}" data-act="nav" data-arg="report">${ic(rc.total ? 'shield-alert' : 'shield-check')}<b>Report</b><span class="v">${rc.total ? `${rc.total} need attention` : 'All good'}</span></button>
+      <div class="stat alert">${ic('lock-open')}<b>Open</b><span class="v num" id="lockLeft">${lockLeftText()}</span></div>
+      <button class="btn btn-full" style="height:40px;margin-top:4px" data-act="lock">${ic('lock')}Lock now</button>`}
+    </div>
+    <div style="display:grid;gap:3px;margin-top:10px">
+      <button class="nav-link ${S.nav === 'settings' ? 'on' : ''}" data-act="nav" data-arg="settings" ${locked ? 'disabled' : ''}>${ic('settings')}Settings</button>
+      <button class="nav-link" data-act="drive" data-arg="Log out">${ic('log-out')}Log out</button>
+    </div>
+  </div>`
+}
+function lockLeftText() {
+  if (S.settings.lockAfter === 'close') return 'until closed'
+  const rem = Math.max(0, S.settings.lockAfter * 60000 - (Date.now() - S.lastActive))
+  const s = Math.ceil(rem / 1000)
+  return `locks in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+function desktopApp() {
+  return `<aside class="panel" style="min-height:0;display:flex">${sidebar()}</aside>
+    <main class="main">${mainBody()}</main>${overlays()}`
+}
+function mainBody() {
+  if (S.firstRun) return `<div class="center">${introView()}</div>`
+  if (!S.unlocked) return `<div class="center">${gateView()}</div>`
+  const listPage = !['generator', 'report', 'settings'].includes(S.nav)
+  const top = `<div class="topbar">
+    ${listPage ? `<div class="input-wrap">${ic('search', 'lead')}<input class="input has-lead" id="search" placeholder="Search ${esc(pageTitle().toLowerCase())}" value="${esc(S.q)}" autocomplete="off"></div>` : '<div style="flex:1"></div>'}
+    <button class="icon-btn" data-act="theme" aria-label="Switch theme">${ic('sun-moon')}</button><span class="avatar">S</span></div>`
+  if (S.nav === 'generator') return top + `<div class="page">${generatorView()}</div>`
+  if (S.nav === 'report') return top + `<div class="page">${reportView()}</div>`
+  if (S.nav === 'settings') return top + `<div class="page">${settingsView()}</div>`
+  const items = visible()
+  const sel = S.items.find(i => i.id === S.sel)
+  return top + headHTML(items) + (chipsShown() ? chipsHTML() : '') +
+    `<div class="split"><section class="panel listp" id="listWrap">${listHTML(items)}</section>
+     <section class="panel">${sel && items.some(i => i.id === sel.id) ? detailHTML(sel) : `<div class="well pressed-lg" style="margin:22px"><span class="tile">${ic('mouse-pointer-click')}</span><p class="muted">Pick an item to see its details</p></div>`}</section></div>`
+}
+function headHTML(items) {
+  if (S.report) {
+    const r = REPORT.find(x => x.k === S.report)
+    return `<div class="head"><div class="crumb"><button data-act="nav" data-arg="report">Security report</button><span class="sl">/</span></div>
+      <h1 class="h1" style="width:100%">${esc(r.t)}</h1><span class="count">${plural(items.length, 'item')}</span></div>`
+  }
+  const trash = S.nav === 'trash'
+  return `<div class="head"><h1 class="h1">${esc(pageTitle())}</h1><span class="count num">${plural(items.length, 'item')}</span>
+    ${trash && items.length ? `<button class="btn btn-danger-solid act" data-act="emptytrash">${ic('trash-2')}Empty trash</button>` : ''}</div>
+    ${trash ? `<p class="cap" style="margin:-8px 0 0">Items in the trash are deleted forever after 30 days.</p>` : ''}`
+}
+function chipsHTML() {
+  const L = S.items.filter(i => !i.trashed && (S.nav === 'fav' ? i.fav : S.nav.startsWith('folder:') ? i.folder === S.nav.slice(7) : true))
+  const chips = [['all', 'All', L.length], ...Object.entries(TYPES).map(([k, t]) => [k, t.many, L.filter(i => i.type === k).length])].filter(c => c[0] === 'all' || c[2])
+  return `<div class="chips">${chips.map(([k, l]) => `<button class="chip ${S.chip === k ? 'on' : ''}" data-act="chip" data-arg="${k}">${l}</button>`).join('')}</div>`
+}
+function listHTML(items) {
+  if (!items.length) return emptyHTML()
+  return items.map(rowHTML).join('')
+}
+function emptyHTML() {
+  if (S.q) return `<div class="well pressed-lg"><span class="tile">${ic('search-x')}</span><p class="h2">No matches</p><p class="muted">Nothing here matches “${esc(S.q)}”.</p></div>`
+  if (S.nav === 'trash') return `<div class="well pressed-lg"><span class="tile">${ic('trash-2')}</span><p class="h2">Trash is empty</p><p class="muted">Deleted items stay here for 30 days.</p></div>`
+  if (S.report) return `<div class="well pressed-lg"><span class="tile">${ic('shield-check')}</span><p class="h2">All fixed</p><p class="muted">Nothing left in this list.</p><div class="btns"><button class="btn" data-act="nav" data-arg="report">Back to report</button></div></div>`
+  if (!live().length) return `<div class="well pressed-lg"><span class="tile">${ic('key-round')}</span><p class="h2">Your vault is empty</p>
+    <p class="muted">Add your first login, or bring your passwords over from Bitwarden, Chrome or another manager.</p>
+    <div class="btns"><button class="btn btn-primary" data-act="new" data-arg="login">${ic('plus')}New login</button><button class="btn" data-act="import">${ic('download')}Import passwords</button></div></div>`
+  return `<div class="well pressed-lg"><span class="tile">${ic(TYPES[S.nav]?.icon || 'folder')}</span><p class="h2">Nothing here yet</p><p class="muted">Items you add here show up on all your devices.</p>
+    <div class="btns"><button class="btn btn-primary" data-act="new" data-arg="${TYPES[S.nav] ? S.nav : 'login'}">${ic('plus')}New ${TYPES[S.nav] ? TYPES[S.nav].one.toLowerCase() : 'login'}</button></div></div>`
+}
+function tileHTML(i, cls = '') {
+  return `<span class="tile ${cls}">${i.type === 'login' ? esc(i.name[0].toUpperCase()) : ic(TYPES[i.type].icon)}</span>`
+}
+function rowHTML(i) {
+  const iss = issues(i).filter(x => BADGE[x.k])
+  const copyKey = i.type === 'login' ? 'pass:' + i.id : i.type === 'card' ? 'number:' + i.id : i.type === 'identity' ? 'email:' + i.id : 'note:' + i.id
+  const copyLabel = { login: 'Copy password', card: 'Copy card number', identity: 'Copy email', note: 'Copy note' }[i.type]
+  return `<div class="row ${S.sel === i.id ? 'sel' : ''}" data-act="select" data-arg="${i.id}" role="button" tabindex="0">
+    ${tileHTML(i)}
+    <div class="info"><div class="name"><span class="t">${esc(i.name)}</span>${i.fav ? ic('star') : ''}${i.trashed ? `<span class="badge out">${30 - (i.tdays || 0)}d left</span>` : iss.slice(0, 1).map(x => `<span class="badge out">${BADGE[x.k]}</span>`).join('')}</div>
+      <div class="sub">${esc(subOf(i))}</div></div>
+    <div class="right">
+      ${i.totp && S.settings.totpList && !i.trashed ? `<span class="code" title="2FA code"><span data-totp="${i.totp}">${totp(i.totp, step())}</span><span class="ring sm" data-left></span></span>` : ''}
+      ${i.trashed ? '' : `<span class="quick">
+        ${i.type === 'login' ? `<button class="icon-btn flat" data-act="copy" data-arg="user:${i.id}" aria-label="Copy username" title="Copy username">${ic('user-round')}</button>` : ''}
+        ${i.type === 'login' && i.urls?.[0]?.startsWith('http') ? `<a class="icon-btn flat" href="${esc(i.urls[0])}" target="_blank" rel="noopener" aria-label="Open website" title="Open website" data-stop>${ic('external-link')}</a>` : ''}
+      </span>
+      <button class="icon-btn flat" data-act="copy" data-arg="${copyKey}" aria-label="${copyLabel}" title="${copyLabel}">${ic('copy')}</button>`}
+    </div></div>`
+}
+function copyValue(key) {
+  const [f, id] = key.split(':')
+  const i = S.items.find(x => x.id === id)
+  if (f === 'totp') return [totp(i.totp, step()).replace(' ', ''), '2FA code']
+  if (f === 'hist') { const [, iid, n] = key.split(':'); return [S.items.find(x => x.id === iid).history[+n].p, 'Old password'] }
+  if (f === 'cf') { const [, iid, n] = key.split(':'); const c = S.items.find(x => x.id === iid).fields[+n]; return [c.v, c.k] }
+  if (f === 'url') { const [, iid, n] = key.split(':'); return [S.items.find(x => x.id === iid).urls[+n], 'Website'] }
+  if (f === 'gen') return [S.gen.value, S.gen.mode === 'password' ? 'Password' : 'Passphrase']
+  const labels = { user: 'Username', pass: 'Password', number: 'Card number', cvv: 'Security code', email: 'Email', note: 'Note', holder: 'Cardholder', exp: 'Expiry', phone: 'Phone', address: 'Address', passport: 'Passport number', name: 'Name' }
+  const v = f === 'name' ? [i.first, i.last].join(' ') : i[f]
+  return [String(v ?? ''), labels[f] || f]
+}
+
+function fieldRow(label, valueHTML, { key, secret, copy = true, extra = '' } = {}) {
+  const shown = !secret || S.reveal[key]
+  return `<div class="f"><div class="fv"><div class="fl">${esc(label)}</div><div class="val ${secret ? 'mono' : ''}">${shown ? valueHTML : '••••••••••••'}</div>${extra}</div>
+    <div class="acts">${secret ? `<button class="icon-btn flat" data-act="reveal" data-arg="${key}" aria-label="${shown ? 'Hide' : 'Show'}">${ic(shown ? 'eye-off' : 'eye')}</button>` : ''}
+    ${copy ? `<button class="icon-btn flat" data-act="copy" data-arg="${key}" aria-label="Copy ${esc(label)}">${ic('copy')}</button>` : ''}</div></div>`
+}
+function detailHTML(i) {
+  const tr = !!i.trashed
+  const iss = issues(i)
+  let body = ''
+  if (i.type === 'login') {
+    const st = strength(i.pass)
+    body += fieldRow('Username', esc(i.user), { key: 'user:' + i.id })
+    body += fieldRow('Password', colorize(i.pass), {
+      key: 'pass:' + i.id, secret: true,
+      extra: `<div class="meter">${meter(i.pass)}</div><div class="cap" style="margin-top:2px">Changed ${ago(i.changed || 0)}</div>`,
+    })
+    if (i.totp) body += `<div class="f"><div class="fv"><div class="fl">2FA code</div><div style="display:flex;align-items:center;gap:10px"><span class="totp" data-totp="${i.totp}">${totp(i.totp, step())}</span><span class="ring" data-left></span><span class="cap num" data-left-s>${left()}s</span></div></div>
+      <div class="acts"><button class="icon-btn flat" data-act="copy" data-arg="totp:${i.id}" aria-label="Copy 2FA code">${ic('copy')}</button></div></div>`
+    ;(i.urls || []).forEach((u, n) => {
+      const web = u.startsWith('http')
+      body += `<div class="f"><div class="fv"><div class="fl">${n ? 'Website ' + (n + 1) : 'Website'}</div><div class="val">${web ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(host(u))}</a>` : esc(host(u))}</div></div>
+        <div class="acts">${web ? `<a class="icon-btn flat" href="${esc(u)}" target="_blank" rel="noopener" aria-label="Open">${ic('external-link')}</a>` : ''}<button class="icon-btn flat" data-act="copy" data-arg="url:${i.id}:${n}" aria-label="Copy">${ic('copy')}</button></div></div>`
+    })
+  } else if (i.type === 'card') {
+    const shown = S.reveal['number:' + i.id]
+    body += `<div class="cardviz raised-md" style="margin:4px 0 8px"><div class="top"><span>${esc(i.name)}</span><span>${brandOf(i.number)}</span></div><span class="chipm"></span>
+      <div class="numv">${shown ? group4(i.number) : '•••• •••• •••• ' + i.number.slice(-4)}</div><div class="bot"><span>${esc(i.holder)}</span><span>${esc(i.exp)}</span></div></div>`
+    body += fieldRow('Cardholder', esc(i.holder), { key: 'holder:' + i.id })
+    body += fieldRow('Number', esc(group4(i.number)), { key: 'number:' + i.id, secret: true })
+    body += fieldRow('Expiry', esc(i.exp), { key: 'exp:' + i.id })
+    body += fieldRow('Security code', esc(i.cvv), { key: 'cvv:' + i.id, secret: true })
+  } else if (i.type === 'identity') {
+    body += fieldRow('Name', esc([i.first, i.last].filter(Boolean).join(' ')), { key: 'name:' + i.id })
+    if (i.email) body += fieldRow('Email', esc(i.email), { key: 'email:' + i.id })
+    if (i.phone) body += fieldRow('Phone', esc(i.phone), { key: 'phone:' + i.id })
+    if (i.address) body += fieldRow('Address', esc(i.address), { key: 'address:' + i.id })
+    if (i.passport) body += fieldRow('Passport number', esc(i.passport), { key: 'passport:' + i.id, secret: true })
+  } else {
+    body += fieldRow('Note', esc(i.note), { key: 'note:' + i.id })
+  }
+  ;(i.fields || []).forEach((c, n) => { body += fieldRow(c.k, esc(c.v), { key: `cf:${i.id}:${n}`, secret: c.t === 'hidden' }) })
+  if (i.notes) body += fieldRow('Notes', esc(i.notes), { key: 'notes:' + i.id, copy: false })
+
+  const hist = i.history?.length ? `<div><button class="btn btn-ghost" style="padding:0;height:36px" data-act="hist">${ic('history')}Password history (${i.history.length})${ic(S.histOpen ? 'chevron-up' : 'chevron-down')}</button>
+    ${S.histOpen ? `<div class="hist">${i.history.map((h, n) => `<div><span class="mono">${colorize(h.p)}</span><span class="cap">${esc(h.d)} <button class="icon-btn flat" style="width:30px;height:30px;vertical-align:middle" data-act="copy" data-arg="hist:${i.id}:${n}" aria-label="Copy">${ic('copy')}</button></span></div>`).join('')}</div>` : ''}</div>` : ''
+
+  return `<div class="detail">
+    <div class="dhead">${tileHTML(i, 'lg')}<div class="t"><b>${esc(i.name)}</b><span class="cap">${TYPES[i.type].one}${i.folder ? ' · ' + esc(folderName(i.folder) || '') : ''}</span></div>
+      ${tr ? '' : `<button class="icon-btn flat ${i.fav ? 'red' : ''}" data-act="fav" data-arg="${i.id}" aria-label="${i.fav ? 'Remove from favorites' : 'Add to favorites'}">${i.fav ? '<i data-lucide="star" style="fill:currentColor"></i>' : ic('star')}</button>`}
+      <button class="icon-btn flat" data-act="more" data-arg="${i.id}" aria-label="More actions">${ic('ellipsis-vertical')}</button></div>
+    ${tr ? `<div class="note">${ic('trash-2')}<span>In the trash for ${plural(i.tdays || 0, 'day')}. Deleted forever in ${30 - (i.tdays || 0)} days.</span></div>` : ''}
+    ${iss.map(x => `<div class="note">${ic('triangle-alert')}<div style="display:grid;gap:8px;justify-items:start"><span>${esc(x.t)}</span>${['weak', 'reused', 'exposed', 'old'].includes(x.k) && x === iss[0] ? `<button class="btn" style="height:36px" data-act="changepw" data-arg="${i.id}">${ic('dices')}Change password</button>` : ''}</div></div>`).join('')}
+    <div class="fields">${body}</div>
+    ${hist}
+    <p class="metaline" style="margin:0">Created ${esc(i.created)} · Edited ${esc(i.edited)}</p>
+    <div class="dactions">${tr
+      ? `<button class="btn" data-act="restore" data-arg="${i.id}">${ic('rotate-ccw')}Restore</button><button class="btn btn-danger" data-act="delforever" data-arg="${i.id}">${ic('trash-2')}Delete forever</button>`
+      : `<button class="btn" data-act="edit" data-arg="${i.id}">${ic('pencil')}Edit</button><button class="btn btn-danger" data-act="trash" data-arg="${i.id}">${ic('trash-2')}Move to trash</button>`}</div>
+  </div>`
+}
+
+function generatorView() {
+  const g = S.gen
+  if (!g.value) regen()
+  const opt = (k, label) => `<button class="opt" data-act="genopt" data-arg="${k}"><span class="check ${g[k] ? 'on' : ''}">${g[k] ? ic('check') : ''}</span>${label}</button>`
+  return `<div class="head"><h1 class="h1">Generator</h1></div>
+    <div class="seg" style="align-self:flex-start"><button class="${g.mode === 'password' ? 'on' : ''}" data-act="genmode" data-arg="password">${ic('asterisk')}Password</button><button class="${g.mode === 'passphrase' ? 'on' : ''}" data-act="genmode" data-arg="passphrase">${ic('whole-word')}Passphrase</button></div>
+    <div class="genout pressed"><span class="mono" id="genVal">${colorize(g.value)}</span>
+      <button class="icon-btn" data-act="regen" aria-label="Generate another">${ic('refresh-cw')}</button>
+      <button class="icon-btn" data-act="copy" data-arg="gen:x" aria-label="Copy">${ic('copy')}</button></div>
+    <div class="meter wide" id="genMeter" style="margin-top:-8px">${meter(g.value)}</div>
+    <div class="panel" style="padding:4px 20px">
+      ${g.mode === 'password' ? `
+        <div class="genrow"><b style="min-width:70px">Length</b><input type="range" id="genLen" min="8" max="64" value="${g.len}" aria-label="Length"><span class="h2 num" id="genLenV" style="min-width:36px;text-align:right">${g.len}</span></div>
+        <div class="genrow"><div class="opts">${opt('upper', 'A–Z')}${opt('lower', 'a–z')}${opt('digits', '0–9')}${opt('symbols', '! @ # $ %')}${opt('avoid', 'Avoid look-alikes (l 1 I O 0)')}</div></div>`
+      : `
+        <div class="genrow"><b style="min-width:70px">Words</b><input type="range" id="genWords" min="3" max="10" value="${g.words}" aria-label="Words"><span class="h2 num" id="genWordsV" style="min-width:36px;text-align:right">${g.words}</span></div>
+        <div class="genrow"><b style="min-width:70px">Separator</b><div class="seg">${['-', '.', '_', ' '].map(s => `<button class="${g.sep === s ? 'on' : ''}" data-act="gensep" data-arg="${s === ' ' ? 'space' : s}">${s === ' ' ? 'Space' : s}</button>`).join('')}</div></div>
+        <div class="genrow"><div class="opts">${opt('cap', 'Capitalize words')}${opt('num', 'Include a number')}</div></div>`}
+      <div class="genrow" style="border:0"><span class="cap">Made on this device with the browser's secure random generator. Nothing is sent anywhere.</span></div>
+    </div>
+    <div><div class="label-swiss" style="margin-bottom:8px"><b>/</b>History</div>
+      <div class="panel" style="padding:6px 16px">${g.history.map((h, n) => `<div class="genrow" style="${n === g.history.length - 1 ? 'border:0' : ''}"><span class="mono grow" style="overflow-wrap:anywhere">${colorize(h.v)}</span><span class="cap">${h.t}</span></div>`).join('')}</div></div>`
+}
+function updateGen() {
+  const v = document.getElementById('genVal'), m = document.getElementById('genMeter')
+  if (v) v.innerHTML = colorize(S.gen.value)
+  if (m) m.innerHTML = meter(S.gen.value)
+}
+
+function reportView() {
+  const c = reportCounts()
+  return `<div class="head"><h1 class="h1">Security report</h1></div>
+    <div class="summary pressed"><span class="big num ${c.total ? 'red' : ''}">${c.total}</span>
+      <div style="flex:1;min-width:200px"><b style="font-size:17px">${c.total ? `${plural(c.total, 'login')} need${c.total === 1 ? 's' : ''} attention` : 'Everything looks good'}</b>
+      <p class="cap" style="margin:4px 0 0">Checked on this device. Fix the red ones first.</p></div>
+      <button class="btn" data-act="breach" ${S.settings.breach ? '' : 'disabled'}>${S.checking ? '<span class="spinner"></span>Checking…' : ic('refresh-cw') + 'Check for breaches'}</button></div>
+    <div class="panel" style="padding:6px">${REPORT.map(r => `<button class="rrow" data-act="report" data-arg="${r.k}">
+      <span class="tile ${c[r.k] && r.k !== 'old' ? 'red' : ''}">${ic(r.icon)}</span><span class="grow"><b>${r.t}</b><span class="cap">${r.d}</span></span>
+      <span class="n num ${c[r.k] && r.k !== 'old' ? 'alert' : ''}">${c[r.k]}</span>${ic('chevron-right')}</button>`).join('')}</div>
+    <p class="cap" style="margin:0;max-width:70ch">${S.settings.breach ? 'The breach check sends only the first 5 characters of each password’s SHA-1 hash to Have I Been Pwned, so your passwords never leave this device.' : 'The breach check is off in Settings. The other checks run on this device.'}</p>`
+}
+
+function settingsView() {
+  const s = S.settings
+  const seg = (k, opts) => `<div class="seg">${opts.map(([v, l]) => `<button class="${s[k] === v ? 'on' : ''}" data-act="set" data-arg="${k}=${v}">${l}</button>`).join('')}</div>`
+  const tog = k => `<button class="toggle ${s[k] ? 'on' : ''}" data-act="tog" data-arg="${k}" role="switch" aria-checked="${!!s[k]}" aria-label="${k}"></button>`
+  const row = (title, desc, ctrl, sw) => `<div class="srow ${sw ? 'sw' : ''}"><div class="grow"><b>${title}</b><span class="cap">${desc}</span></div>${ctrl}</div>`
+  return `<div class="head"><h1 class="h1">Settings</h1></div>
+    <div><div class="label-swiss" style="margin-bottom:10px"><b>01</b>Master password</div><div class="panel">
+      ${row('Change master password', 'Nothing is re-encrypted, so it’s instant. Your recovery code keeps working.', `<button class="btn" data-act="chpw">${ic('key-round')}Change</button>`)}
+      ${row('New recovery code', 'Makes a new code. The old one stops working.', `<button class="btn" data-act="newcode">${ic('life-buoy')}New code</button>`)}
+      ${row('Reset TeleWarden', 'Only if you’ve lost both your master password and your recovery code. Deletes every item. Your files and photos aren’t touched.', `<button class="btn btn-danger" data-act="reset">${ic('trash-2')}Reset</button>`)}
+    </div></div>
+    <div><div class="label-swiss" style="margin-bottom:10px"><b>02</b>Unlocking</div><div class="panel">
+      ${row('Lock TeleWarden after', 'Counted from your last tap or key press. Your files in My Drive keep their own lock.', seg('lockAfter', [[1, '1 min'], [5, '5 min'], [15, '15 min'], [30, '30 min'], ['close', 'On close']]))}
+      ${row('Unlock with fingerprint', 'Android app. The master password is still asked once after a restart.', tog('bio'), true)}
+      ${row('Unlock with a PIN', 'Quicker than the full password. The master password is asked once after a restart.', tog('pin'), true)}
+    </div></div>
+    <div><div class="label-swiss" style="margin-bottom:10px"><b>03</b>Privacy</div><div class="panel">
+      ${row('Clear the clipboard after', 'Copied passwords and codes are removed from the clipboard.', seg('clip', [[10, '10 s'], [30, '30 s'], [60, '1 min'], [0, 'Never']]))}
+      ${row('Block screenshots', 'Android and Windows apps, while TeleWarden is open.', tog('noShots'), true)}
+      ${row('Check for breached passwords', 'Uses Have I Been Pwned. Only a 5-character hash prefix is sent.', tog('breach'), true)}
+      ${row('Show 2FA codes in the list', 'Codes appear next to each login that has one.', tog('totpList'), true)}
+    </div></div>
+    <div><div class="label-swiss" style="margin-bottom:10px"><b>04</b>Autofill</div><div class="panel">
+      ${row('Autofill in other apps', s.autofill ? 'On. Logins are offered when you tap a username or password field.' : 'Android app. Fills logins in other apps and in Chrome.', s.autofill ? `<span class="badge neutral">${ic('check')}On</span>` : `<button class="btn" data-act="autofillon">Turn on</button>`)}
+    </div></div>
+    <div><div class="label-swiss" style="margin-bottom:10px"><b>05</b>Your data</div><div class="panel">
+      ${row('Import passwords', 'From Bitwarden, Chrome, Edge, Firefox, LastPass, 1Password or KeePass.', `<button class="btn" data-act="import">${ic('download')}Import</button>`)}
+      ${row('Export vault', 'Keep an encrypted copy somewhere other than Telegram.', `<button class="btn" data-act="export">${ic('upload')}Export</button>`)}
+    </div></div>`
+}
+
+function gateView() {
+  const err = S.gateErr
+  const wait = Math.max(0, Math.ceil((S.waitUntil - Date.now()) / 1000))
+  return `<div class="gate"><span class="tile pressed-lg">${ic('lock')}</span>
+    <h1 class="h1" style="font-size:40px">TeleWarden is locked</h1>
+    <p class="muted" style="margin:0">Enter your master password.</p>
+    <form data-form="unlock" novalidate>
+      <div class="fld"><label for="gatePw">Master password</label>
+      <div class="input-wrap">${ic('key-round', 'lead')}<input class="input has-lead" id="gatePw" type="password" autocomplete="current-password" ${wait ? 'disabled' : ''} ${err ? 'style="outline:2px solid var(--red);outline-offset:2px"' : ''}></div>
+      ${wait ? `<span class="err" id="gateWait">Too many wrong tries. Try again in ${wait} s</span>` : err ? `<span class="err">${err}</span>` : ''}
+      ${S.hintShown ? `<span class="hint">Hint: ${esc(S.hint || 'No hint was set')}</span>` : ''}</div>
+      <button class="btn btn-primary btn-full" type="submit" ${wait ? 'disabled' : ''}>${ic('lock-open')}Unlock</button>
+      ${isPhone() && S.settings.bio && S.bioReady ? `<button class="btn btn-full" type="button" data-act="bio">${ic('fingerprint')}Use fingerprint</button>` : ''}
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <button type="button" class="btn btn-ghost" style="padding:0;height:32px" data-act="showhint">${ic('lightbulb')}${S.hintShown ? 'Hide hint' : 'Show hint'}</button>
+        <button type="button" class="btn btn-ghost" style="padding:0;height:32px" data-act="recover">${ic('life-buoy')}Forgot it? Use recovery code</button>
+      </div>
+    </form>
+    <p class="cap" style="margin:0">${S.master ? 'Prototype: use the master password you created (try a wrong one 5 times for the delay).' : 'Prototype: any password works, except “wrong” (try it 5 times for the delay).'}${isPhone() && S.settings.bio && !S.bioReady ? ' Fingerprint shows after the first unlock since the app started.' : ''}</p></div>`
+}
+// ---- master password: rules, form, recovery code ----
+const TD_PW = 'TeleDrive@2026' // the demo's TeleDrive password, to show the "not your TeleDrive password" rule
+const CROCK = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+const newCode = () => Array.from({ length: 32 }, () => CROCK[rnd(32)]).join('').replace(/(.{4})(?!$)/g, '$1-')
+function rules(pw, pw2) {
+  return [
+    ['len', 'At least 12 characters', pw.length >= 12],
+    ['str', 'Rated Strong or Very strong', strength(pw).score >= 3],
+    ['td', 'Not your TeleDrive password', !!pw && pw !== TD_PW],
+    ['eq', 'Both entries match', !!pw && pw === pw2],
+  ]
+}
+function rulesHTML(pw, pw2) {
+  return rules(pw, pw2).map(([k, t, ok]) => `<li class="${ok ? '' : 'red'}" style="display:flex;gap:8px;align-items:center;font-size:13px;font-weight:${ok ? 600 : 700}">${ic(ok ? 'check' : 'x')}${t}</li>`).join('')
+}
+function masterFormHTML(p, { hint = false, label = 'Master password', next = 'Next', act } = {}) {
+  return `<div class="fld"><label for="${p}-pw">${label}</label><div class="input-wrap">${ic('key-round', 'lead')}<input class="input has-lead" id="${p}-pw" data-master="${p}" type="password" autocomplete="new-password"></div>
+      <div class="meter" id="${p}-meter">${meter('')}</div></div>
+    <div class="fld"><label for="${p}-pw2">Type it again</label><input class="input" id="${p}-pw2" data-master="${p}" type="password" autocomplete="new-password"></div>
+    <ul id="${p}-rules" style="list-style:none;margin:0;padding:0;display:grid;gap:4px">${rulesHTML('', '')}</ul>
+    <button type="button" class="btn btn-ghost" style="justify-self:start;padding:0;height:30px" data-act="suggest" data-arg="${p}">${ic('dices')}Suggest a passphrase</button>
+    ${hint ? `<div class="fld"><label for="${p}-hint">Hint <span class="cap" style="font-weight:500">(optional)</span></label><input class="input" id="${p}-hint" placeholder="Something only you would understand"><span class="hint">Encrypted, shown only on your devices. Don’t put the password in it.</span></div>` : ''}
+    <div class="note">${ic('triangle-alert')}<span><b>Nobody can reset this password.</b> Not Telegram, not TeleDrive. Your recovery code is the only way back in.</span></div>
+    <button type="button" class="btn btn-primary" id="${p}-next" data-act="${act}" disabled>${next}</button>`
+}
+function updateMaster(p) {
+  const pw = document.getElementById(p + '-pw')?.value || '', pw2 = document.getElementById(p + '-pw2')?.value || ''
+  const m = document.getElementById(p + '-meter'); if (m) m.innerHTML = meter(pw)
+  const r = document.getElementById(p + '-rules'); if (r) { r.innerHTML = rulesHTML(pw, pw2); icons() }
+  const b = document.getElementById(p + '-next'); if (b) b.disabled = !rules(pw, pw2).every(x => x[2])
+}
+function codeHTML(code, act, label) {
+  return `<p style="margin:0">If you forget your master password, this code is the only way to open TeleWarden. It’s shown once.</p>
+    <div class="pressed" style="border-radius:6px;padding:18px;text-align:center"><span class="mono" style="font-size:17px;font-weight:700;letter-spacing:.04em;overflow-wrap:anywhere">${code}</span></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap"><button type="button" class="btn" data-act="copycode">${ic('copy')}Copy</button><button type="button" class="btn" data-act="savecode">${ic('file-down')}Save as file</button></div>
+    <p class="cap" style="margin:0">Keep it somewhere safe, away from this device: on paper, or in another password manager.</p>
+    <button type="button" class="opt" data-act="codesaved"><span class="check ${S.codeSaved ? 'on' : ''}">${S.codeSaved ? ic('check') : ''}</span>I’ve saved my recovery code</button>
+    <button type="button" class="btn btn-primary" data-act="${act}" ${S.codeSaved ? '' : 'disabled'}>${label}</button>`
+}
+function introView() {
+  const st = S.setup.step
+  const card = st === 1 ? `
+      <div class="point"><span class="tile">${ic('lock-keyhole')}</span><div><b>Encrypted on this device</b><p>Telegram only ever stores scrambled data. Nobody else can read it.</p></div></div>
+      <div class="point"><span class="tile">${ic('key-round')}</span><div><b>Its own master password</b><p>Never stored anywhere, not even on this device. Only you know it, so knowing your TeleDrive password isn’t enough.</p></div></div>
+      <div class="point"><span class="tile">${ic('monitor-smartphone')}</span><div><b>On every device</b><p>Website, Windows and Android stay in sync. Android can fill passwords in other apps.</p></div></div>
+      <button type="button" class="btn btn-primary" data-act="setupnext">Create a master password${ic('arrow-right')}</button>`
+    : st === 2 ? `<div><span class="label red">Step 1 of 2</span><p class="h2" style="margin-top:4px">Create a master password</p></div>
+      ${masterFormHTML('mp', { hint: true, act: 'setupcode' })}
+      <p class="cap" style="margin:0">Demo: your TeleDrive password here is <span class="mono">${TD_PW}</span>, so it’s refused.</p>`
+    : `<div><span class="label red">Step 2 of 2</span><p class="h2" style="margin-top:4px">Save your recovery code</p></div>${codeHTML(S.setup.code, 'setupdone', 'Open TeleWarden')}`
+  return `<div class="intro">
+    <div><h1 class="wordmark">Tele<br>Warden<i>.</i></h1>
+      <p style="font-size:17px;font-weight:600;margin:18px 0 0;max-width:34ch">Your passwords, cards and notes, kept in your Telegram next to your files and photos.</p></div>
+    <div class="introcard raised-xl">${card}</div></div>`
+}
+
+// ---------- phone ----------
+function phoneApp() {
+  if (S.firstRun || !S.unlocked) {
+    return `<div class="ph-top"><button class="icon-btn" data-act="drawer" aria-label="Menu">${ic('menu')}</button><span class="sp"></span><span class="avatar">S</span></div>
+      <div class="ph-body" style="padding-bottom:24px">${S.firstRun ? `<div class="center">${introView()}</div>` : `<div class="center">${gateView()}</div>`}</div>${overlays()}`
+  }
+  const listPage = !['generator', 'report', 'settings'].includes(S.nav)
+  let body
+  if (S.nav === 'generator') body = `<div class="page">${generatorView()}</div>`
+  else if (S.nav === 'report') body = `<div class="page">${reportView()}</div>`
+  else if (S.nav === 'settings') body = `<div class="page">${settingsView()}</div>`
+  else {
+    const items = visible()
+    body = headHTML(items) + `<div class="input-wrap">${ic('search', 'lead')}<input class="input has-lead" id="search" placeholder="Search" value="${esc(S.q)}" autocomplete="off"></div>` +
+      (chipsShown() ? chipsHTML() : '') + `<section class="panel listp" id="listWrap">${listHTML(items)}</section>`
+  }
+  const tab = (id, icon, label, match) => `<button class="${match ? 'on' : ''}" data-act="nav" data-arg="${id}"><span class="pill">${ic(icon)}</span>${label}</button>`
+  const vaultTab = listPage
+  return `<div class="ph-top"><button class="icon-btn" data-act="drawer" aria-label="Menu">${ic('menu')}</button><span class="sp"></span>
+      <span class="badge solid num" id="lockBadge" title="Auto-lock">${lockLeftText().replace('locks in ', 'OPEN · ')}</span>
+      <button class="icon-btn" data-act="lock" aria-label="Lock now">${ic('lock')}</button></div>
+    <div class="ph-body">${body}</div>
+    ${listPage ? `<button class="fab" data-act="newmenu" aria-label="New item">${ic('plus')}</button>` : ''}
+    <nav class="bnav">${tab('all', 'key-round', 'Vault', vaultTab)}${tab('generator', 'dices', 'Generator', S.nav === 'generator')}${tab('report', 'shield-check', 'Report', S.nav === 'report')}${tab('settings', 'settings', 'Settings', S.nav === 'settings')}</nav>
+    ${overlays()}`
+}
+
+// ---------- overlays ----------
+function overlays() {
+  let h = ''
+  if (S.drawer && isPhone()) h += `<div class="drawer" data-close="drawer">${sidebar()}</div>`
+  if (S.sheet && isPhone() && S.sel && !S.dialog) {
+    const i = S.items.find(x => x.id === S.sel)
+    if (i) h += `<div class="scrim" data-close="sheet"><div class="dialog" style="padding:26px 6px 10px"><div class="handle"></div>${detailHTML(i)}</div></div>`
+  }
+  if (S.dialog) h += `<div class="scrim" data-close="dialog"><div class="dialog" role="dialog" aria-modal="true">${isPhone() ? '<div class="handle"></div>' : ''}${dialogHTML()}</div></div>`
+  if (S.menu) h += `<div class="menu" style="left:${S.menu.x}px;top:${S.menu.y}px" role="menu">${S.menu.entries.map(e => (e.hr ? '<hr>' : `<button class="${e.danger ? 'danger' : ''}" data-act="${e.act}" data-arg="${esc(e.arg ?? '')}" role="menuitem">${ic(e.icon)}${esc(e.label)}</button>`)).join('')}</div>`
+  return h
+}
+const dh = (icon, title, sub, lock) => `<div class="dh"><span class="tile raised-sm ${lock ? 'lock' : ''}">${ic(icon)}</span><div class="grow"><p class="h2">${esc(title)}</p>${sub ? `<span class="cap">${esc(sub)}</span>` : ''}</div><button class="icon-btn flat" data-act="closedialog" aria-label="Close">${ic('x')}</button></div>`
+
+function dialogHTML() {
+  const d = S.dialog
+  if (d.kind === 'form') return formHTML()
+  if (d.kind === 'confirm') return `${dh('trash-2', d.title, '', true)}<p style="margin:0">${esc(d.text)}</p>
+    <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-danger-solid" data-act="${d.act}" data-arg="${d.arg || ''}">${esc(d.label)}</button></div>`
+  if (d.kind === 'folder') return `${dh('folder-plus', 'New folder')}<div class="fld"><label for="folderName">Name</label><input class="input" id="folderName" placeholder="e.g. Banking" autofocus>${d.err ? '<span class="err">Give the folder a name</span>' : ''}</div>
+    <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-primary" data-act="savefolder">Create</button></div>`
+  if (d.kind === 'move') {
+    const i = S.items.find(x => x.id === d.id)
+    const opts = [{ id: '', name: 'No folder' }, ...S.folders]
+    return `${dh('folder-input', 'Move to folder', i.name)}<div style="display:grid;gap:2px">${opts.map(f => `<button class="opt" data-act="movesel" data-arg="${f.id}"><span class="radio ${(i.folder || '') === f.id ? 'on' : ''}"></span>${esc(f.name)}</button>`).join('')}</div>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Done</button></div>`
+  }
+  if (d.kind === 'import') {
+    const srcs = [['bitwarden', 'Bitwarden', '.json'], ['chrome', 'Chrome or Edge', '.csv'], ['firefox', 'Firefox', '.csv'], ['lastpass', 'LastPass', '.csv'], ['1password', '1Password', '.csv'], ['keepass', 'KeePass', '.xml']]
+    const src = srcs.find(s => s[0] === d.src)
+    if (d.step === 1) return `${dh('download', 'Import passwords', 'Step 1 of 2')}
+      <div class="fld"><label>Where are they now?</label><div style="display:grid;gap:2px">${srcs.map(s => `<button class="opt" data-act="impsrc" data-arg="${s[0]}"><span class="radio ${d.src === s[0] ? 'on' : ''}"></span>${s[1]} <span class="cap">${s[2]}</span></button>`).join('')}</div></div>
+      <button class="well pressed-lg" style="margin:0;padding:26px;width:100%" data-act="impfile"><span class="tile" style="width:52px;height:52px">${ic('file-up')}</span><b>Choose your ${src[1]} export (${src[2]})</b><span class="cap">Or drop it here</span></button>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button></div>`
+    const n = IMPORTED.length, by = t => IMPORTED.filter(i => i.type === t).length
+    return `${dh('download', 'Import passwords', 'Step 2 of 2')}
+      <div class="pressed" style="border-radius:6px;padding:16px;display:flex;gap:12px;align-items:center">${ic('file-check')}<div><b>${src[0]}_export${src[2]}</b><div class="cap">${n} items: ${by('login')} logins, ${by('card')} cards, ${by('identity')} identity, ${by('note')} notes · 0 duplicates</div></div></div>
+      <div class="note">${ic('triangle-alert')}<span>This file isn’t encrypted. Delete it after importing.</span></div>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-primary" data-act="impgo">${ic('download')}Import ${n} items</button></div>`
+  }
+  if (d.kind === 'export') {
+    const f = d.fmt
+    return `${dh('upload', 'Export vault', live().length + ' items', true)}
+      <div class="fld"><label>Format</label><div style="display:grid;gap:2px">
+        ${[['enc', 'Encrypted file (.json)', 'Protected with a password you choose. Can be imported back into TeleWarden or Bitwarden.'], ['json', 'Plain file (.json)', 'Readable by anyone who gets the file.'], ['csv', 'Spreadsheet (.csv)', 'Logins only. Readable by anyone who gets the file.']].map(([k, l, s]) => `<button class="opt" style="align-items:flex-start" data-act="expfmt" data-arg="${k}"><span class="radio ${f === k ? 'on' : ''}"></span><span><b style="display:block">${l}</b><span class="cap">${s}</span></span></button>`).join('')}</div></div>
+      ${f === 'enc' ? `<div class="fld"><label for="expPw">File password</label><input class="input" id="expPw" type="password"><span class="hint">You’ll need it to open the file. It can’t be recovered.</span></div>` : `<div class="note">${ic('triangle-alert')}<span>Plain exports contain every password in readable text.</span></div>`}
+      <div class="fld"><label for="expAcc">Master password</label><div class="input-wrap">${ic('key-round', 'lead')}<input class="input has-lead" id="expAcc" type="password"></div></div>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-primary" data-act="expgo">${ic('upload')}Export</button></div>`
+  }
+  if (d.kind === 'recover') {
+    if (d.step === 1) return `${dh('life-buoy', 'Use your recovery code', 'Forgot your master password')}
+      <div class="fld"><label for="rc-code">Recovery code</label><input class="input mono" id="rc-code" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+      ${d.err ? `<span class="err">${d.err}</span>` : '<span class="hint">Dashes, spaces and capitals don’t matter.</span>'}</div>
+      ${S.setup.code ? `<p class="cap" style="margin:0">Demo: your code is <span class="mono">${S.setup.code}</span></p>` : '<p class="cap" style="margin:0">Demo: any 32 letters and digits work.</p>'}
+      <button type="button" class="btn btn-ghost" style="justify-self:start;padding:0;height:30px" data-act="reset">Lost the code too? Reset TeleWarden</button>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-primary" data-act="recnext">Next</button></div>`
+    if (d.step === 2) return `${dh('key-round', 'New master password', 'Step 2 of 3')}${masterFormHTML('rp', { act: 'recpw' })}`
+    return `${dh('life-buoy', 'Your new recovery code', 'Step 3 of 3 · the old code no longer works')}${codeHTML(d.code, 'recdone', 'Open TeleWarden')}`
+  }
+  if (d.kind === 'chpw') return `${dh('key-round', 'Change master password')}
+      <div class="fld"><label for="cp-cur">Current master password</label><input class="input" id="cp-cur" type="password">${d.err ? `<span class="err">${d.err}</span>` : ''}</div>
+      ${masterFormHTML('cp', { label: 'New master password', next: 'Change master password', act: 'chpwsave' })}`
+  if (d.kind === 'newcode') return d.step === 1
+    ? `${dh('life-buoy', 'New recovery code', 'The old one stops working')}
+      <div class="fld"><label for="nc-pw">Master password</label><div class="input-wrap">${ic('key-round', 'lead')}<input class="input has-lead" id="nc-pw" type="password"></div>${d.err ? `<span class="err">${d.err}</span>` : ''}</div>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-primary" data-act="newcodego">Make a new code</button></div>`
+    : `${dh('life-buoy', 'Your new recovery code', 'The old one no longer works')}${codeHTML(d.code, 'newcodedone', 'Done')}`
+  if (d.kind === 'reset') return `${dh('trash-2', 'Reset TeleWarden', '', true)}
+      <div class="note">${ic('triangle-alert')}<span>Deletes every item in TeleWarden, on all your devices. This can’t be undone. Your files and photos aren’t touched.</span></div>
+      <div class="fld"><label for="rs-td">TeleDrive password</label><div class="input-wrap">${ic('shield', 'lead')}<input class="input has-lead" id="rs-td" type="password"></div><span class="hint">Demo: ${TD_PW}</span></div>
+      <div class="fld"><label for="rs-word">Type RESET to confirm</label><input class="input" id="rs-word" autocomplete="off">${d.err ? `<span class="err">${d.err}</span>` : ''}</div>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-danger-solid" data-act="resetgo">Reset TeleWarden</button></div>`
+  if (d.kind === 'pin') return `${dh('grid-3x3', 'Set a PIN', 'Unlock with a PIN')}
+      <div class="fld"><label for="pin1">PIN (4 to 8 digits)</label><input class="input mono" id="pin1" inputmode="numeric" maxlength="8" type="password"></div>
+      <div class="note">${ic('info')}<span>After TeleDrive restarts, your master password is asked once before the PIN works again.</span></div>
+      <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-primary" data-act="pinsave">Set PIN</button></div>`
+  if (d.kind === 'bio') return `<div class="bio"><p class="h2" style="margin:0">Unlock TeleWarden</p><span class="cap">Touch the fingerprint sensor</span>
+      <button class="fp raised-md" data-act="biook" aria-label="Touch sensor">${d.ok ? ic('check') : ic('fingerprint')}</button>
+      <button class="btn btn-ghost" data-act="closedialog">Use master password</button></div>`
+  return ''
+}
+
+// The add / edit form. Values live in S.dialog.draft so re-rendering (add a website, roll a password) keeps them.
+function draftFrom(type, i) {
+  i = i || {}
+  return {
+    name: i.name || '', folder: i.folder || (S.nav.startsWith('folder:') ? S.nav.slice(7) : ''), notes: i.notes || '',
+    user: i.user || '', pass: i.pass || '', totp: i.totp || '', urls: i.urls?.length ? [...i.urls] : [''],
+    holder: i.holder || '', number: i.number ? group4(i.number) : '', exp: i.exp || '', cvv: i.cvv || '',
+    first: i.first || '', last: i.last || '', email: i.email || '', phone: i.phone || '', address: i.address || '', passport: i.passport || '',
+    note: i.note || '', fields: clone(i.fields || []), showPass: false,
+  }
+}
+function captureForm() {
+  const d = S.dialog.draft
+  document.querySelectorAll('#itemForm [data-f]').forEach(el => { d[el.dataset.f] = el.value })
+  d.urls = [...document.querySelectorAll('#itemForm [data-url]')].map(el => el.value)
+  d.fields = [...document.querySelectorAll('#itemForm [data-cf]')].map((row, n) => ({ k: row.querySelector('[data-cfk]').value, v: row.querySelector('[data-cfv]').value, t: d.fields[n]?.t || 'text' }))
+}
+function formHTML() {
+  const { type, id, draft: d, err } = S.dialog
+  const T = TYPES[type]
+  const inp = (f, label, attrs = '') => `<div class="fld"><label for="f-${f}">${label}</label><input class="input" id="f-${f}" data-f="${f}" value="${esc(d[f])}" ${attrs}></div>`
+  const folder = `<div class="fld"><label for="f-folder">Folder</label><select class="input" id="f-folder" data-f="folder"><option value="">No folder</option>${S.folders.map(f => `<option value="${f.id}" ${d.folder === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>`
+  let body = `<div class="fld"><label for="f-name">Name</label><input class="input" id="f-name" data-f="name" value="${esc(d.name)}" placeholder="${type === 'login' ? 'e.g. Amazon' : type === 'card' ? 'e.g. HDFC Visa' : type === 'identity' ? 'e.g. Personal' : 'e.g. Home Wi-Fi'}" ${err ? 'style="outline:2px solid var(--red);outline-offset:2px"' : ''}>${err ? '<span class="err">Give it a name</span>' : ''}</div>`
+  if (type === 'login') {
+    body += inp('user', 'Username or email', 'autocomplete="off"')
+    body += `<div class="fld"><label for="f-pass">Password</label><div class="input-wrap"><input class="input has-trail ${d.showPass ? 'mono' : ''}" id="f-pass" data-f="pass" type="${d.showPass ? 'text' : 'password'}" value="${esc(d.pass)}" autocomplete="new-password">
+      <span class="trail"><button class="icon-btn" type="button" data-act="fshow" aria-label="${d.showPass ? 'Hide' : 'Show'} password">${ic(d.showPass ? 'eye-off' : 'eye')}</button><button class="icon-btn" type="button" data-act="fgen" aria-label="Generate a password" title="Generate a password">${ic('dices')}</button></span></div>
+      <div class="meter" id="f-meter">${meter(d.pass)}</div></div>`
+    body += `<div class="fld"><label for="f-totp">2FA secret <span class="cap" style="font-weight:500">(optional)</span></label><div class="input-wrap"><input class="input has-trail mono" id="f-totp" data-f="totp" value="${esc(d.totp)}" placeholder="Key or otpauth:// link">
+      <span class="trail"><button class="icon-btn" type="button" data-act="scan" aria-label="Scan QR code" title="Scan QR code">${ic('scan-qr-code')}</button></span></div><span class="hint">TeleWarden then shows the 6-digit code, so you don’t need a separate authenticator app.</span></div>`
+    body += `<div class="fld"><label>Websites</label>${d.urls.map((u, n) => `<input class="input" data-url="${n}" value="${esc(u)}" placeholder="https://example.com" aria-label="Website ${n + 1}">`).join('')}
+      <button class="btn btn-ghost" type="button" style="justify-self:start;padding:0;height:32px" data-act="furl">${ic('plus')}Add another website</button></div>`
+  } else if (type === 'card') {
+    body += inp('holder', 'Cardholder name')
+    body += `<div class="fld"><label for="f-number">Number <span class="badge neutral" id="f-brand" style="margin-left:6px">${brandOf(d.number) || '—'}</span></label><input class="input mono" id="f-number" data-f="number" value="${esc(d.number)}" inputmode="numeric" placeholder="1234 5678 9012 3456"></div>`
+    body += `<div class="grid2">${inp('exp', 'Expiry', 'placeholder="MM/YY"')}${inp('cvv', 'Security code', 'type="password" inputmode="numeric" maxlength="4"')}</div>`
+  } else if (type === 'identity') {
+    body += `<div class="grid2">${inp('first', 'First name')}${inp('last', 'Last name')}</div>${inp('email', 'Email', 'type="email"')}${inp('phone', 'Phone', 'type="tel"')}${inp('address', 'Address')}${inp('passport', 'Passport number')}`
+  } else {
+    body += `<div class="fld"><label for="f-note">Note</label><textarea class="input" id="f-note" data-f="note" rows="6">${esc(d.note)}</textarea></div>`
+  }
+  body += folder
+  if (type !== 'note') body += `<div class="fld"><label for="f-notes">Notes</label><textarea class="input" id="f-notes" data-f="notes" rows="2">${esc(d.notes)}</textarea></div>`
+  body += `<div class="fld"><label>Custom fields</label>${d.fields.map((c, n) => `<div class="grid2" data-cf="${n}"><input class="input" data-cfk value="${esc(c.k)}" placeholder="Field name" aria-label="Field name"><input class="input" data-cfv value="${esc(c.v)}" placeholder="${c.t === 'hidden' ? 'Hidden value' : 'Value'}" type="${c.t === 'hidden' ? 'password' : 'text'}" aria-label="Field value"></div>`).join('')}
+    <div style="display:flex;gap:16px;flex-wrap:wrap"><button class="btn btn-ghost" type="button" style="padding:0;height:32px" data-act="fcf" data-arg="text">${ic('plus')}Text field</button><button class="btn btn-ghost" type="button" style="padding:0;height:32px" data-act="fcf" data-arg="hidden">${ic('plus')}Hidden field</button></div></div>`
+  return `${dh(T.icon, id ? 'Edit ' + T.one.toLowerCase() : 'New ' + T.one.toLowerCase(), id ? d.name : '')}
+    <form id="itemForm" style="display:grid;gap:16px" novalidate>${body}</form>
+    <div class="foot"><button class="btn btn-ghost" data-act="closedialog">Cancel</button><button class="btn btn-primary" data-act="saveitem">${ic('check')}Save</button></div>`
+}
+
+// ---------- autofill demo ----------
+function autofillStage() {
+  const a = S.af
+  const vaultItem = S.items.find(i => i.id === 'i9')
+  let screen
+  if (a.step === 'signedin') {
+    screen = `<div class="welcome"><span class="kb-logo" style="margin:0"><span class="m">${ic('bird')}</span>Kitebird</span><p class="h2">Welcome back, @${esc(a.user)}</p><p class="cap" style="margin:0">You’re signed in.</p>
+      <button class="btn" data-act="afreset">${ic('rotate-ccw')}Restart demo</button></div>`
+  } else {
+    const drop = a.step === 'dropdown'
+      ? `<div class="afdrop">${a.locked
+        ? `<button data-act="afunlock"><span class="tw">${ic('key-round')}</span><span><b>TeleWarden is locked</b><small>Tap to unlock and fill</small></span></button>`
+        : `<button data-act="affill"><span class="tw">${ic('key-round')}</span><span><b>${esc(vaultItem.name)}</b><small>${esc(vaultItem.user)}</small></span></button>
+           <button data-act="afother"><span class="tw" style="background:transparent;color:var(--muted)">${ic('search')}</span><span><b>Search TeleWarden</b><small>Pick another login</small></span></button>`}</div>` : ''
+    screen = `<div class="kb">
+      <div class="kb-logo"><span class="m">${ic('bird')}</span>Kitebird</div>
+      <p class="h2" style="margin:0 0 4px">Log in</p>
+      <div class="fieldwrap"><label for="kbUser">Username or email</label><input id="kbUser" class="${a.filled ? 'filled' : ''}" value="${esc(a.user)}" autocomplete="off">${drop}</div>
+      <div class="fieldwrap"><label for="kbPass">Password</label><input id="kbPass" type="password" class="${a.filled ? 'filled' : ''}" value="${esc(a.pass)}" autocomplete="off"></div>
+      <button class="go" data-act="aflogin">Log in</button>
+      <p class="cap" style="text-align:center;margin:6px 0 0">Kitebird is a made-up app for this demo.</p>
+    </div>`
+  }
+  let over = ''
+  if (a.step === 'bio') over = `<div class="scrim"><div class="dialog"><div class="handle"></div><div class="bio">
+      <span class="logo" style="width:36px;height:36px">${ic('key-round')}</span><p class="h2" style="margin:0">Unlock TeleWarden</p><span class="cap">To fill your login in Kitebird</span>
+      <button class="fp raised-md" data-act="afbio" aria-label="Touch sensor">${a.bioOk ? ic('check') : ic('fingerprint')}</button>
+      <button class="btn btn-ghost" data-act="afbio">Use master password</button></div></div></div>`
+  if (a.step === 'save') {
+    const upd = a.update
+    over = `<div class="scrim"><div class="dialog"><div class="handle"></div>
+      <div class="dh"><span class="logo">${ic('key-round')}</span><div class="grow"><p class="h2">${upd ? 'Update password in TeleWarden?' : 'Save to TeleWarden?'}</p><span class="cap">kitebird.example · Kitebird app</span></div></div>
+      <div class="fields"><div class="f"><div class="fv"><div class="fl">Username</div><div class="val">${esc(a.user)}</div></div></div><div class="f"><div class="fv"><div class="fl">Password</div><div class="val mono">${'•'.repeat(Math.min(a.pass.length, 14))}</div><div class="meter">${meter(a.pass)}</div></div></div></div>
+      <div class="foot"><button class="btn btn-ghost" data-act="afnosave">Not now</button><button class="btn btn-primary" data-act="afsave">${ic('check')}${upd ? 'Update' : 'Save'}</button></div></div></div>`
+  }
+  if (a.step === 'pick') over = `<div class="scrim"><div class="dialog"><div class="handle"></div>${dh('key-round', 'Choose a login', 'Search TeleWarden')}
+      <div class="input-wrap">${ic('search', 'lead')}<input class="input has-lead" placeholder="Search" aria-label="Search"></div>
+      <div>${live().filter(i => i.type === 'login').slice(0, 5).map(i => `<div class="row" data-act="afpick" data-arg="${i.id}">${tileHTML(i)}<div class="info"><div class="name"><span class="t">${esc(i.name)}</span></div><div class="sub">${esc(i.user)}</div></div></div>`).join('')}</div>
+      <div class="note">${ic('info')}<span>Picking a login made for another site asks before filling.</span></div></div></div>`
+  const order = ['idle', 'dropdown', 'bio', 'filled', 'signedin']
+  const at = a.step === 'pick' ? 'dropdown' : ['save'].includes(a.step) ? 'save' : a.step
+  const idx = order.indexOf(at)
+  const steps = [
+    ['Tap the username field', 'Android asks TeleWarden for logins that match the Kitebird app.'],
+    ['Tap “TeleWarden is locked”', 'Your vault stays locked until you choose to fill.'],
+    ['Touch the fingerprint sensor', 'TeleWarden unlocks for this fill only.'],
+    ['Tap the Kitebird login', 'Username and password are filled. Nothing is copied to the clipboard.'],
+    ['Log in', 'Done. TeleWarden locks again on its own.'],
+  ]
+  const st = (n, [t, p]) => {
+    const cls = at === 'save' ? '' : n < idx || (a.step === 'filled' && n === 3) || (a.step === 'signedin') ? 'done' : n === idx ? 'now' : ''
+    return `<li class="${cls}"><b>${n + 1}</b><span>${t}<br><span class="cap">${p}</span></span></li>`
+  }
+  return `<div class="device"><div class="app ph">${statusBar()}${screen}${over}<div class="toasts"></div></div></div>
+    <div class="steps"><div class="label-swiss"><b>/</b>Autofill on Android</div>
+      <ol>${steps.map((s, n) => st(n, s)).join('')}</ol>
+      <div class="label-swiss" style="margin-top:8px"><b>/</b>Saving a new login</div>
+      <ol><li class="${at === 'save' ? 'now' : ''}"><b>A</b><span>Type a username and password yourself, then tap Log in<br><span class="cap">TeleWarden offers to save it, or to update the password if the username is already saved.</span></span></li></ol>
+      <button class="btn" style="justify-self:start" data-act="afreset">${ic('rotate-ccw')}Restart demo</button></div>`
+}
+
+// ---------- actions ----------
+function placeMenu(btn, entries) {
+  const app = btn.closest('.app').getBoundingClientRect(), r = btn.getBoundingClientRect()
+  const x = Math.max(8, Math.min(r.left - app.left, app.width - 252))
+  let y = r.bottom - app.top + 6
+  const h = entries.length * 42 + 20
+  if (y + h > app.height - 8) y = Math.max(8, r.top - app.top - h - 6)
+  S.menu = { x, y, entries }
+}
+const NEW_ENTRIES = [
+  { label: 'Login', icon: 'globe', act: 'new', arg: 'login' }, { label: 'Card', icon: 'credit-card', act: 'new', arg: 'card' },
+  { label: 'Identity', icon: 'contact', act: 'new', arg: 'identity' }, { label: 'Secure note', icon: 'sticky-note', act: 'new', arg: 'note' },
+  { hr: true }, { label: 'Folder', icon: 'folder-plus', act: 'newfolder' }, { label: 'Import passwords', icon: 'download', act: 'import' },
+]
+function setScenario(k) {
+  S.scenario = k; S.dialog = null; S.menu = null; S.sheet = false; S.drawer = false; S.picker = false; S.gateErr = false; S.q = ''; S.report = null
+  if (k === 'first') { S.firstRun = true; S.unlocked = false; S.items = []; S.folders = []; S.nav = 'all'; S.sel = null; S.setup = { step: 1, code: '' }; S.master = null; S.hint = ''; S.codeSaved = false; S.tries = 0; S.waitUntil = 0; S.bioReady = false }
+  else if (k === 'locked') { S.firstRun = false; S.unlocked = false; if (!S.items.length) { S.items = clone(ITEMS); S.folders = clone(FOLDERS) } }
+  else if (k === 'vault') { S.firstRun = false; S.unlocked = true; if (!S.items.length) { S.items = clone(ITEMS); S.folders = clone(FOLDERS) } S.lastActive = Date.now(); if (!S.sel) S.sel = 'i1' }
+  else S.af = newAF()
+}
+function unlock() {
+  S.bioReady = true; S.tries = 0; S.waitUntil = 0; S.hintShown = false
+  S.unlocked = true; S.firstRun = false; S.gateErr = false; S.lastActive = Date.now(); S.dialog = null; S.scenario = 'vault'
+  if (!S.sel && S.items.length) S.sel = visible()[0]?.id
+}
+function lock(msg) {
+  S.unlocked = false; S.reveal = {}; S.dialog = null; S.menu = null; S.sheet = false; S.drawer = false; S.histOpen = false; S.scenario = 'locked'
+  if (msg) toast(msg, 'lock')
+}
+function selectFirst() { const v = visible(); if (!v.some(i => i.id === S.sel)) S.sel = isPhone() ? null : v[0]?.id || null }
+
+const A = {
+  scenario: k => setScenario(k),
+  device: k => { S.device = k; S.sheet = false; S.drawer = false; S.menu = null },
+  theme: () => {
+    const el = document.documentElement, cur = el.getAttribute('data-theme')
+    const sys = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    const next = !cur ? (sys === 'dark' ? 'light' : 'dark') : cur === 'dark' ? 'light' : 'dark'
+    el.setAttribute('data-theme', next)
+  },
+  picker: () => { S.picker = !S.picker },
+  drive: name => { toast(name === 'Log out' ? 'Log out works as it does today' : `${name} is part of TeleDrive already. This prototype shows TeleWarden.`, 'info') ; S.picker = false },
+  drawer: () => { S.drawer = true },
+  nav: id => { S.nav = id; S.report = null; S.chip = 'all'; S.q = ''; S.drawer = false; S.sheet = false; S.histOpen = false; selectFirst() },
+  chip: k => { S.chip = k; selectFirst() },
+  select: id => { S.sel = id; S.histOpen = false; if (isPhone()) S.sheet = true },
+  reveal: k => { S.reveal[k] = !S.reveal[k] },
+  copy: k => { const [v, l] = copyValue(k); copyText(v, l); return false },
+  hist: () => { S.histOpen = !S.histOpen },
+  fav: id => { const i = S.items.find(x => x.id === id); i.fav = !i.fav; toast(i.fav ? `Added “${i.name}” to favorites` : `Removed “${i.name}” from favorites`, 'star') },
+  more: (id, el) => {
+    const i = S.items.find(x => x.id === id)
+    placeMenu(el, i.trashed
+      ? [{ label: 'Restore', icon: 'rotate-ccw', act: 'restore', arg: id }, { hr: true }, { label: 'Delete forever', icon: 'trash-2', act: 'delforever', arg: id, danger: true }]
+      : [{ label: 'Edit', icon: 'pencil', act: 'edit', arg: id }, { label: 'Clone', icon: 'copy-plus', act: 'clone', arg: id }, { label: 'Move to folder', icon: 'folder-input', act: 'move', arg: id },
+        { label: i.fav ? 'Remove from favorites' : 'Add to favorites', icon: 'star', act: 'fav', arg: id }, { hr: true }, { label: 'Move to trash', icon: 'trash-2', act: 'trash', arg: id, danger: true }])
+  },
+  newmenu: (_, el) => { placeMenu(el, NEW_ENTRIES) },
+  new: type => { S.menu = null; S.sheet = false; S.drawer = false; S.dialog = { kind: 'form', type, draft: draftFrom(type) } },
+  edit: id => { const i = S.items.find(x => x.id === id); S.menu = null; S.sheet = false; S.dialog = { kind: 'form', type: i.type, id, draft: draftFrom(i.type, i) } },
+  changepw: id => { A.edit(id); S.dialog.draft.pass = genPassword({ ...S.gen, len: 20, upper: true, lower: true, digits: true, symbols: true, avoid: false }); S.dialog.draft.showPass = true },
+  clone: id => { const i = S.items.find(x => x.id === id); const c = { ...clone(i), id: 'x' + Date.now(), name: i.name + ' (copy)', fav: false, created: 'Today', edited: 'Today' }; S.items.push(c); S.sel = c.id; toast(`Cloned “${i.name}”`) },
+  move: id => { S.dialog = { kind: 'move', id } },
+  movesel: fid => { const i = S.items.find(x => x.id === S.dialog.id); i.folder = fid || null; toast(fid ? `Moved to ${folderName(fid)}` : 'Removed from its folder', 'folder') ; S.dialog = null },
+  trash: id => { const i = S.items.find(x => x.id === id); i.trashed = true; i.tdays = 0; S.sheet = false; S.menu = null; selectFirst(); toast(`Moved “${i.name}” to the trash`, 'trash-2') },
+  restore: id => { const i = S.items.find(x => x.id === id); delete i.trashed; delete i.tdays; S.dialog = null; S.sheet = false; selectFirst(); toast(`Restored “${i.name}”`, 'rotate-ccw') },
+  delforever: id => { const i = S.items.find(x => x.id === id); S.dialog = { kind: 'confirm', title: 'Delete forever?', text: `“${i.name}” will be deleted from all your devices. This can’t be undone.`, label: 'Delete forever', act: 'dodelete', arg: id } },
+  dodelete: id => { const i = S.items.find(x => x.id === id); S.items = S.items.filter(x => x.id !== id); S.dialog = null; S.sheet = false; selectFirst(); toast(`Deleted “${i.name}”`, 'trash-2') },
+  emptytrash: () => { const n = S.items.filter(i => i.trashed).length; S.dialog = { kind: 'confirm', title: 'Empty trash?', text: `${plural(n, 'item')} will be deleted from all your devices. This can’t be undone.`, label: 'Empty trash', act: 'doempty' } },
+  doempty: () => { S.items = S.items.filter(i => !i.trashed); S.dialog = null; S.sel = null; toast('Trash emptied', 'trash-2') },
+  newfolder: () => { S.menu = null; S.drawer = false; S.dialog = { kind: 'folder' } },
+  savefolder: () => {
+    const v = document.getElementById('folderName').value.trim()
+    if (!v) { S.dialog.err = true; return }
+    const f = { id: 'f' + Date.now(), name: v }; S.folders.push(f); S.dialog = null; S.nav = 'folder:' + f.id; S.chip = 'all'; S.sel = null; toast(`Created folder “${v}”`, 'folder')
+  },
+  closedialog: () => { S.dialog = null },
+  fshow: () => { S.dialog.draft.showPass = !S.dialog.draft.showPass },
+  fgen: () => { S.dialog.draft.pass = genPassword({ ...S.gen, len: Math.max(S.gen.len, 16), mode: 'password' }); S.dialog.draft.showPass = true },
+  furl: () => { S.dialog.draft.urls.push('') },
+  fcf: t => { S.dialog.draft.fields.push({ k: '', v: '', t }) },
+  scan: () => { toast('Opens the camera on Android, or reads a QR code from a screenshot', 'scan-qr-code'); return false },
+  saveitem: () => {
+    captureForm()
+    const { type, id, draft: d } = S.dialog
+    if (!d.name.trim()) { S.dialog.err = true; return }
+    const base = { name: d.name.trim(), folder: d.folder || null, notes: d.notes, fields: d.fields.filter(f => f.k || f.v) }
+    const typed = type === 'login' ? { user: d.user, pass: d.pass, totp: d.totp.trim(), urls: d.urls.map(u => u.trim()).filter(Boolean) }
+      : type === 'card' ? { holder: d.holder, number: d.number.replace(/\s/g, ''), exp: d.exp, cvv: d.cvv }
+      : type === 'identity' ? { first: d.first, last: d.last, email: d.email, phone: d.phone, address: d.address, passport: d.passport }
+      : { note: d.note }
+    if (id) {
+      const i = S.items.find(x => x.id === id)
+      if (type === 'login' && i.pass !== d.pass) { i.history = [{ p: i.pass, d: 'Today' }, ...(i.history || [])].slice(0, 5); i.changed = 0; delete i.breached }
+      Object.assign(i, base, typed, { edited: 'Today' })
+      toast(`Saved “${i.name}”`)
+    } else {
+      const i = { id: 'x' + Date.now(), type, ...base, ...typed, created: 'Today', edited: 'Today', changed: 0 }
+      S.items.push(i); S.sel = i.id
+      if (!visible().some(x => x.id === i.id)) { S.nav = 'all'; S.chip = 'all'; S.report = null; S.q = '' }
+      toast(`Added “${i.name}”`)
+    }
+    S.dialog = null
+    if (S.report) selectFirst()
+  },
+  lock: () => lock('TeleWarden locked'),
+  setupnext: () => { S.setup.step = 2 },
+  setupcode: () => {
+    S.master = document.getElementById('mp-pw').value; S.hint = document.getElementById('mp-hint')?.value.trim() || ''
+    S.setup.step = 3; S.setup.code = newCode(); S.codeSaved = false
+  },
+  setupdone: () => { S.firstRun = false; S.codeSaved = false; toast('TeleWarden is ready', 'key-round'); unlock() },
+  suggest: pfx => {
+    const v = genPassphrase({ ...S.gen, words: 5, sep: '-', cap: true, num: true })
+    for (const id of [pfx + '-pw', pfx + '-pw2']) { const el = document.getElementById(id); if (el) { el.value = v; el.type = 'text' } }
+    updateMaster(pfx); toast('Suggested a passphrase. Write it down somewhere safe.', 'dices'); return false
+  },
+  copycode: () => { copyText(S.dialog?.code || S.setup.code, 'Recovery code'); return false },
+  savecode: () => { toast('Saves telewarden-recovery-code.txt (the app saves the file)', 'file-down'); return false },
+  codesaved: () => { S.codeSaved = !S.codeSaved },
+  showhint: () => { S.hintShown = !S.hintShown },
+  recover: () => { S.dialog = { kind: 'recover', step: 1 } },
+  recnext: () => {
+    const v = (document.getElementById('rc-code').value || '').toUpperCase().replace(/[\s-]/g, '')
+    const want = S.setup.code.replace(/-/g, '')
+    if (want ? v !== want : !/^[0-9A-Z]{32}$/.test(v)) { S.dialog.err = 'That recovery code doesn’t match'; return }
+    S.dialog = { kind: 'recover', step: 2 }
+  },
+  recpw: () => { S.master = document.getElementById('rp-pw').value; S.codeSaved = false; S.dialog = { kind: 'recover', step: 3, code: newCode() } },
+  recdone: () => { S.setup.code = S.dialog.code; S.codeSaved = false; S.dialog = null; unlock(); toast('New master password and recovery code set', 'key-round') },
+  chpw: () => { S.dialog = { kind: 'chpw' } },
+  chpwsave: () => {
+    const cur = document.getElementById('cp-cur').value
+    if (S.master ? cur !== S.master : !cur) { S.dialog.err = 'Wrong master password'; return }
+    S.master = document.getElementById('cp-pw').value; S.dialog = null; toast('Master password changed', 'key-round')
+  },
+  newcode: () => { S.dialog = { kind: 'newcode', step: 1 } },
+  newcodego: () => {
+    const v = document.getElementById('nc-pw').value
+    if (S.master ? v !== S.master : !v) { S.dialog.err = 'Wrong master password'; return }
+    S.codeSaved = false; S.dialog = { kind: 'newcode', step: 2, code: newCode() }
+  },
+  newcodedone: () => { S.setup.code = S.dialog.code; S.codeSaved = false; S.dialog = null; toast('New recovery code saved. The old one no longer works.', 'life-buoy') },
+  reset: () => { S.dialog = { kind: 'reset' } },
+  resetgo: () => {
+    if (document.getElementById('rs-td').value !== TD_PW) { S.dialog.err = 'Wrong TeleDrive password'; return }
+    if (document.getElementById('rs-word').value !== 'RESET') { S.dialog.err = 'Type RESET in capitals'; return }
+    setScenario('first'); toast('TeleWarden was reset', 'trash-2')
+  },
+  bio: () => { S.dialog = { kind: 'bio' } },
+  biook: () => { S.dialog.ok = true; render(); setTimeout(() => { unlock(); render() }, 450); return false },
+  genmode: m => { S.gen.mode = m; regen() },
+  regen: () => { regen() },
+  genopt: k => { S.gen[k] = !S.gen[k]; regen() },
+  gensep: s => { S.gen.sep = s === 'space' ? ' ' : s; regen() },
+  report: k => { S.report = k; S.nav = 'all'; S.chip = 'all'; S.q = ''; S.sel = isPhone() ? null : visible()[0]?.id || null },
+  breach: () => {
+    S.checking = true
+    setTimeout(() => { S.checking = false; const n = live().filter(i => i.breached).length; toast(`Checked ${live().filter(i => i.type === 'login').length} passwords · ${n} ${n === 1 ? 'was' : 'were'} found in breaches`, 'shield-check'); if (S.nav === 'report') render() }, 1400)
+  },
+  set: kv => { const [k, v] = kv.split('='); S.settings[k] = isNaN(+v) ? v : +v; S.lastActive = Date.now() },
+  tog: k => { if (k === 'pin' && !S.settings.pin) { S.dialog = { kind: 'pin' }; return } S.settings[k] = !S.settings[k] },
+  pinsave: () => { const v = document.getElementById('pin1').value; if (!/^\d{4,8}$/.test(v)) { toast('Use 4 to 8 digits', 'x'); return false } S.settings.pin = true; S.dialog = null; toast('PIN set') },
+  autofillon: () => { S.settings.autofill = true; toast('Opens Android’s autofill settings. Pick TeleDrive there.', 'smartphone') },
+  import: () => { S.menu = null; S.drawer = false; S.dialog = { kind: 'import', step: 1, src: 'bitwarden' } },
+  impsrc: s => { S.dialog.src = s },
+  impfile: () => { S.dialog.step = 2 },
+  impgo: () => {
+    const have = new Set(S.items.map(i => i.id))
+    for (const i of clone(IMPORTED)) if (!have.has(i.id)) S.items.push(i)
+    for (const f of FOLDERS) if (!S.folders.some(x => x.id === f.id)) S.folders.push({ ...f })
+    S.dialog = null; S.nav = 'all'; S.chip = 'all'; S.sel = isPhone() ? null : 'i1'; toast(`Imported ${IMPORTED.length} items`, 'download')
+  },
+  export: () => { S.dialog = { kind: 'export', fmt: 'enc' } },
+  expfmt: f => { S.dialog.fmt = f },
+  expgo: () => { S.dialog = null; toast('Exported teledrive-vault-2026-10-07.json (the app saves the file)', 'upload') },
+
+  // autofill demo
+  afunlock: () => { S.af.step = 'bio'; S.af.next = 'fill' },
+  afbio: () => {
+    S.af.bioOk = true; render()
+    setTimeout(() => {
+      S.af.bioOk = false; S.af.locked = false
+      if (S.af.next === 'save') { saveFromAF() } else S.af.step = 'dropdown'
+      render()
+    }, 450)
+    return false
+  },
+  affill: () => { const i = S.items.find(x => x.id === 'i9'); Object.assign(S.af, { user: i.user, pass: i.pass, filled: true, step: 'filled' }); toast('Filled by TeleWarden', 'key-round') },
+  afother: () => { S.af.step = 'pick' },
+  afpick: id => { const i = S.items.find(x => x.id === id); Object.assign(S.af, { user: i.user, pass: i.pass, filled: true, step: 'filled' }); toast(`Filled “${i.name}”`, 'key-round') },
+  aflogin: () => {
+    const a = S.af
+    a.user = document.getElementById('kbUser')?.value ?? a.user
+    a.pass = document.getElementById('kbPass')?.value ?? a.pass
+    if (!a.user || !a.pass) { toast('Enter a username and password', 'x'); return false }
+    if (a.filled) { a.step = 'signedin'; return }
+    const same = S.items.find(i => i.type === 'login' && !i.trashed && (i.urls || []).some(u => u.includes('kitebird')) && i.user === a.user)
+    if (same && same.pass === a.pass) { a.step = 'signedin'; return }
+    a.update = !!same; a.step = 'save'
+  },
+  afsave: () => { if (S.af.locked) { S.af.step = 'bio'; S.af.next = 'save'; return } saveFromAF() },
+  afnosave: () => { S.af.step = 'signedin' },
+  afreset: () => { S.af = newAF() },
+}
+function saveFromAF() {
+  const a = S.af
+  const same = S.items.find(i => i.type === 'login' && !i.trashed && (i.urls || []).some(u => u.includes('kitebird')) && i.user === a.user)
+  if (same) { same.history = [{ p: same.pass, d: 'Today' }, ...(same.history || [])]; same.pass = a.pass; same.changed = 0; same.edited = 'Today'; toast('Password updated in TeleWarden', 'key-round') }
+  else { S.items.push({ id: 'x' + Date.now(), type: 'login', name: 'Kitebird', folder: 'social', user: a.user, pass: a.pass, urls: ['https://kitebird.example', 'androidapp://com.kitebird.app'], created: 'Today', edited: 'Today', changed: 0 }); toast('Saved to TeleWarden', 'key-round') }
+  a.step = 'signedin'
+}
+
+// ---------- events ----------
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-stop]')) return
+  const hadMenu = !!S.menu
+  if (S.menu && !e.target.closest('.menu')) S.menu = null
+  const close = e.target.dataset?.close
+  if (close) { if (close === 'dialog') S.dialog = null; if (close === 'sheet') S.sheet = false; if (close === 'drawer') S.drawer = false; render(); return }
+  if (S.af.step === 'dropdown' && !e.target.closest('.afdrop') && !e.target.closest('#kbUser') && S.scenario === 'autofill') { S.af.step = S.af.filled ? 'filled' : 'idle'; if (!e.target.closest('[data-act]')) { render(); return } }
+  const el = e.target.closest('[data-act]')
+  if (!el) { if (hadMenu) render(); return }
+  if (el.closest('.menu')) S.menu = null
+  const fn = A[el.dataset.act]
+  if (!fn) return
+  if (fn(el.dataset.arg, el, e) !== false) render()
+})
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if (S.menu) S.menu = null; else if (S.dialog) S.dialog = null; else if (S.sheet) S.sheet = false; else if (S.drawer) S.drawer = false; else return; render() }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row[data-act]')) { e.preventDefault(); e.target.click() }
+})
+document.addEventListener('submit', e => {
+  e.preventDefault()
+  const f = e.target.dataset.form
+  if (f === 'unlock') {
+    if (S.waitUntil > Date.now()) return
+    const pw = e.target.querySelector('input[type=password]').value
+    if (!pw) S.gateErr = 'Enter your master password'
+    else if (S.master ? pw !== S.master : pw === 'wrong') {
+      S.tries++
+      S.gateErr = `Wrong master password${S.tries < 5 ? ` · ${5 - S.tries} ${5 - S.tries === 1 ? 'try' : 'tries'} before a wait` : ''}`
+      if (S.tries >= 5) S.waitUntil = Date.now() + 30000 * 2 ** (S.tries - 5)
+    } else { unlock(); render(); return }
+    render(); document.getElementById('gatePw')?.focus()
+  }
+})
+document.addEventListener('input', e => {
+  const t = e.target
+  if (t.dataset.master) { updateMaster(t.dataset.master); return }
+  if (t.id === 'search') {
+    S.q = t.value
+    const w = document.getElementById('listWrap'); const v = visible()
+    if (w) { w.innerHTML = listHTML(v); icons() }
+    const c = document.querySelector('.head .count'); if (c) c.textContent = plural(v.length, 'item')
+  } else if (t.id === 'f-pass') {
+    const m = document.getElementById('f-meter'); if (m) m.innerHTML = meter(t.value)
+  } else if (t.id === 'f-number') {
+    const b = document.getElementById('f-brand'); if (b) b.textContent = brandOf(t.value) || '—'
+  } else if (t.id === 'genLen' || t.id === 'genWords') {
+    if (t.id === 'genLen') S.gen.len = +t.value; else S.gen.words = +t.value
+    document.getElementById(t.id + 'V').textContent = t.value
+    S.gen.value = S.gen.mode === 'password' ? genPassword() : genPassphrase(); updateGen()
+  } else if (t.id === 'kbUser') { S.af.user = t.value; S.af.filled = false; t.classList.remove('filled'); document.getElementById('kbPass')?.classList.remove('filled') }
+  else if (t.id === 'kbPass') { S.af.pass = t.value; S.af.filled = false; t.classList.remove('filled') }
+})
+document.addEventListener('change', e => { if (e.target.id === 'genLen' || e.target.id === 'genWords') { regen(); render() } })
+document.addEventListener('focusin', e => {
+  if (e.target.id === 'kbUser' && S.scenario === 'autofill' && !S.af.filled && (S.af.step === 'idle')) {
+    S.af.step = 'dropdown'; render(); const u = document.getElementById('kbUser'); u?.focus()
+  }
+})
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => { S.lastActive = Date.now() }, { capture: true, passive: true })
+let wasNarrow = narrow()
+window.addEventListener('resize', () => { if (narrow() !== wasNarrow) { wasNarrow = narrow(); render() } })
+
+// ---------- clock: 2FA codes, auto-lock, clipboard ----------
+function tick() {
+  const s = step(), l = left()
+  document.querySelectorAll('[data-totp]').forEach(el => { el.textContent = totp(el.dataset.totp, s) })
+  document.querySelectorAll('[data-left]').forEach(el => { el.style.setProperty('--p', l / 30) })
+  document.querySelectorAll('[data-left-s]').forEach(el => { el.textContent = l + 's' })
+  if (S.unlocked && S.scenario === 'vault' && S.settings.lockAfter !== 'close' && Date.now() - S.lastActive > S.settings.lockAfter * 60000) {
+    lock(`Locked after ${plural(S.settings.lockAfter, 'minute')} without activity`); render(); return
+  }
+  if (S.waitUntil && !S.unlocked) {
+    const w = Math.ceil((S.waitUntil - Date.now()) / 1000), el = document.getElementById('gateWait')
+    if (w <= 0) { S.waitUntil = 0; S.gateErr = false; render(); return }
+    if (el) el.textContent = `Too many wrong tries. Try again in ${w} s`
+  }
+  const ll = document.getElementById('lockLeft'); if (ll) ll.textContent = lockLeftText()
+  const lb = document.getElementById('lockBadge'); if (lb) lb.textContent = lockLeftText().replace('locks in ', 'OPEN · ')
+  let dirty = false
+  const now = Date.now()
+  for (const t of S.toasts) {
+    if (t.clip && !t.cleared && S.settings.clip && now - t.born >= S.settings.clip * 1000) { t.cleared = true; t.text = 'Clipboard cleared'; t.born = now; dirty = true }
+  }
+  const before = S.toasts.length
+  S.toasts = S.toasts.filter(t => (t.clip && !t.cleared ? !(S.settings.clip === 0 && now - t.born > 3000) : now - t.born < 3200))
+  if (dirty || before !== S.toasts.length || S.toasts.some(t => t.clip && !t.cleared)) drawToasts()
+}
+setInterval(tick, 1000)
+
+regen()
+render()
+})()
+</script>

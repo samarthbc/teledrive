@@ -1201,6 +1201,351 @@ details one tap deeper).
   settings unchanged. Not pressed **Back up** (that uploads real photos): still to check that a range uploads exactly
   its photos and is dropped when done.
 
+## Phase 19: TeleWarden, the vault ⬜
+
+A third built-in drive, **TeleWarden**: a password manager in the style of Bitwarden, kept in its own Telegram channel
+and encrypted like everything else. Phases 19–23 build it; this phase is the drive, its key and lock, and the four
+item types. The UI follows the prototype in `design/8-telewarden/prototype.html` (open it in a browser: first run,
+locked, vault, generator, report, settings, phone layout, Android autofill).
+
+### 19.1 What the user sees
+- **Drive picker:** My Drive, TelePhotos, **TeleWarden** (key icon).
+- **First time**, three steps:
+  1. Welcome ("Encrypted on this device", "Its own master password", "On every device").
+  2. **Create a master password:** typed twice, live strength meter, a checklist that turns from red to ink as each
+     rule is met (at least 12 characters · rated Strong · not your TeleDrive password · both entries match), optional
+     hint, and in red: "Nobody can reset this password. Not Telegram, not TeleDrive." **Next** stays disabled until
+     every rule is met. *Suggest a passphrase* fills one from the generator (shown, so it can be written down).
+  3. **Recovery code:** `K7QP-M2XD-9WFH-T3RB-6NCV-Y8JA-P4LE-H2ZS` shown once, **Copy** and **Save as file**, "Keep it
+     somewhere safe, away from this device", a checkbox "I've saved my recovery code", then **Open TeleWarden**.
+  Then an empty vault offering **New login** and **Import passwords**.
+- **Locked:** "TeleWarden is locked" with the **master password** field (key icon) and **Unlock**; *Show hint*;
+  *Forgot it? Use your recovery code*. After 5 wrong tries: "Try again in 30 s" (doubling). The sidebar shows but its
+  items are disabled; the drive picker and Log out still work.
+- **Recovery:** the recovery code → a new master password (same rules) → a new recovery code (the old one stops
+  working). Without the code: **Reset TeleWarden** (TeleDrive password, then type RESET) deletes the vault.
+- **Reminder:** a week after creating it, once: "Do you still remember your master password?" with a field to check
+  it (and *Use recovery code* / *Change it*).
+- **Desktop:** sidebar (New; All items, Favorites, Logins, Cards, Identities, Notes; Folders with a +; Tools:
+  Generator, Security report, Trash; the vault card: item count, "Open · locks in 4:12", **Lock now**; Settings),
+  then a list column and a detail column.
+- **List row:** tile (first letter for logins, type icon otherwise), name, red star when a favorite, one badge
+  (WEAK / REUSED / EXPOSED, from Phase 22), the username (or "Visa •••• 4421"), the live 2FA code with its ring
+  (Phase 20); on hover: copy username, open website; always: copy (password / card number / email / note).
+- **Detail:** name, type and folder, star, ⋮ (Edit, Clone, Move to folder, Favorite, Move to trash). Fields under a
+  2 px rule, each with copy, secret ones with show/hide: passwords in a monospace face with digits in red (no l/1/I
+  mix-ups) and a strength bar; websites open in a new tab; a card picture for cards; password history (folds open);
+  "Created … · Edited …"; **Edit** and **Move to trash**.
+- **+ New:** Login, Card, Identity, Secure note, then Folder and Import passwords. The form is a dialog (a bottom
+  sheet on the phone): login has the dice (generate) and eye buttons on the password and a live strength bar; the card
+  number shows the brand as it's typed; **Add another website**; **+ Text field / + Hidden field**.
+- **Copy:** toast "Password copied · clears in 30s", counting down, then "Clipboard cleared".
+- **Trash:** "deleted forever after 30 days", days left on each row, Restore / Delete forever, **Empty trash**.
+- **Generator page:** Password / Passphrase; the result large (monospace, digits red), regenerate, copy, strength bar;
+  length slider and A–Z, a–z, 0–9, symbols, avoid look-alikes; or words, separator, capitals, number; history (last 8,
+  memory only).
+- **Phone:** top bar with menu (drawer = the sidebar), the red "OPEN · 4:12" badge and a Lock button; H1, search,
+  chips; bottom tabs **Vault · Generator · Report · Settings**; the + button; an item opens in a bottom sheet.
+- **Settings → TeleWarden:** Lock after (1 / 5 / 15 / 30 min / On close), Clear the clipboard after (10 s / 30 s /
+  1 min / Never), **Change master password**, **New recovery code**, **Reset TeleWarden**. Later phases add rows (fingerprint, PIN, screenshots, breach check, 2FA in list, autofill,
+  import/export).
+
+### 19.2 The drive
+- `telegram/channel.ts`: a third built-in title, `VAULT_TITLE = 'TeleDrive Vault'`, shown as
+  `VAULT_NAME = 'TeleWarden'`; `isVaultDrive`, `createVaultDrive` (as `createPhotosDrive`); ranked after TelePhotos;
+  "New drive" refuses the name. Listed in the picker before it exists, created when first opened.
+- `Drive.tsx` hands the whole main area to `pages/Vault.tsx` when the vault drive is open (no files, uploads,
+  transfers or camera backup there). Routes inside it: `/` all, `/v/fav`, `/v/login|card|identity|note`,
+  `/v/folder/:id`, `/v/trash`, `/generator`, `/report`, `/settings`.
+- Camera backup, Send to Telegram, the storage bar and duplicate checks never look at this drive.
+
+### 19.3 The master password and the vault key
+```
+TeleDrive password ─▶ master key ─▶ ROOT KEY            (remembered on the device: drives, camera backup)
+MASTER PASSWORD (only in the user's head) ─Argon2id─▶ password key
+RECOVERY CODE (written down)              ─HKDF─────▶ recovery key
+VAULT KEY (random 256-bit), stored twice:
+   k = AES-GCM(root key, AES-GCM(password key, vault key))
+   r = AES-GCM(root key, AES-GCM(recovery key, vault key))
+VAULT KEY ─▶ every item (AES-256-GCM)
+```
+- **Two layers:** opening the vault needs this account's root key (a logged-in device) **and** the master password (or
+  the recovery code). Someone who knows or saw the TeleDrive password can't open it; someone who steals the channel
+  has to break both passwords offline.
+- **Argon2id** for the master password (memory-hard, so far slower to brute-force on GPUs than PBKDF2): `hash-wasm`
+  (~30 KB, loaded only by TeleWarden), 64 MB, 3 passes, 4 lanes (Bitwarden's defaults; about 1 s on a phone). The
+  parameters are stored, so they can be raised later. The master password is typed rarely (fingerprint and PIN cover
+  daily use), so the cost is fine.
+- **Strong is required:** at least 12 characters **and** a `zxcvbn` score of 3 or more (`@zxcvbn-ts/core` + the common
+  dictionary, loaded only on the create / change screens; a length-and-charset estimate would rate `Password1234!` as
+  strong). **Not the TeleDrive password:** checked on the device with `checkAccountPassword` before creating.
+- **Recovery code:** 160 random bits as 32 Crockford base32 characters in groups of 4 (no I, L, O, U; typing is
+  case-insensitive and ignores dashes and spaces). High entropy, so HKDF is enough (no slow KDF). Using it opens the
+  vault, then a new master password and a **new** code are required (`k` and `r` are rewritten; the old code stops
+  working). Settings → *New recovery code* (asks the master password) rewrites `r`.
+- **Hint:** optional, sealed with the **root key** (`seal(root, hint)`), so only the user's logged-in devices can show
+  it; Telegram can't read it. It may not contain the password (checked).
+- **Changing the master password:** re-wrap the inner layer of `k` (as `changeLockPassword` does). No item is touched.
+- **Reset TeleWarden** (forgotten password, no code): TeleDrive password, then type RESET; deletes every vault message
+  and the config. My Drive and TelePhotos aren't touched.
+- **Wrong passwords:** after 5, a growing wait (30 s, 1 min, 2 min…), counted on the device. Offline attacks can't be
+  slowed this way; that's what Argon2id and the strength rule are for.
+- **Stored** in the vault channel's pinned config message: `ConfigMeta.w = {v: 1, kdf: {a: 'argon2id', m, t, p},
+  s (salt), k, r, h? (sealed hint), ct (created)}`.
+- **In memory only:** the vault key (`vault/keyring.ts`: `vaultKey()`, `openVault`, `lockVault`, its own idle timer
+  from `vaultLockMinutes`, separate from `keyring.ts`'s item locks). Closing TeleDrive always locks it. Locking clears
+  the key, the decrypted items, the search index and any shown secrets. The master password string is dropped as soon
+  as the key is derived.
+
+### 19.4 How items are stored
+- **One item = one text message** in the vault channel:
+  `{"td":1,"t":"v","id":"k3j9","ts":1759200000,"e":"<sealed>"}`. Folders: `{"td":1,"t":"vf","id":…,"e":…}`.
+  New caption types, so `tree.ts`, TelePhotos and older app versions ignore them (`decode` returns null for unknown
+  types today).
+- **Everything is sealed**, including the type, favorite and trash flags, so Telegram sees only how many items there
+  are: `seal(vaultKey, item)`, with the item JSON compressed first (`CompressionStream('deflate-raw')`).
+- Sealed item: `{ty, n, f?(folder), fav?, tr?(trashed at), rd(revision date), pc?(password changed), data…,
+  cf?(custom fields), ph?(password history), notes?}`; data per type:
+  - login `{u, p, otp?, urls: [{u, m?(match mode)}]}`
+  - card `{h, num, exp, cvv, br?}`
+  - identity `{ti, fn, mn, ln, em, ph, a1, a2, a3, city, st, pin, ctry, aad, pan, pp, dl, vid, un, co}`
+  - note `{t}`
+- **Size:** text messages hold 4096 characters, about 2.9 KB of compressed item. Bigger items (very long notes) go
+  as an encrypted document message instead (same `e`, plus the encrypted body as a small file). `encode` gets a
+  per-type limit (1024 for captions, 4096 for vault text messages).
+- **Edits** are `EditMessage` of that message; **delete forever** deletes it. Sync is the existing `sync.ts` /
+  `getChannelDifference` on this channel, cached in the drive's IndexedDB as ciphertext only.
+- **Decrypted items stay in memory** (`store/useVault.ts`), rebuilt from the records when the vault opens and on each
+  sync; nothing decrypted is written to IndexedDB or localStorage.
+- **Two devices editing the same item:** before saving, compare the item's `rd` with the latest synced one; if it
+  changed on another device, ask "Changed on another device: keep yours / keep theirs".
+- **Trash:** `tr` = when it was trashed; any device that opens the vault deletes items trashed over 30 days ago.
+- **Tied to its ID:** the item's ID is sealed inside it and passed to AES-GCM as additional data (`tw1:<id>`). Copying
+  one item's ciphertext onto another message fails to decrypt and shows as "Damaged item".
+- **Rollbacks:** the device keeps the newest `rd` it has seen per item (IndexedDB, not secret); an item that comes back
+  with an older `rd` gets a warning ("An older version of this item came back. Keep it / Ignore").
+- **Padding:** the compressed item is padded to a multiple of 256 bytes before encryption, so message sizes don't
+  give away what kind of item it is.
+
+### 19.5 Clipboard
+- Web: `navigator.clipboard.writeText`; after the chosen time, write an empty string if the page still has focus
+  (a browser can't clear it otherwise; the toast says "Clipboard cleared" only when it was).
+- Android: a native `copySecret(text, clearAfter)` in `TeleDriveNativePlugin`: marks the clip sensitive
+  (`ClipDescription.EXTRA_IS_SENSITIVE`, Android 13+, so the keyboard and the clipboard preview don't show it) and
+  clears it after the time if it's still ours.
+- Windows app: Electron's `clipboard.clear()` from the main process, same rule.
+
+### 19.6 Generator and strength
+- `vault/generator.ts`: `crypto.getRandomValues` with rejection sampling (no modulo bias); at least one character
+  from each chosen set; passphrases from the **EFF large wordlist** (7,776 words, ~60 KB, loaded only when the
+  generator opens).
+- `vault/strength.ts`: a small estimator (character pool × length, capped for common words and patterns) for the
+  meter while typing. Phase 22 may replace it with zxcvbn.
+
+### 19.7 Website hardening
+- Today the website's only security header is `frame-ancestors 'none'`. Once it holds passwords, anything able to
+  inject a script (a compromised dependency, an injected tag) could read them, so `vercel.json` gets a strict
+  Content-Security-Policy: `default-src 'self'`; `script-src 'self' 'wasm-unsafe-eval'` (Argon2); `connect-src 'self'`
+  plus Telegram's WebSocket/HTTPS hosts, `api.pwnedpasswords.com` and whatever the update check uses;
+  `img-src 'self' blob: data:`; `worker-src 'self' blob:`; `object-src 'none'`; `base-uri 'none'`. First list what the
+  site really loads (network log on every page), then set it, then check nothing breaks.
+- The Windows app gets the same policy (Electron `session.webRequest` headers); the Android app's WebView loads only
+  its bundled files already.
+
+### 19.8 Steps
+1. `vault/items.ts`: item types, defaults, validation (Aadhaar 12 digits, PAN `AAAAA9999A`, PIN code 6 digits,
+   card brand detection incl. RuPay); `meta.ts`: `t:'v'` / `t:'vf'`, `ConfigMeta.w`; unit tests.
+2. `vault/vaultCrypto.ts`: Argon2id (hash-wasm), the two-layer wrap of the vault key, the recovery code (make, format,
+   parse, HKDF), the sealed hint, seal/unseal with ID binding, compression and padding; unit tests (round trip, wrong
+   password, wrong code, swapped ciphertext fails, padding sizes).
+3. `vault/keyring.ts` (create, open, lock, idle timer, wrong-try delays, change password, new code, reset) and
+   `vault/ops.ts` (create, edit with the revision check, trash, restore, delete, empty trash, folders, clone, move,
+   rollback warning); unit tests (size limit, conflict, 30-day purge).
+4. The strength rule: `@zxcvbn-ts` loaded on the create/change screens; the "not the TeleDrive password" check.
+5. The drive in `channel.ts` and the picker; `pages/Vault.tsx` with its routes; first run (welcome, master password,
+   recovery code), lock screen (hint, recovery, delays), recovery and reset flows, the one-week reminder.
+6. Screens: sidebar, list, detail, the four forms, folders, trash, generator, settings rows; phone tabs, sheet,
+   drawer, + button. Follow the prototype.
+7. Clipboard: web, Android native method, Electron.
+8. Website hardening (19.7).
+9. Dev mock (`?mock&vault`, as `?mock&photos`): the prototype's example items.
+10. Check on the website and the phone: create (weak passwords and the TeleDrive password refused), lock/unlock,
+    wrong password and the delays, the hint, recovery with the code (the old code stops working), change master
+    password, reset, every item type, edit on one device and see it on the other, conflict, trash and restore,
+    clipboard clear, auto-lock, nothing decrypted in IndexedDB, the CSP blocks an injected script.
+
+---
+
+## Phase 20: TeleWarden, authenticator ⬜
+
+TeleWarden works as an authenticator app (like Google Authenticator), so a login's 2FA code sits next to its
+password.
+
+### 20.1 What the user sees
+- **Login form:** "2FA secret (optional)", with a **scan** button (QR code) and paste (key or `otpauth://` link).
+- **Detail:** "2FA code" `842 091` large, a ring counting down the 30 s, copy. **List:** the code and a small ring
+  next to each login that has one (Settings → *Show 2FA codes in the list*).
+- **2FA codes** in the sidebar under Tools (on the phone, a chip at the top of the Vault tab): every code, search, tap
+  to copy; **+ Add** (scan, paste, or image).
+- **Import from Google Authenticator:** in Import, and in 2FA codes → Add. Steps shown: in Google Authenticator,
+  ⋮ → *Transfer accounts* → *Export accounts* → scan the QR code(s) here ("QR code 2 of 3"). Then a list of every
+  account with where it goes: *Add to login "GitHub"* (matched) or *New 2FA item*, changeable; **Import 12 codes**.
+- **2FA-only items:** a login with no password, only the code (accounts without a saved login, e.g. after the Google
+  Authenticator import).
+- If the device clock is off by more than 15 s (compared with Telegram's server time), a warning: "Your phone's clock
+  is off, codes may not work".
+- Not possible: Microsoft Authenticator and Authy have no export. Their sites are set up again ("Set up authenticator
+  app" on the site, scan the new QR code into TeleWarden). The import dialog says so.
+
+### 20.2 How it works
+- `vault/totp.ts`: RFC 6238 with `crypto.subtle` HMAC (SHA-1, SHA-256, SHA-512), 6 or 8 digits, 30 or 60 s;
+  base32 decoding. HOTP (counter) accounts are imported and shown with a "next code" button that increments the
+  counter.
+- `vault/otpauth.ts`: parse `otpauth://totp/Issuer:account?secret=…&issuer=…&algorithm=…&digits=…&period=…`.
+- `vault/googleAuth.ts`: parse `otpauth-migration://offline?data=…`: base64 → protobuf `MigrationPayload`
+  (`otp_parameters`: secret bytes, name, issuer, algorithm, digits, type, counter; `batch_size`, `batch_index`).
+  A small hand-written protobuf reader (only varints and length-delimited fields are needed); no library.
+- **Matching** an imported account to a login: issuer or account name against the item name and website hosts
+  (case-insensitive, "Google" ↔ `accounts.google.com`); one match → suggested; none or several → New 2FA item.
+- **QR scanning:**
+  - Android: the camera through a native scanner (ML Kit barcode scanning in `TeleDriveNativePlugin`, or
+    `@capacitor-mlkit/barcode-scanning`).
+  - Website and Windows: read the QR code from an image or a pasted screenshot with `jsQR` (loaded only then).
+- **Clock check:** GramJS knows Telegram's time offset after connecting; compare it with `Date.now()`.
+
+### 20.3 Steps
+1. `totp.ts`, `otpauth.ts`, `googleAuth.ts` with unit tests (RFC 6238 test vectors; a real export QR payload).
+2. Codes in the detail and the list with the ring (one shared 1 s timer); the 2FA codes page; 2FA-only items.
+3. Scan: Android native scanner; image / paste with jsQR.
+4. Google Authenticator import: multi-QR progress, matching, the review list.
+5. Check on the phone: scan a site's QR code, codes match Google Authenticator side by side, an export from Google
+   Authenticator imports every account, the clock warning.
+
+---
+
+## Phase 21: TeleWarden, unlocking and your data ⬜
+
+### 21.1 Fingerprint (Android)
+- Settings → *Unlock with fingerprint*. Turning it on asks the master password once; the vault key's raw bytes
+  (from a variant of `openLock` that returns them) are encrypted by an Android Keystore key
+  (`setUserAuthenticationRequired(true)`, `setInvalidatedByBiometricEnrollment(true)`) through `BiometricPrompt` with a
+  `CryptoObject`, and stored by the app (`SharedPreferences`); the raw bytes are then wiped.
+- Unlocking: **Use fingerprint** on the lock screen → `BiometricPrompt` → the key comes back → imported as a
+  non-extractable `CryptoKey`.
+- After the app restarts, the master password is asked once first (as in the prototype); the fingerprint works
+  again from then on.
+- A new fingerprint added to the phone invalidates the Keystore key: fall back to the password and offer to turn it
+  on again.
+
+### 21.2 PIN (all platforms)
+- Settings → *Unlock with a PIN* (4–8 digits). The vault key is wrapped with a key derived from the PIN (PBKDF2) and
+  that copy is kept **in memory only**, so a PIN can't be brute-forced from disk; after a restart the master
+  password is asked first. Five wrong PINs → the master password is needed.
+
+### 21.3 Block screenshots
+- Android: native `setSecure(true|false)` (`FLAG_SECURE`) while the vault drive is open (the app switcher shows a
+  blank card too).
+- Windows app: `BrowserWindow.setContentProtection(true)` through the preload bridge.
+
+### 21.4 Import
+- `vault/importers/`: Bitwarden `.json` (unencrypted) and `.csv`; Chrome / Edge `.csv`
+  (`name,url,username,password,note`); Firefox `.csv`; LastPass `.csv` (incl. `totp`, `grouping` → folder);
+  1Password `.csv`; KeePass 2 `.xml`. Each returns items + folders; unit tests with a sample file each.
+- Dialog: 1) source and file (pick or drop); 2) "14 items: 9 logins, 2 cards, 1 identity, 2 notes · 0 duplicates"
+  (same type + name + username + host) and "This file isn't encrypted. Delete it after importing."; **Import**.
+- Sending many items: batched messages (Telegram limits), with progress; folders created first.
+
+### 21.5 Export
+- Asks the master password. Formats:
+  - **Password-protected .json** in Bitwarden's format (PBKDF2-SHA256 → HKDF → AES-256-CBC + HMAC-SHA256,
+    `encKeyValidation_DO_NOT_EDIT`), so it opens in Bitwarden too and can be imported back here.
+  - Plain Bitwarden `.json`; `.csv` (logins only). Both behind a warning.
+- Saved like a download today (browser download; Android: Downloads / share sheet; Windows: save dialog).
+
+### 21.6 Steps
+1. Android: Keystore + `BiometricPrompt`, `setSecure`, `copySecret` in `TeleDriveNativePlugin`; JS wrappers in
+   `native/android.ts`.
+2. PIN wrap and the lock screen's PIN pad; Electron content protection.
+3. Importers with tests; the import dialog; batched sending.
+4. Export formats with tests (round trip through our own import, and a Bitwarden-format check); the export dialog.
+5. Check on the phone: fingerprint after enrolling a new finger, restart, PIN, FLAG_SECURE in the app switcher;
+   import a real Chrome export and a Bitwarden export; re-import our encrypted export.
+
+---
+
+## Phase 22: TeleWarden, security report ⬜
+
+### 22.1 What the user sees
+- **Security report** (sidebar, and a phone tab): "5 logins need attention", then rows with counts: Exposed in data
+  breaches, Reused passwords, Weak passwords, Not changed in over a year, Unsecured websites (http://). Tapping a row
+  lists those logins (breadcrumb "Security report / Weak passwords").
+- On a login: a red-ruled warning per problem; **Change password** opens the editor with a new generated password
+  (the user opens the site, changes it there, then saves).
+- Badges in the list: EXPOSED, REUSED, WEAK (the most serious one only).
+- **Check for breaches** runs the breach check. Settings → *Check for breached passwords*: asked once the first time
+  the report opens; off means it never runs.
+
+### 22.2 How it works
+- `vault/report.ts` (pure): weak (strength score ≤ 1), reused (same password, compared by SHA-256 in memory), old
+  (`pc` over 365 days ago), unsecured (an `http://` website), exposed (from the breach check). Unit tests.
+- **Breach check** (`vault/hibp.ts`): SHA-1 of each password; `GET https://api.pwnedpasswords.com/range/<first 5 hex>`
+  with `Add-Padding: true`; match the rest locally. One request per distinct prefix, 4 at a time; results kept in
+  memory until the vault locks. Only the prefix leaves the device.
+- Strength: optionally swap the Phase 19 estimator for `@zxcvbn-ts/core` + its common dictionary, loaded only when the
+  report or a form opens (it's large).
+- Later: "2FA available" (sites that support 2FA but have no code saved, from the 2fa.directory list).
+
+### 22.3 Steps
+1. `report.ts` and `hibp.ts` with tests (mocked fetch).
+2. Report page, filtered lists, warnings and badges, Change password.
+3. Check: a known-breached password ("password123") shows as exposed; nothing but prefixes is sent (network log).
+
+---
+
+## Phase 23: TeleWarden, Android autofill ⬜
+
+### 23.1 What the user sees
+- Settings → *Autofill in other apps* → **Turn on** opens Android's "Autofill service" setting to pick TeleDrive;
+  the row then says On. (Chrome also needs *Settings → Autofill services → Autofill using another service*; the row
+  explains it.)
+- In another app or in Chrome, tapping a username or password field shows **"TeleWarden is locked · Tap to unlock and
+  fill"** → fingerprint (or the password) → the matching logins → tap one → both fields are filled. Nothing goes
+  through the clipboard. If the login has a 2FA code, it's copied after filling ("2FA code copied").
+- **Search TeleWarden** for a login that didn't match; filling a login saved for another site asks first.
+- After signing in with a new login: **"Save to TeleWarden?"** (or **"Update password in TeleWarden?"** when the
+  username is saved with another password).
+- Android 11+: suggestions appear above the keyboard (inline).
+- Card and address forms are filled from cards and identities.
+
+### 23.2 How it works
+- `TeleWardenAutofillService` (Java, `BIND_AUTOFILL_SERVICE`, `res/xml/autofill_service.xml`, inline suggestions
+  supported).
+- **onFillRequest:** walk the `AssistStructure`: fields by `autofillHints`, input type (password variations), and in
+  browsers `HtmlInfo` (type, name, id, autocomplete) and `webDomain`; guess the username field (the text field before
+  the password). The target is the web domain, or the app's package name.
+- The native side never holds decrypted items. The response is one dataset with an **authentication** `IntentSender`
+  for `AutofillActivity`: a small activity with its own WebView running the app at `/autofill?target=…&fields=…`
+  (as `HeadlessRunner` builds a WebView today). There the vault is unlocked (fingerprint / password), the matches are
+  listed, and the chosen item goes back to Java, which builds the `Dataset` and returns it with
+  `EXTRA_AUTHENTICATION_RESULT`. The activity has `FLAG_SECURE`.
+- **Matching** (`vault/match.ts`, pure, tested): each saved website has a match mode: base domain (default; uses the
+  Public Suffix List, a trimmed copy bundled), host, starts with, exact, regular expression, never; Android apps as
+  `androidapp://<package>`. Later: Digital Asset Links to tie apps to their websites.
+- **onSaveRequest:** `SaveInfo` is set whenever a password field is found; saving opens `AutofillActivity` in save
+  mode (domain/package, username, password) → Save / Update → a normal vault edit.
+- **Cards and identities:** datasets from hints (`creditCardNumber`, `creditCardExpiration…`, `postalAddress`,
+  `postalCode`, `phone`, `emailAddress`, `personName…`).
+- **Inline suggestions:** `InlinePresentation` built from the request's `InlineSuggestionsRequest` (Android 11+).
+
+### 23.3 Steps
+1. `match.ts` with tests (subdomains, `co.in`-style suffixes, apps, every match mode).
+2. The service: structure parsing, the locked dataset, `AutofillActivity` with its WebView and the `/autofill` route
+   (unlock, list, search, return); fill.
+3. Save and update requests.
+4. Cards, identities, inline suggestions; the Settings row, with Chrome's setting explained.
+5. Check on the phone: a real app login (fill, save, update), Chrome on a website, a card form, an address form,
+   keyboard suggestions, locked vs unlocked, nothing decrypted left in memory after the activity closes.
+
 ## Later (ideas, not planned yet)
 - **No duplicates after logging in again:** before uploading, skip photos already in Camera Backup (same name + size, or the SHA-256 from Phase 4's duplicate detection).
 

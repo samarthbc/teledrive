@@ -198,6 +198,66 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - [ ] Camera backup from a date range: every photo and video taken between two dates, when turning backup on or for a folder already backed up (Phase 18)
 - [ ] Later: on this day, map, smart search (what's in a photo, on the device)
 
+### 4.12 TeleWarden (password manager and authenticator, Bitwarden-style)
+A third built-in drive, **TeleWarden**, next to My Drive and TelePhotos. UI prototype: `design/8-telewarden/prototype.html`.
+
+**The drive (Phase 19)**
+- [ ] Its own channel; listed in the drive picker after TelePhotos; created the first time it's opened; can't be renamed or deleted
+- [ ] Its own **master password**, created the first time: never stored anywhere, only the user knows it (the
+      TeleDrive password stays remembered on the device for camera backup and the drives, and doesn't open TeleWarden)
+- [ ] The master password must be **strong**: at least 12 characters, rated Strong or Very strong, and not the same as
+      the TeleDrive password; typed twice; optional hint (encrypted, shown only on the user's devices)
+- [ ] A **recovery code**, shown once at creation, opens the vault if the master password is forgotten (then a new
+      master password and a new code are set); a new code can be made in Settings
+- [ ] Forgotten master password and no recovery code: **Reset TeleWarden** (asks the TeleDrive password) deletes the
+      vault and starts over; nothing else is touched
+- [ ] Change the master password in Settings (nothing is re-encrypted; only the vault key is wrapped again)
+- [ ] Its own lock, separate from My Drive's locked items; growing delays after wrong passwords
+- [ ] Locks after 1 / 5 / 15 / 30 minutes without activity, or when TeleDrive closes; **Lock now** in the sidebar card
+- [ ] Everything encrypted on the device (names, types, every field); Telegram only stores ciphertext; each item tied
+      to its ID and padded, so items can't be swapped or rolled back unnoticed and their sizes say little
+- [ ] The website gets a strict Content-Security-Policy (only its own scripts; only Telegram and Have I Been Pwned)
+- [ ] Syncs between devices like files do
+
+**Items (Phase 19)**
+- [ ] **Login:** name, username, password, 2FA secret, websites (several), notes
+- [ ] **Card:** name, cardholder, number (brand detected: Visa, Mastercard, RuPay, Amex…), expiry, security code
+- [ ] **Identity:** title, first / middle / last name, email, phone (+91 default), address, city, state, PIN code,
+      country; Aadhaar, PAN, passport, driving licence, voter ID; username, company
+- [ ] **Secure note:** free text
+- [ ] Custom fields on any item (text or hidden); password history (last 5) on logins
+- [ ] Folders, favorites, trash (deleted forever after 30 days), restore, delete forever, clone, move to folder
+- [ ] Search (name, username, website); filter by type and folder
+- [ ] Show / hide secret fields; copy any field; the clipboard clears itself (10 s / 30 s / 1 min / never)
+- [ ] Password generator (length, A-Z, a-z, 0-9, symbols, avoid look-alikes) and passphrase generator (words,
+      separator, capitals, number), with history; dice button in the login form; strength meter while typing
+- [ ] Phone: bottom tabs (Vault, Generator, Report, Settings), + button, items open in a bottom sheet
+
+**Authenticator (Phase 20)**
+- [ ] TeleWarden is an authenticator app: 6/8-digit codes (TOTP) with a countdown, on any login, refreshed live
+- [ ] Add a code by scanning a QR code (Android camera, or a screenshot / image), pasting the key or an `otpauth://` link
+- [ ] **Import from Google Authenticator** (its "Export accounts" QR codes, all accounts at once), matched to saved
+      logins or added as 2FA-only items
+- [ ] A **2FA codes** page with every code; tap to copy
+- [ ] Not possible (no export): Microsoft Authenticator, Authy; those sites are set up again by scanning a new QR code
+
+**Unlocking and your data (Phase 21)**
+- [ ] Unlock with fingerprint (Android) and with a PIN; the master password is asked again after a restart
+- [ ] Block screenshots while TeleWarden is open (Android, Windows app)
+- [ ] Import from Bitwarden (.json, .csv), Chrome / Edge, Firefox, LastPass, 1Password (.csv), KeePass (.xml); duplicates skipped
+- [ ] Export: password-protected file (opens in Bitwarden too), plain .json, .csv; asks the master password first
+
+**Security report (Phase 22)**
+- [ ] Weak, reused, old (over a year), unsecured (http://) and exposed passwords (Have I Been Pwned, opt-in; only a
+      5-character hash prefix is sent)
+- [ ] Badges in the list, warnings on the item, **Change password** opens the editor with a new generated password
+
+**Android autofill (Phase 23)**
+- [ ] Fills logins in other apps and in Chrome (TeleDrive as Android's autofill service); unlock with fingerprint first
+- [ ] "Save to TeleWarden?" / "Update password?" after signing in somewhere
+- [ ] Suggestions above the keyboard (Android 11+); fills cards and identities into forms too
+- [ ] Website matching: base domain, host, starts with, exact, regular expression, never; Android apps by package name
+
 ---
 
 ## 5. Out of Scope (not possible without a backend)
@@ -205,6 +265,9 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 - Public share links for people without Telegram
 - Accounts shared by several users on the same drive (other than sharing the channel itself)
 - Server-side processing (e.g. video transcoding)
+- TeleWarden: Bitwarden **Send** (public share links), **organizations** / family sharing, **emergency access**
+- TeleWarden: autofill on the website and in the Windows app (needs a browser extension, a separate project);
+  passkeys (maybe later, Android 14+)
 
 ## 6. Constraints & Risks
 
@@ -241,3 +304,8 @@ Folders are marker messages with their own ID (`{"td":1, "t":"d", "id":"k3j9", "
 | **16** | TelePhotos: albums, free up space, and more |
 | **17** | TelePhotos: Locked photos |
 | **18** | Camera backup: back up a date range |
+| **19** | TeleWarden: the drive, the vault key and lock, items (login, card, identity, note), folders, trash, generator |
+| **20** | TeleWarden: authenticator (2FA codes, QR scan, import from Google Authenticator) |
+| **21** | TeleWarden: fingerprint / PIN unlock, block screenshots, import and export |
+| **22** | TeleWarden: security report |
+| **23** | TeleWarden: Android autofill and save prompt |
