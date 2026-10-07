@@ -64,6 +64,8 @@ interface TeleDriveNativePlugin {
   systemBars(o: { dark: boolean }): Promise<void>
   /** TeleWarden: copy marked sensitive, cleared after `clearAfter` seconds (0 = never) if still on the clipboard. */
   copySecret(o: { text: string; clearAfter: number }): Promise<void>
+  /** TeleWarden: scan a QR code (Google's scanner). */
+  scanQr(): Promise<{ text?: string; cancelled?: boolean }>
   /** Background backup page only. */
   network(): Promise<{ connected: boolean; wifi: boolean }>
   done(o: { result: string }): Promise<void>

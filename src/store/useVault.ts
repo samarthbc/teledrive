@@ -9,6 +9,7 @@ import { verifyPassword } from '../drive/vault'
 import { getSettings, useSettings } from '../lib/settings'
 import { telegramBackend, type VaultBackend } from '../vault/backend'
 import { TRASH_DAYS, withPasswordHistory, type VaultFolder, type VaultItem } from '../vault/items'
+import { forgetOtpKeys } from '../vault/totp'
 import * as vc from '../vault/vaultCrypto'
 import { useDrive } from './useDrive'
 
@@ -194,6 +195,7 @@ export const useVault = create<VaultState>((set, get) => {
     keyFrom = null
     cache.clear()
     where.clear()
+    forgetOtpKeys()
     clearTimeout(idle)
   }
 

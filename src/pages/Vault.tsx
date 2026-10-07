@@ -1,6 +1,6 @@
 import {
   Dices, Folder, FolderPlus, KeyRound, LayoutGrid, Lock, LockOpen, LogOut, Menu as MenuIcon, MonitorSmartphone, MousePointerClick, Pencil, Plus,
-  Search, Settings, Star, Trash2, X, type LucideIcon,
+  ScanQrCode, Search, Settings, Star, Trash2, X, type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
@@ -15,6 +15,7 @@ import Toasts from '../components/Toasts'
 import { Choice } from '../components/ui'
 import ItemForm from '../components/vault/ItemForm'
 import { ItemDetail, ItemRow, itemMenu } from '../components/vault/ItemViews'
+import { AddCodeDialog, CodesPanel, ImportGoogleDialog } from '../components/vault/Otp'
 import { TYPE_ICONS } from '../components/vault/parts'
 import { RecoverDialog, ReminderDialog, reminderDue, ResetDialog, VaultLock, VaultSetup } from '../components/vault/VaultGate'
 import { GeneratorPanel, VaultSettings } from '../components/vault/VaultPanels'
@@ -34,6 +35,7 @@ type ListFilter = 'all' | 'fav' | 'trash' | ItemType
 type View =
   | { kind: 'list'; filter: ListFilter; folder?: string }
   | { kind: 'generator' }
+  | { kind: 'codes' }
   | { kind: 'settings' }
 
 const TYPES: ItemType[] = ['login', 'card', 'identity', 'note']
@@ -41,6 +43,7 @@ const isWebsite = !isAndroid && !isDesktop
 
 function viewOf(pathname: string): View {
   if (pathname === '/generator') return { kind: 'generator' }
+  if (pathname === '/codes') return { kind: 'codes' }
   if (pathname === '/settings') return { kind: 'settings' }
   const folder = pathname.match(/^\/v\/folder\/([^/]+)$/)
   if (folder) return { kind: 'list', filter: 'all', folder: decodeURIComponent(folder[1]) }
@@ -61,6 +64,8 @@ type Modal =
   | { type: 'getApps' }
   | { type: 'newDrive' }
   | { type: 'reminder' }
+  | { type: 'addCode' }
+  | { type: 'importGoogle' }
   | { type: 'recover' }
   | { type: 'reset' }
 
@@ -194,6 +199,8 @@ export default function VaultPage() {
   const title =
     view.kind === 'generator'
       ? 'Generator'
+      : view.kind === 'codes'
+        ? '2FA codes'
       : view.kind === 'settings'
         ? 'Settings'
         : view.folder
@@ -242,6 +249,25 @@ export default function VaultPage() {
   if (status === 'none' || pendingCode === 'setup') content = <VaultSetup />
   else if (status === 'locked' || pendingCode === 'recover') content = <VaultLock />
   else if (view.kind === 'generator') content = <GeneratorPanel />
+  else if (view.kind === 'codes')
+    content = (
+      <>
+        <div className="mb-4 flex flex-wrap items-end gap-x-4 gap-y-2 md:mb-5">
+          <h1 className="h-display">2FA codes</h1>
+        </div>
+        {!wide && <div className="mb-4 flex">{searchBox}</div>}
+        <CodesPanel
+          query={query}
+          onAdd={() => setModal({ type: 'addCode' })}
+          onImport={() => setModal({ type: 'importGoogle' })}
+          onOpen={(id) => {
+            go('/v/login')
+            waitingFor.current = id
+            select(id)
+          }}
+        />
+      </>
+    )
   else if (view.kind === 'settings') content = <SettingsView extra={<VaultSettings />} onGetApps={isWebsite ? () => setModal({ type: 'getApps' }) : undefined} />
 
   return (
@@ -261,7 +287,7 @@ export default function VaultPage() {
             <MenuIcon />
           </button>
           {/* Wide screens: search in the top bar; phones: under the title */}
-          {open && view.kind === 'list' && wide ? searchBox : <div className="flex-1" />}
+          {open && (view.kind === 'list' || view.kind === 'codes') && wide ? searchBox : <div className="flex-1" />}
           {open && (
             <>
               <LockCountdown className="md:hidden" />
@@ -442,6 +468,8 @@ export default function VaultPage() {
           onClose={() => setModal(null)}
         />
       )}
+      {modal?.type === 'addCode' && <AddCodeDialog onClose={() => setModal(null)} />}
+      {modal?.type === 'importGoogle' && <ImportGoogleDialog onClose={() => setModal(null)} />}
       {modal?.type === 'reminder' && config && (
         <ReminderDialog ct={config.ct} onClose={() => setModal(null)} onRecover={() => setModal({ type: 'recover' })} />
       )}
@@ -630,6 +658,7 @@ function VaultSidebar(props: {
         <span className="text-[11px] font-extrabold tracking-[0.1em] text-muted uppercase">Tools</span>
       </div>
       <nav className="space-y-1">
+        {link('/codes', ScanQrCode, '2FA codes', live.filter((i) => i.ty === 'login' && i.d.otp).length)}
         {link('/generator', Dices, 'Generator')}
         {link('/v/trash', Trash2, 'Trash', items.filter((i) => i.tr).length)}
       </nav>
@@ -678,8 +707,8 @@ function VaultSidebar(props: {
 
 function BottomNav({ pathname, go }: { pathname: string; go: (to: string) => void }) {
   const tabs = [
-    { label: 'Vault', icon: KeyRound, to: '/', on: pathname === '/' || (pathname.startsWith('/v/') && pathname !== '/v/fav') },
-    { label: 'Favorites', icon: Star, to: '/v/fav', on: pathname === '/v/fav' },
+    { label: 'Vault', icon: KeyRound, to: '/', on: pathname === '/' || pathname.startsWith('/v/') },
+    { label: '2FA codes', icon: ScanQrCode, to: '/codes', on: pathname === '/codes' },
     { label: 'Generator', icon: Dices, to: '/generator', on: pathname === '/generator' },
     { label: 'Settings', icon: Settings, to: '/settings', on: pathname === '/settings' },
   ]

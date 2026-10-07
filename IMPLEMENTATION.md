@@ -1400,7 +1400,7 @@ VAULT KEY ─▶ every item (AES-256-GCM)
 - Not yet: very long items as a document message (today: "This item is too long" past ~2.9 KB compressed); the Windows
   app's CSP (19.7). Still to check: real Telegram (create the channel, two devices), Android (native copy, layout).
 
-## Phase 20: TeleWarden, authenticator ⬜
+## Phase 20: TeleWarden, authenticator 🚧 (implemented; the camera scanner still needs the phone)
 
 TeleWarden works as an authenticator app (like Google Authenticator), so a login's 2FA code sits next to its
 password.
@@ -1446,6 +1446,23 @@ password.
    Authenticator imports every account, the clock warning.
 
 ---
+
+### 20.4 Done so far
+- Code: `vault/totp.ts` (base32, RFC 4226/6238 with WebCrypto HMAC SHA-1/256/512, 6–8 digits, any period,
+  `otpauth://` parse and build, HMAC keys dropped when the vault locks); `vault/googleAuth.ts` (the export's protobuf,
+  read by hand; several QR codes per export by `batch_id`/`batch_index`; MD5 accounts skipped); `vault/otpMatch.ts`
+  (issuer against name and website hosts, same username first); `vault/qr.ts` (jsQR for images and pasted
+  screenshots; Android: native `scanQr` with Google's code scanner, `play-services-code-scanner`, no camera
+  permission); `telegramClockOffset()` for the clock warning. Screens (`components/vault/Otp.tsx`): the code with its
+  ring in the detail (HOTP: Next code), in list rows (Settings → *Show 2FA codes in the list*), the 2FA field in the
+  login form (scan, image, paste a screenshot, a live "Code now" check), the **2FA codes** page (sidebar under Tools,
+  a phone tab in place of Favorites), Add 2FA code (matched login, another login, or a new 2FA-only login), Import from
+  Google Authenticator (camera / images / pasted link; per-account target; already-saved keys skipped).
+- Tests: `vault/totp.test.ts` (RFC 6238 vectors for SHA-1/256/512, RFC 4226 values, keys and links, a hand-built
+  export with two accounts and an MD5 one, matching).
+- Checked in the browser (mock): the codes page (Google's code equals an independent calculation), import of a
+  three-account export (GitHub → its login, Dropbox → new item, Google → skipped as already saved), codes in list rows
+  and in the detail. Still to check on the phone: the camera scanner (Google's scanner screen).
 
 ## Phase 21: TeleWarden, unlocking and your data ⬜
 

@@ -6,7 +6,7 @@ import { copySecret } from '../../vault/clipboard'
 import {
   DEFAULT_PASSPHRASE, DEFAULT_PASSWORD, generatePassphrase, generatePassword, MAX_LENGTH, MIN_LENGTH, type PassphraseOptions, type PasswordOptions,
 } from '../../vault/generator'
-import { Checkbox, Segmented } from '../ui'
+import { Checkbox, Segmented, Toggle } from '../ui'
 import { SecretText, StrengthMeter } from './parts'
 import { ChangePasswordDialog, NewCodeDialog, ResetDialog } from './VaultGate'
 
@@ -161,6 +161,9 @@ export function VaultSettings() {
             onChange={(v) => setSetting('clipboardSeconds', v)}
             options={CLIPBOARD_CHOICES.map((s) => ({ value: s, label: !s ? 'Never' : s < 60 ? `${s} s` : `${s / 60} min` }))}
           />
+        </Row>
+        <Row inline name="Show 2FA codes in the list" hint="The current code next to each login that has one.">
+          <Toggle label="Show 2FA codes in the list" checked={settings.vaultCodesInList} onChange={(v) => setSetting('vaultCodesInList', v)} />
         </Row>
         <Row name="Master password" hint="Change it any time. Nothing is re-encrypted, and your recovery code keeps working.">
           <button className="btn-secondary" onClick={() => setDialog('password')}>

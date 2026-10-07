@@ -91,6 +91,7 @@ export default function App() {
       {/* TeleWarden's own places */}
       <Route path="/v/*" element={<Page mode="folder" />} />
       <Route path="/generator" element={<Page mode="folder" />} />
+      <Route path="/codes" element={<Page mode="folder" />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

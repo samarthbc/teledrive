@@ -23,10 +23,12 @@ export interface Settings {
   lockOnClose: boolean
   vaultLockMinutes: VaultLockMinutes
   clipboardSeconds: ClipboardSeconds
+  /** TeleWarden: 2FA codes next to each login in the list. */
+  vaultCodesInList: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  density: 'comfortable', thumbnails: true, autoLockMinutes: 5, lockOnClose: false, vaultLockMinutes: 5, clipboardSeconds: 30,
+  density: 'comfortable', thumbnails: true, autoLockMinutes: 5, lockOnClose: false, vaultLockMinutes: 5, clipboardSeconds: 30, vaultCodesInList: true,
 }
 
 const KEY = 'teledrive.settings'
@@ -53,6 +55,7 @@ export function parseSettings(raw: string | null): Settings {
     clipboardSeconds: CLIPBOARD_CHOICES.includes(saved.clipboardSeconds as ClipboardSeconds)
       ? (saved.clipboardSeconds as ClipboardSeconds)
       : d.clipboardSeconds,
+    vaultCodesInList: typeof saved.vaultCodesInList === 'boolean' ? saved.vaultCodesInList : d.vaultCodesInList,
   }
 }
 

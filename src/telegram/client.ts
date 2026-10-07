@@ -87,6 +87,15 @@ export function getClient(): Promise<TelegramClient> {
   return connecting
 }
 
+/**
+ * Telegram's clock minus this device's, in seconds (null before connecting). Telegram corrects it when the device's
+ * clock is off, so a big value means the clock is wrong (2FA codes then don't work).
+ */
+export function telegramClockOffset(): number | null {
+  const state = (client as unknown as { _sender?: { _state?: { timeOffset?: number } } } | null)?._sender?._state
+  return typeof state?.timeOffset === 'number' ? state.timeOffset : null
+}
+
 export async function saveSession(): Promise<void> {
   if (client) await setKV(KEYS.session, (client.session as StringSession).save())
 }

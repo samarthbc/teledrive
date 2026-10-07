@@ -1,4 +1,4 @@
-import { Check, Dices, Eye, EyeOff, Loader2, Plus, ScanQrCode, X } from 'lucide-react'
+import { Check, Dices, Eye, EyeOff, Loader2, Plus, X } from 'lucide-react'
 import { useId, useState } from 'react'
 import { ConflictError, newVaultId, useVault } from '../../store/useVault'
 import { toast, toastError } from '../../store/useToast'
@@ -8,6 +8,7 @@ import {
 } from '../../vault/items'
 import Dialog from '../Dialog'
 import { ErrorText } from '../ui'
+import { OtpField } from './Otp'
 import { StrengthMeter, TextField, TYPE_ICONS } from './parts'
 
 const PLACEHOLDERS: Record<ItemType, string> = { login: 'e.g. Amazon', card: 'e.g. HDFC Visa', identity: 'e.g. Personal', note: 'e.g. Home Wi-Fi' }
@@ -177,19 +178,7 @@ export default function ItemForm(props: { type: ItemType; item?: VaultItem; fold
                 />
                 <StrengthMeter password={draft.d.p} userInputs={[draft.n, draft.d.u]} />
               </div>
-              <TextField
-                label="2FA secret (optional)"
-                value={draft.d.otp ?? ''}
-                onChange={(otp) => setData({ otp })}
-                mono
-                placeholder="Key or otpauth:// link"
-                hint="The key from the site’s two-factor setup page."
-                trailing={
-                  <button type="button" className="icon-btn-flat" disabled title="Scanning comes with the authenticator" aria-label="Scan QR code">
-                    <ScanQrCode />
-                  </button>
-                }
-              />
+              <OtpField value={draft.d.otp ?? ''} onChange={(otp) => setData({ otp })} />
               <div>
                 <p className="field-label">Websites</p>
                 <div className="space-y-2.5">

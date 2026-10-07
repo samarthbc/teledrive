@@ -7,7 +7,7 @@ describe('parseSettings', () => {
     expect(parseSettings('{not json')).toEqual(DEFAULT_SETTINGS)
   })
   it('keeps valid saved values', () => {
-    const saved = { density: 'compact', thumbnails: false, autoLockMinutes: 15, lockOnClose: true, vaultLockMinutes: 0, clipboardSeconds: 60 }
+    const saved = { density: 'compact', thumbnails: false, autoLockMinutes: 15, lockOnClose: true, vaultLockMinutes: 0, clipboardSeconds: 60, vaultCodesInList: false }
     expect(parseSettings(JSON.stringify(saved))).toEqual(saved)
   })
   it('replaces invalid values with defaults, one by one', () => {

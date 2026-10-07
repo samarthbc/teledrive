@@ -42,6 +42,9 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -551,6 +554,27 @@ public class TeleDriveNativePlugin extends Plugin {
             }
             call.resolve();
         });
+    }
+
+    /** Scan a QR code with Google's scanner screen (2FA setup codes, Google Authenticator exports). */
+    @PluginMethod
+    public void scanQr(PluginCall call) {
+        GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build();
+        GmsBarcodeScanning.getClient(getActivity(), options).startScan()
+            .addOnSuccessListener(code -> {
+                JSObject res = new JSObject();
+                res.put("text", code.getRawValue());
+                call.resolve(res);
+            })
+            .addOnCanceledListener(() -> {
+                JSObject res = new JSObject();
+                res.put("cancelled", true);
+                call.resolve(res);
+            })
+            .addOnFailureListener(e -> call.reject("The QR scanner isn't available: " + e.getMessage()));
     }
 
     // ---- Keeping transfers alive ----

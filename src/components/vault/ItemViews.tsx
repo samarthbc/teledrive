@@ -11,6 +11,8 @@ import {
   cardBrand, fullName, groupCardNumber, hostOf, last4, maskAadhaar, openableUrl, subtitleOf, TRASH_DAYS, TYPE_NAMES, type VaultItem,
 } from '../../vault/items'
 import type { MenuEntry } from '../Menu'
+import { useSettings } from '../../lib/settings'
+import { OtpRow, RowCode } from './Otp'
 import { FieldRow, ItemTile, SecretText, StrengthMeter } from './parts'
 
 const nowSec = () => Math.floor(Date.now() / 1000)
@@ -33,6 +35,7 @@ function quickCopy(item: VaultItem): [string, string] | null {
 export function ItemRow(props: { item: VaultItem; selected: boolean; onOpen: () => void }) {
   const { item, selected, onOpen } = props
   const copy = item.tr ? null : quickCopy(item)
+  const codesInList = useSettings((s) => s.vaultCodesInList)
   const site = item.ty === 'login' ? item.d.urls.map((u) => openableUrl(u.u)).find(Boolean) : null
   return (
     <div
@@ -56,6 +59,7 @@ export function ItemRow(props: { item: VaultItem; selected: boolean; onOpen: () 
         </p>
         <p className="truncate text-[13px] text-muted">{subtitleOf(item)}</p>
       </div>
+      {codesInList && !item.tr && item.ty === 'login' && item.d.otp && <RowCode otp={item.d.otp} />}
       {copy && (
         <div className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
           {item.ty === 'login' && item.d.u && (
@@ -249,7 +253,7 @@ function Fields({ item }: { item: VaultItem }) {
               </>
             }
           />
-          {d.otp && <FieldRow label="2FA secret" value={d.otp} secret mono />}
+          <OtpRow item={item} />
           {d.urls.map((u, i) => {
             const href = openableUrl(u.u)
             return (
